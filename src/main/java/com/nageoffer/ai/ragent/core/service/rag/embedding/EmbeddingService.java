@@ -1,4 +1,4 @@
-package com.nageoffer.ai.ragent.core.service.llm;
+package com.nageoffer.ai.ragent.core.service.rag.embedding;
 
 import java.util.List;
 

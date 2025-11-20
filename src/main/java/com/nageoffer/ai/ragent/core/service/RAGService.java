@@ -1,9 +1,9 @@
 package com.nageoffer.ai.ragent.core.service;
 
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
-import com.nageoffer.ai.ragent.core.service.llm.OllamaEmbeddingService;
-import com.nageoffer.ai.ragent.core.service.llm.LLMService;
-import com.nageoffer.ai.ragent.core.service.llm.StreamCallback;
+import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
+import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
+import com.nageoffer.ai.ragent.core.service.rag.chat.StreamCallback;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.data.BaseVector;
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class RagService {
+public class RAGService {
 
     private final MilvusClientV2 milvusClient;
     private final OllamaEmbeddingService embeddingService;

@@ -1,4 +1,4 @@
-package com.nageoffer.ai.ragent.core.service.llm;
+package com.nageoffer.ai.ragent.core.service.rag.chat;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

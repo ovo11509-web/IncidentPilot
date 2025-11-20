@@ -5,7 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.core.dto.DocumentChunk;
 import com.nageoffer.ai.ragent.core.dto.DocumentIndexResult;
-import com.nageoffer.ai.ragent.core.service.llm.OllamaEmbeddingService;
+import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
@@ -13,6 +13,7 @@ import io.milvus.v2.service.vector.request.QueryReq;
 import io.milvus.v2.service.vector.response.DeleteResp;
 import io.milvus.v2.service.vector.response.InsertResp;
 import io.milvus.v2.service.vector.response.QueryResp;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class IndexDocumentService {
 
     private static final int DEFAULT_CHUNK_SIZE = 800;
@@ -38,18 +40,12 @@ public class IndexDocumentService {
 
     private final MilvusClientV2 milvusClient;
     private final OllamaEmbeddingService embeddingService;
-    private final String collectionName;
+
+    @Value("${rag.collection-name}")
+    private String collectionName;
 
     private final Tika tika = new Tika();
     private final Gson gson = new Gson();
-
-    public IndexDocumentService(MilvusClientV2 milvusClient,
-                                OllamaEmbeddingService embeddingService,
-                                @Value("${rag.collection-name}") String collectionName) {
-        this.milvusClient = milvusClient;
-        this.embeddingService = embeddingService;
-        this.collectionName = collectionName;
-    }
 
     /**
      * 纯文本入库（比如你后台管理系统直接粘贴文本）

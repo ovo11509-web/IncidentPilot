@@ -1,4 +1,4 @@
-package com.nageoffer.ai.ragent.core.service.llm;
+package com.nageoffer.ai.ragent.core.service.rag.embedding;
 
 import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Value;
