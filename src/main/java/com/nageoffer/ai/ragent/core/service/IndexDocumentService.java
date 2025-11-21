@@ -17,8 +17,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.TikaCoreProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -26,7 +24,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -179,10 +183,7 @@ public class IndexDocumentService {
      */
     private String extractText(MultipartFile file) {
         try (InputStream is = file.getInputStream()) {
-            Metadata metadata = new Metadata();
-            metadata.set(TikaCoreProperties.RESOURCE_NAME_KEY, file.getOriginalFilename());
-
-            String text = tika.parseToString(is, metadata);
+            String text = tika.parseToString(is);
             return text != null ? text.trim() : "";
         } catch (IOException | TikaException e) {
             throw new RuntimeException("解析文件失败: " + file.getOriginalFilename(), e);
