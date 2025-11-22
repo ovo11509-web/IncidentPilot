@@ -3,12 +3,16 @@ package com.nageoffer.ai.ragent.core.index;
 import cn.hutool.core.util.IdUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.nageoffer.ai.ragent.core.convention.ChatRequest;
+import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
 import com.nageoffer.ai.ragent.core.service.RAGService;
+import com.nageoffer.ai.ragent.core.service.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.core.service.rag.embedding.EmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.InsertReq;
 import io.milvus.v2.service.vector.response.InsertResp;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
@@ -31,19 +35,14 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @SpringBootTest
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class InvoiceIndexDocumentTests {
 
-    @Autowired
-    private LLMService llmService;
-
-    @Autowired
-    private EmbeddingService embeddingService;
-
-    @Autowired
-    private MilvusClientV2 milvusClient;
-
-    @Autowired
-    private RAGService ragService;
+    private final LLMService llmService;
+    private final EmbeddingService embeddingService;
+    private final MilvusClientV2 milvusClient;
+    private final RAGService ragService;
+    private final RetrieverService retrieverService;
 
     @Value("${rag.collection-name}")
     private String collectionName;
@@ -76,8 +75,59 @@ public class InvoiceIndexDocumentTests {
     public void ragQuery() {
         String question = "阿里巴巴发票抬头";
         String answer = ragService.answer(question, 5);
-        // TODO 梳理专用发票搜索 RAG 提示词
         System.out.println(answer);
+    }
+
+    @Test
+    public void chatLlmQuery() {
+        String question = "阿里发票抬头";
+        List<RAGHit> hits = retrieverService.retrieve(question, 5);
+
+        if (hits == null || hits.isEmpty()) {
+            System.out.println("未检索到与问题相关的文档内容，请尝试换一个问法。");
+            return;
+        }
+
+        String context = hits.stream()
+                .map(h -> "- " + h.getText())
+                .collect(Collectors.joining("\n"));
+
+        String prompt = """
+                你是专业的企业发票信息查询助手，现在根据【文档内容】回答用户关于开票信息的问题。
+                
+                请严格遵守以下规则：
+                
+                【回答格式规则】
+                1. 回答必须严格基于【文档内容】，不得虚构任何信息。
+                2. 如果查询结果只有一个公司，请输出“单条发票信息”的完整格式化内容。
+                3. 如果查询到多个公司，请输出 “发票信息列表”，列表中每一项都是完整的一段发票信息，不使用零散的分点描述。
+                4. 每条发票信息必须按如下统一格式输出：
+                
+                开票抬头：xxx
+                纳税资质：xxx
+                纳税人识别号：xxx
+                地址、电话：xxx
+                开户银行、账号：xxx
+                
+                5. 字段有缺失时必须保留字段名并标注“文档未提供该字段”。
+                6. 如果文档内没有与用户问题相关的企业，请回答：“文档未包含相关信息。”
+                
+                【文档内容】
+                %s
+                
+                【用户问题】
+                %s
+                """.formatted(context, question);
+
+        ChatRequest req = ChatRequest.builder()
+                .prompt(prompt)
+                .thinking(false)
+                .temperature(0D)
+                .topP(0.7D)
+                .build();
+
+        String chat = llmService.chat(req);
+        System.out.println(chat);
     }
 
     private String extractText(String filePath) throws TikaException, IOException {
