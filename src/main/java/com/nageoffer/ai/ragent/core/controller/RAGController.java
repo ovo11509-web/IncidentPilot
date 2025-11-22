@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.controller;
 
-import com.nageoffer.ai.ragent.core.service.impl.RAGServiceImpl;
+import com.nageoffer.ai.ragent.core.service.RAGService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.StreamCallback;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -17,10 +17,10 @@ import java.util.concurrent.Executors;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/ragent/rag")
+@RequestMapping("/api/ragent/v2/rag")
 public class RAGController {
 
-    private final RAGServiceImpl ragService;
+    private final RAGService ragService;
     private final Executor executor = Executors.newCachedThreadPool();
 
     @GetMapping("/chat")
