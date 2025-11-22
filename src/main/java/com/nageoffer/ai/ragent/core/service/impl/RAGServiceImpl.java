@@ -1,7 +1,7 @@
 package com.nageoffer.ai.ragent.core.service.impl;
 
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 import com.nageoffer.ai.ragent.core.service.RAGService;
 import com.nageoffer.ai.ragent.core.service.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
@@ -25,15 +25,15 @@ public class RAGServiceImpl implements RAGService {
 
     @Override
     public String answer(String question, int topK) {
-        List<RAGHit> hits = retrieverService.retrieve(question, topK);
+        List<RetrievedChunk> retrievedChunks = retrieverService.retrieve(question, topK);
 
         // 如果没有检索到内容，直接 fallback
-        if (hits == null || hits.isEmpty()) {
+        if (retrievedChunks == null || retrievedChunks.isEmpty()) {
             return "未检索到与问题相关的文档内容，请尝试换一个问法。";
         }
 
         // 拼接上下文
-        String context = hits.stream()
+        String context = retrievedChunks.stream()
                 .map(h -> "- " + h.getText())
                 .collect(Collectors.joining("\n"));
 
@@ -75,15 +75,15 @@ public class RAGServiceImpl implements RAGService {
         int finalTopK = topK;
         int searchTopK = finalTopK * 3;
 
-        List<RAGHit> roughHits = retrieverService.retrieve(question, searchTopK);
+        List<RetrievedChunk> roughRetrievedChunks = retrieverService.retrieve(question, searchTopK);
         long tSearchEnd = System.nanoTime();
         System.out.println("[Perf] search(question, topK) 耗时: " + ((tSearchEnd - tSearchStart) / 1_000_000.0) + " ms");
 
-        List<RAGHit> hits = rerankService.rerank(question, roughHits, finalTopK);
+        List<RetrievedChunk> retrievedChunks = rerankService.rerank(question, roughRetrievedChunks, finalTopK);
 
         // ==================== 2. 构建 context ====================
         long tContextStart = System.nanoTime();
-        String context = hits.stream()
+        String context = retrievedChunks.stream()
                 .map(h -> "- " + h.getText())
                 .collect(Collectors.joining("\n"));
         long tContextEnd = System.nanoTime();

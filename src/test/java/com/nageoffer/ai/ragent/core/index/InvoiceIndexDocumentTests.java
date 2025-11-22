@@ -4,7 +4,7 @@ import cn.hutool.core.util.IdUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 import com.nageoffer.ai.ragent.core.service.RAGService;
 import com.nageoffer.ai.ragent.core.service.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
@@ -81,14 +81,14 @@ public class InvoiceIndexDocumentTests {
     @Test
     public void chatLlmQuery() {
         String question = "阿里发票抬头";
-        List<RAGHit> hits = retrieverService.retrieve(question, 5);
+        List<RetrievedChunk> retrievedChunks = retrieverService.retrieve(question, 5);
 
-        if (hits == null || hits.isEmpty()) {
+        if (retrievedChunks == null || retrievedChunks.isEmpty()) {
             System.out.println("未检索到与问题相关的文档内容，请尝试换一个问法。");
             return;
         }
 
-        String context = hits.stream()
+        String context = retrievedChunks.stream()
                 .map(h -> "- " + h.getText())
                 .collect(Collectors.joining("\n"));
 

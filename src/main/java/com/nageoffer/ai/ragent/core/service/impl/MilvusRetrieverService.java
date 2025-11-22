@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.service.impl;
 
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 import com.nageoffer.ai.ragent.core.service.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
@@ -34,7 +34,7 @@ public class MilvusRetrieverService implements RetrieverService {
     private String metricType;
 
     @Override
-    public List<RAGHit> retrieve(String query, int topK) {
+    public List<RetrievedChunk> retrieve(String query, int topK) {
         List<Float> emb = embeddingService.embed(query);
         float[] vec = toArray(emb);
 
@@ -44,7 +44,7 @@ public class MilvusRetrieverService implements RetrieverService {
     }
 
     @Override
-    public List<RAGHit> retrieveByVector(float[] vector, int topK) {
+    public List<RetrievedChunk> retrieveByVector(float[] vector, int topK) {
         List<BaseVector> vectors = List.of(new FloatVec(vector));
 
         Map<String, Object> params = new HashMap<>();
@@ -68,7 +68,7 @@ public class MilvusRetrieverService implements RetrieverService {
         }
 
         return results.get(0).stream()
-                .map(r -> new RAGHit(
+                .map(r -> new RetrievedChunk(
                         Objects.toString(r.getEntity().get("doc_id"), ""),
                         Objects.toString(r.getEntity().get("content"), ""),
                         r.getScore()))

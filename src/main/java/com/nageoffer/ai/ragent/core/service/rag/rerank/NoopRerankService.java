@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.service.rag.rerank;
 
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 public class NoopRerankService implements RerankService {
 
     @Override
-    public List<RAGHit> rerank(String query, List<RAGHit> candidates, int topN) {
+    public List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }

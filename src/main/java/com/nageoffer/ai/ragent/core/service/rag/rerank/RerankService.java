@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.service.rag.rerank;
 
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 
 import java.util.List;
 
@@ -16,5 +16,5 @@ public interface RerankService {
      * @param topN       最终希望保留的条数（喂给大模型的 K）
      * @return 经过精排后的前 topN 条文档
      */
-    List<RAGHit> rerank(String query, List<RAGHit> candidates, int topN);
+    List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN);
 }

@@ -5,7 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.core.config.RerankProperties;
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
@@ -30,7 +30,7 @@ public class RerankBaiLianService implements RerankService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
-    public List<RAGHit> rerank(String query, List<RAGHit> candidates, int topN) {
+    public List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -41,7 +41,7 @@ public class RerankBaiLianService implements RerankService {
         return chat(query, candidates, topN);
     }
 
-    public List<RAGHit> chat(String query, List<RAGHit> candidates, int topN) {
+    public List<RetrievedChunk> chat(String query, List<RetrievedChunk> candidates, int topN) {
         RerankProperties.ChatBaiLianProperties properties = rerankProperties.getBailian();
 
         if (candidates == null || candidates.isEmpty() || topN <= 0) {
@@ -56,7 +56,7 @@ public class RerankBaiLianService implements RerankService {
         input.addProperty("query", query);
 
         JsonArray documentsArray = new JsonArray();
-        for (RAGHit each : candidates) {
+        for (RetrievedChunk each : candidates) {
             documentsArray.add(each.getText() == null ? "" : each.getText());
         }
         input.add("documents", documentsArray);
@@ -90,7 +90,7 @@ public class RerankBaiLianService implements RerankService {
             return candidates.stream().limit(topN).collect(Collectors.toList());
         }
 
-        List<RAGHit> reranked = new ArrayList<>();
+        List<RetrievedChunk> reranked = new ArrayList<>();
 
         for (JsonElement elem : results) {
             if (!elem.isJsonObject()) {
@@ -110,7 +110,7 @@ public class RerankBaiLianService implements RerankService {
             }
 
             // 3.2 从原 candidates 里取出对应的命中
-            RAGHit src = candidates.get(idx);
+            RetrievedChunk src = candidates.get(idx);
 
             // 3.3 取 relevance_score（可选）
             Float score = null;
@@ -121,10 +121,10 @@ public class RerankBaiLianService implements RerankService {
             // 这里看你的 RAGHit 是不可变还是可变的：
             // - 如果 RAGHit 有 setScore，可在原对象上直接设置；
             // - 如果是不可变对象，就 new 一个拷贝。
-            RAGHit hit;
+            RetrievedChunk hit;
             if (score != null) {
                 // 举例：假设 RAGHit 有 (docId, text, score) 这样的构造器
-                hit = new RAGHit(src.getId(), src.getText(), score);
+                hit = new RetrievedChunk(src.getId(), src.getText(), score);
             } else {
                 hit = src;
             }
@@ -138,7 +138,7 @@ public class RerankBaiLianService implements RerankService {
 
         // 如果因为解析问题没拿够 topN，就用原 candidates 补齐
         if (reranked.size() < topN) {
-            for (RAGHit c : candidates) {
+            for (RetrievedChunk c : candidates) {
                 if (!reranked.contains(c)) {
                     reranked.add(c);
                 }

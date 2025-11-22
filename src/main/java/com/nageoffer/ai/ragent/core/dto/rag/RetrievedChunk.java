@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RAGHit {
+public class RetrievedChunk {
 
     /**
      * 命中记录的唯一标识

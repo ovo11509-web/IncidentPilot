@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.service;
 
-import com.nageoffer.ai.ragent.core.dto.rag.RAGHit;
+import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
 
 import java.util.List;
 
@@ -40,9 +40,9 @@ public interface RetrieverService {
      *
      * @param query 用户自然语言问题
      * @param topK  返回的命中数量
-     * @return RAGHit 列表（包含 chunk 内容、得分、metadata 等）
+     * @return RetrievedChunk 列表（包含 chunk 内容、得分、metadata 等）
      */
-    List<RAGHit> retrieve(String query, int topK);
+    List<RetrievedChunk> retrieve(String query, int topK);
 
     /**
      * 根据向量直接检索（可选使用）
@@ -57,8 +57,8 @@ public interface RetrieverService {
      *
      * @param vector 查询向量（如 float[4096]）
      * @param topK   返回的命中数量
-     * @return RAGHit 列表（按相似度排序）
+     * @return RetrievedChunk 列表（按相似度排序）
      */
-    List<RAGHit> retrieveByVector(float[] vector, int topK);
+    List<RetrievedChunk> retrieveByVector(float[] vector, int topK);
 }
 
