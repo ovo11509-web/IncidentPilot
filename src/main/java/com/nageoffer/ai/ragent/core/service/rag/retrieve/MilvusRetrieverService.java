@@ -1,7 +1,5 @@
-package com.nageoffer.ai.ragent.core.service.impl;
+package com.nageoffer.ai.ragent.core.service.rag.retrieve;
 
-import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
-import com.nageoffer.ai.ragent.core.service.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;

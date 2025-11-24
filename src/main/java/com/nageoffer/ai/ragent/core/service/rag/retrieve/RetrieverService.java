@@ -1,6 +1,4 @@
-package com.nageoffer.ai.ragent.core.service;
-
-import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
+package com.nageoffer.ai.ragent.core.service.rag.retrieve;
 
 import java.util.List;
 

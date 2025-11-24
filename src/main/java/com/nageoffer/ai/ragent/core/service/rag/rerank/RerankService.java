@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.service.rag.rerank;
 
-import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
 
 import java.util.List;
 

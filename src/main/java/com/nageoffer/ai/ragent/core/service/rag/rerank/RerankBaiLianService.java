@@ -5,7 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.core.config.RerankProperties;
-import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;

@@ -1,4 +1,4 @@
-package com.nageoffer.ai.ragent.core.dto.rag;
+package com.nageoffer.ai.ragent.core.service.rag.retrieve;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

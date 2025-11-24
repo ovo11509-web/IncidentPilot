@@ -1,9 +1,9 @@
 package com.nageoffer.ai.ragent.core.service.impl;
 
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
-import com.nageoffer.ai.ragent.core.dto.rag.RetrievedChunk;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
 import com.nageoffer.ai.ragent.core.service.RAGService;
-import com.nageoffer.ai.ragent.core.service.RetrieverService;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.core.service.rag.rerank.RerankService;
