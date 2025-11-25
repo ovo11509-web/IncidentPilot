@@ -3,6 +3,7 @@ package com.nageoffer.ai.ragent.core.service;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.nageoffer.ai.ragent.core.config.RAGDefaultProperties;
 import com.nageoffer.ai.ragent.core.dto.DocumentChunk;
 import com.nageoffer.ai.ragent.core.dto.DocumentIndexResult;
 import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
@@ -17,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,9 +44,7 @@ public class IndexDocumentService {
 
     private final MilvusClientV2 milvusClient;
     private final OllamaEmbeddingService embeddingService;
-
-    @Value("${rag.collection-name}")
-    private String collectionName;
+    private final RAGDefaultProperties ragDefaultProperties;
 
     private final Tika tika = new Tika();
     private final Gson gson = new Gson();
@@ -80,7 +78,7 @@ public class IndexDocumentService {
         );
 
         InsertReq req = InsertReq.builder()
-                .collectionName(collectionName)
+                .collectionName(ragDefaultProperties.getCollectionName())
                 .data(rows)
                 .build();
 
@@ -102,7 +100,7 @@ public class IndexDocumentService {
         String filter = String.format("metadata[\"documentId\"] == \"%s\"", documentId);
 
         DeleteReq deleteReq = DeleteReq.builder()
-                .collectionName(collectionName)
+                .collectionName(ragDefaultProperties.getCollectionName())
                 .filter(filter)
                 .build();
 
@@ -131,7 +129,7 @@ public class IndexDocumentService {
         String filter = String.format("metadata[\"documentId\"] == \"%s\"", documentId);
 
         QueryReq queryReq = QueryReq.builder()
-                .collectionName(collectionName)
+                .collectionName(ragDefaultProperties.getCollectionName())
                 .filter(filter)
                 .outputFields(List.of("doc_id", "content", "metadata"))
                 .limit(MAX_CHUNKS_PER_DOC_QUERY)

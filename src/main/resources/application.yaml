@@ -5,13 +5,28 @@ spring:
   application:
     name: ragent-core
 
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    username: root
+    password: root
+    url: jdbc:mysql://127.0.0.1:3306/ragent?characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+    hikari:
+      connection-test-query: select 1
+      connection-timeout: 20000
+      idle-timeout: 300000
+      maximum-pool-size: 5
+      minimum-idle: 5
+
 milvus:
   uri: http://localhost:19530
 
 rag:
-  collection-name: rag_hnsw_cosine_test
-  dimension: 4096
-  metric-type: COSINE
+  default:
+    # rag_default_store
+    collection-name: rag_hnsw_cosine_test
+    dimension: 4096
+    metric-type: COSINE
 
 ai:
   embedding:
