@@ -3,12 +3,13 @@ package com.nageoffer.ai.ragent.core.index;
 import cn.hutool.core.util.IdUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.nageoffer.ai.ragent.core.config.RAGDefaultProperties;
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
-import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
 import com.nageoffer.ai.ragent.core.service.RAGService;
-import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.core.service.rag.embedding.EmbeddingService;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieverService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.InsertReq;
 import io.milvus.v2.service.vector.response.InsertResp;
@@ -19,7 +20,6 @@ import org.apache.tika.exception.TikaException;
 import org.apache.tika.metadata.Metadata;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.util.StringUtils;
 
@@ -43,9 +43,7 @@ public class InvoiceIndexDocumentTests {
     private final MilvusClientV2 milvusClient;
     private final RAGService ragService;
     private final RetrieverService retrieverService;
-
-    @Value("${rag.collection-name}")
-    private String collectionName;
+    private final RAGDefaultProperties ragDefaultProperties;
 
     private final Tika tika = new Tika();
 
@@ -63,7 +61,7 @@ public class InvoiceIndexDocumentTests {
         );
 
         InsertReq req = InsertReq.builder()
-                .collectionName(collectionName)
+                .collectionName(ragDefaultProperties.getCollectionName())
                 .data(rows)
                 .build();
 
@@ -159,12 +157,110 @@ public class InvoiceIndexDocumentTests {
                 3. 不要添加虚构信息
                 4. 不要改变字段顺序
                 5. 不要解释，只输出清洗后的文本
+                6. 多个发票之间不允许有空行
                 
                 【需要处理的原文】：
                 %s
                 """
                 .formatted(fileContent);
         return llmService.chat(prompt);
+    }
+
+    @Test
+    public void testSplit() {
+        String text = """
+                开票抬头：杭州阿里巴巴健康集团有限公司 \s
+                纳税资质：小规模纳税人 \s
+                纳税人识别号：91330108MA9A1B2C3X \s
+                地址、电话：浙江省杭州市西湖区留和路200号A座801室  0571-88001101 \s
+                开户银行、账号：中信银行杭州钱江支行 8110001000000000001 \s
+                
+                开票抬头：杭州阿里巴巴健康科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330108MA4D5E6F7Y \s
+                地址、电话：浙江省杭州市西湖区紫荆花北路8号1幢1203室  0571-88001102 \s
+                开户银行、账号：中信银行杭州钱江支行 8110001000000000002 \s
+                
+                开票抬头：杭州腾讯网络科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330108MA7G8H9J0K \s
+                地址、电话：浙江省杭州市滨江区西兴街道滨安路501号801室 0571-88001103 \s
+                开户银行、账号：建行杭州高新支行 3300 0000 0000 0000 1001 \s
+                
+                开票抬头：杭州快手科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330108MA1K2L3M4N \s
+                地址、电话：浙江省杭州市西湖区留下街道科创路18号2幢402室 0571-88001104 \s
+                开户银行、账号：中信银行杭州钱江支行 8110001000000000003 \s
+                
+                开票抬头：杭州百度科技有限公司 \s
+                纳税资质：增值税一般纳税人 \s
+                纳税人识别号：91330108MA5P6Q7R8S \s
+                地址、电话：浙江省杭州市西湖区留下街道文一西路600号C座702室 0571-88001105 \s
+                开户银行、账号：中信银行杭州钱江支行 8110001000000000004 \s
+                
+                开票抬头：杭州快手科技有限公司西湖区分公司 \s
+                纳税资质：小规模纳税人 \s
+                纳税人识别号：91330106MA9T1U2V3W \s
+                地址和电话：浙江省杭州市西湖区学院路88号创新大厦5楼510室 0571-88001106 \s
+                开户银行：中信银行杭州钱江支行 8110001000000000005 \s
+                
+                开票抬头：杭州快手科技有限公司余杭分公司 \s
+                纳税资质：小规模纳税人 \s
+                纳税人识别号：91330110MA4X5Y6Z7A \s
+                地址和电话：浙江省杭州市余杭区五常街道文一西路1288号B座903室 0571-88001107 \s
+                银行：中信银行杭州钱江支行 8110001000000000006 \s
+                
+                开票抬头：杭州字节跳动科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330110MA8B9C0D1E \s
+                地址、电话：浙江省杭州市滨江区长河街道科技园路300号6层A602室 0571-88001108 \s
+                开户银行、账号：中信银行杭州钱江支行 7331000000000100001 \s
+                
+                开票抬头：杭州美团科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330110MA2F3G4H5J \s
+                地址、电话：浙江省杭州市西湖区留和路300号创新中心9楼901室 0571-88001109 \s
+                开户银行、账号：中信银行杭州钱江支行 7331000000000100002 \s
+                
+                开票抬头：杭州京东数据科技集团有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330106MA6K7L8M9N \s
+                地址、电话：浙江省杭州市西湖区紫荆花东路10号3幢702室 0571-88001110 \s
+                开户银行、账号：中信银行杭州钱江支行 7331000000000100003 \s
+                
+                开票抬头：杭州拼多多科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330108MA1P2Q3R4S \s
+                地址、电话：浙江省杭州市西湖区留和路360号电商产业园5幢603室 0571-88001111 \s
+                开户银行、账号：中信银行杭州钱江支行 8110001000000000007 \s
+                
+                开票抬头：杭州哔哩哔哩科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330108MA5T6U7V8W \s
+                地址、电话：浙江省杭州市滨江区西兴街道科技一路99号A座1201室 0571-88001112 \s
+                开户银行、账号：中信银行杭州钱江支行 7331000000000100004 \s
+                
+                开票抬头：杭州滴滴出行科技有限公司 \s
+                纳税资质：一般纳税人 \s
+                纳税人识别号：91330108MA9X1Y2Z3A \s
+                地址、电话：浙江省杭州市西湖区三墩镇高新路88号2幢1501室 0571-88001113 \s
+                开户银行、账号：中信银行钱江支行 7331000000000100005 \s
+                
+                开票抬头：杭州小红书科技有限公司 \s
+                纳税资质：小规模纳税人 \s
+                纳税人识别号：91330108MA4B5C6D7E \s
+                地址、电话：浙江省杭州市西湖区留和路400号电商园区3幢502室 0571-88001114 \s
+                开户银行、账号：中信银行杭州钱江支行 8110001000000000008 \s
+                
+                开票抬头：杭州网易科技有限公司 \s
+                纳税资质：增值税一般纳税人 \s
+                纳税人识别号：91330110MA8F9G0H1J \s
+                地址、电话：浙江省杭州市西湖区留和路500号互联网大厦12层1206室 0571-88001115 \s
+                开户银行、账号：中信银行杭州钱江支行 7331000000000100006
+                """;
+        List<String> strings = splitIntoLineChunks(text, 6);
+        System.out.println(strings);
     }
 
     /**
