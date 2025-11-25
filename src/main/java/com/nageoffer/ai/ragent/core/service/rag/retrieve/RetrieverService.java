@@ -40,7 +40,27 @@ public interface RetrieverService {
      * @param topK  返回的命中数量
      * @return RetrievedChunk 列表（包含 chunk 内容、得分、metadata 等）
      */
-    List<RetrievedChunk> retrieve(String query, int topK);
+    default List<RetrievedChunk> retrieve(String query, int topK) {
+        RetrieveRequest req = RetrieveRequest.builder()
+                .query(query)
+                .topK(topK)
+                .build();
+        return retrieve(req);
+    }
+
+    /**
+     * 根据自然语言 Query 进行检索，支持扩展参数
+     * <p>
+     * 说明：
+     * - 内部通常会先调用 EmbeddingService.embed(query) 获取向量
+     * - 然后在向量库中执行相似度搜索
+     * - 返回命中文档 Chunk 的列表，已按相似度倒序排序
+     * <p>
+     *
+     * @param retrieveParam 向量检索请求参数
+     * @return RetrievedChunk 列表（包含 chunk 内容、得分、metadata 等）
+     */
+    List<RetrievedChunk> retrieve(RetrieveRequest retrieveParam);
 
     /**
      * 根据向量直接检索（可选使用）
@@ -53,10 +73,10 @@ public interface RetrieverService {
      * 注意：
      * - 调用方负责确保 vector 维度与向量库 schema 保持一致
      *
-     * @param vector 查询向量（如 float[4096]）
-     * @param topK   返回的命中数量
+     * @param vector        查询向量（如 float[4096]）
+     * @param retrieveParam 向量检索请求参数
      * @return RetrievedChunk 列表（按相似度排序）
      */
-    List<RetrievedChunk> retrieveByVector(float[] vector, int topK);
+    List<RetrievedChunk> retrieveByVector(float[] vector, RetrieveRequest retrieveParam);
 }
 

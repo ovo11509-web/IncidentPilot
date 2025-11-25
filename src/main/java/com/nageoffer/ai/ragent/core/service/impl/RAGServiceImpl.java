@@ -1,18 +1,34 @@
 package com.nageoffer.ai.ragent.core.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.json.JSONUtil;
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
-import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
+import com.nageoffer.ai.ragent.core.enums.IntentKind;
 import com.nageoffer.ai.ragent.core.service.RAGService;
-import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.core.service.rag.chat.StreamCallback;
+import com.nageoffer.ai.ragent.core.service.rag.intent.IntentNode;
+import com.nageoffer.ai.ragent.core.service.rag.intent.LLMTreeIntentClassifier;
+import com.nageoffer.ai.ragent.core.service.rag.intent.NodeScore;
 import com.nageoffer.ai.ragent.core.service.rag.rerank.RerankService;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieveRequest;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
+import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieverService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
+
+import static com.nageoffer.ai.ragent.core.constant.RAGConstant.CHAT_SYSTEM_PROMPT;
+import static com.nageoffer.ai.ragent.core.constant.RAGConstant.INTENT_MIN_SCORE;
+import static com.nageoffer.ai.ragent.core.constant.RAGConstant.MAX_INTENT_COUNT;
+import static com.nageoffer.ai.ragent.core.constant.RAGConstant.RAG_DEFAULT_PROMPT;
+import static com.nageoffer.ai.ragent.core.enums.IntentKind.SYSTEM;
 
 @Slf4j
 @Service
@@ -22,10 +38,54 @@ public class RAGServiceImpl implements RAGService {
     private final RetrieverService retrieverService;
     private final LLMService llmService;
     private final RerankService rerankService;
+    private final LLMTreeIntentClassifier llmTreeIntentClassifier;
 
     @Override
     public String answer(String question, int topK) {
-        List<RetrievedChunk> retrievedChunks = retrieverService.retrieve(question, topK);
+        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(question);
+        log.info("\n意图识别:\n{}", JSONUtil.toJsonPrettyStr(nodeScores));
+
+        if (nodeScores.size() == 1) {
+            if (Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
+                String prompt = CHAT_SYSTEM_PROMPT.formatted(question);
+
+                ChatRequest req = ChatRequest.builder()
+                        .prompt(prompt)
+                        .temperature(0.7D) // 打招呼可以稍微活泼一点
+                        .topP(0.8D)
+                        .thinking(false)
+                        .build();
+
+                return llmService.chat(req);
+            }
+        }
+
+        List<NodeScore> ragIntentScores = nodeScores.stream()
+                .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
+                .filter(ns -> {
+                    IntentNode node = ns.getNode();
+                    return node.getKind() == null || node.getKind() == IntentKind.KB;
+                })
+                .limit(MAX_INTENT_COUNT)
+                .toList();
+
+
+        int finalTopK = topK;
+        int searchTopK = finalTopK * 3;
+
+        List<RetrievedChunk> retrievedChunks = Collections.synchronizedList(new ArrayList());
+        ragIntentScores.parallelStream().forEach(nodeScore -> {
+            RetrieveRequest request = RetrieveRequest.builder()
+                    .collectionName(nodeScore.getNode().getCollectionName())
+                    .query(question)
+                    .topK(searchTopK)
+                    .build();
+            List<RetrievedChunk> nodeRetrieveChunks = retrieverService.retrieve(request);
+            nodeRetrieveChunks = rerankService.rerank(question, nodeRetrieveChunks, finalTopK);
+            if (CollUtil.isNotEmpty(nodeRetrieveChunks)) {
+                retrievedChunks.addAll(nodeRetrieveChunks);
+            }
+        });
 
         // 如果没有检索到内容，直接 fallback
         if (retrievedChunks == null || retrievedChunks.isEmpty()) {
@@ -37,22 +97,10 @@ public class RAGServiceImpl implements RAGService {
                 .map(h -> "- " + h.getText())
                 .collect(Collectors.joining("\n"));
 
-        // 标准化 Prompt（保持和流式一致）
-        String prompt = """
-                你是专业的企业内 RAG 问答助手，请基于文档内容回答用户问题。
-                
-                规则：
-                1. 回答必须严格基于【文档内容】
-                2. 不得虚构信息
-                3. 回答可以适度丰富（分点说明更佳）
-                4. 若文档未包含答案，请明确说明“文档未包含相关信息。”
-                
-                【文档内容】
-                %s
-                
-                【用户问题】
-                %s
-                """.formatted(context, question);
+        String prompt = nodeScores.size() == 1
+                ? nodeScores.get(0).getNode().getPromptTemplate()
+                : RAG_DEFAULT_PROMPT;
+        prompt = prompt.formatted(context, question);
 
         // 调 LLM
         ChatRequest req = ChatRequest.builder()

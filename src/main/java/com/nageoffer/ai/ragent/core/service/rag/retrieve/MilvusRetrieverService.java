@@ -1,5 +1,7 @@
 package com.nageoffer.ai.ragent.core.service.rag.retrieve;
 
+import cn.hutool.core.util.StrUtil;
+import com.nageoffer.ai.ragent.core.config.RAGDefaultProperties;
 import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
@@ -8,7 +10,6 @@ import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -24,36 +25,33 @@ public class MilvusRetrieverService implements RetrieverService {
 
     private final OllamaEmbeddingService embeddingService;
     private final MilvusClientV2 milvusClient;
-
-    @Value("${rag.collection-name}")
-    private String collectionName;
-
-    @Value("${rag.metric-type}")
-    private String metricType;
+    private final RAGDefaultProperties ragDefaultProperties;
 
     @Override
-    public List<RetrievedChunk> retrieve(String query, int topK) {
-        List<Float> emb = embeddingService.embed(query);
+    public List<RetrievedChunk> retrieve(RetrieveRequest retrieveParam) {
+        List<Float> emb = embeddingService.embed(retrieveParam.getQuery());
         float[] vec = toArray(emb);
 
         float[] norm = normalize(vec);
 
-        return retrieveByVector(norm, topK);
+        return retrieveByVector(norm, retrieveParam);
     }
 
     @Override
-    public List<RetrievedChunk> retrieveByVector(float[] vector, int topK) {
+    public List<RetrievedChunk> retrieveByVector(float[] vector, RetrieveRequest retrieveParam) {
         List<BaseVector> vectors = List.of(new FloatVec(vector));
 
         Map<String, Object> params = new HashMap<>();
-        params.put("metric_type", metricType);
+        params.put("metric_type", ragDefaultProperties.getMetricType());
         params.put("ef", 128);
 
         SearchReq req = SearchReq.builder()
-                .collectionName(collectionName)
+                .collectionName(
+                        StrUtil.isBlank(retrieveParam.getCollectionName()) ? ragDefaultProperties.getCollectionName() : retrieveParam.getCollectionName()
+                )
                 .annsField("embedding")
                 .data(vectors)
-                .topK(topK)
+                .topK(retrieveParam.getTopK())
                 .searchParams(params)
                 .outputFields(List.of("doc_id", "content", "metadata"))
                 .build();
