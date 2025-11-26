@@ -28,6 +28,9 @@ rag:
     dimension: 4096
     metric-type: COSINE
 
+  query-rewrite:
+    enabled: true
+
 ai:
   embedding:
     provider: ollama

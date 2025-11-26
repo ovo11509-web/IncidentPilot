@@ -15,6 +15,7 @@ import com.nageoffer.ai.ragent.core.service.rag.rerank.RerankService;
 import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieveRequest;
 import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrievedChunk;
 import com.nageoffer.ai.ragent.core.service.rag.retrieve.RetrieverService;
+import com.nageoffer.ai.ragent.core.service.rag.rewrite.QueryRewriteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,15 +41,21 @@ public class RAGServiceImpl implements RAGService {
     private final LLMService llmService;
     private final RerankService rerankService;
     private final LLMTreeIntentClassifier llmTreeIntentClassifier;
+    private final QueryRewriteService queryRewriteService;
 
     @Override
     public String answer(String question, int topK) {
-        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(question);
+        int finalTopK = topK > 0 ? topK : 5;
+        int searchTopK = Math.max(finalTopK * 3, 20); // 至少 20，避免问题很小时候召回太少
+
+        String rewriteQuestion = queryRewriteService.rewrite(question);
+
+        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
         log.info("\n意图识别树如下所示:\n{}", JSONUtil.toJsonPrettyStr(nodeScores));
 
         if (nodeScores.size() == 1) {
             if (Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
-                String prompt = CHAT_SYSTEM_PROMPT.formatted(question);
+                String prompt = CHAT_SYSTEM_PROMPT.formatted(rewriteQuestion);
 
                 ChatRequest req = ChatRequest.builder()
                         .prompt(prompt)
@@ -70,42 +77,67 @@ public class RAGServiceImpl implements RAGService {
                 .limit(MAX_INTENT_COUNT)
                 .toList();
 
-        int finalTopK = topK;
-        int searchTopK = finalTopK * 3;
-
-        List<RetrievedChunk> retrievedChunks = Collections.synchronizedList(new ArrayList());
+        List<RetrievedChunk> allChunks = Collections.synchronizedList(new ArrayList<>());
         ragIntentScores.parallelStream().forEach(nodeScore -> {
             RetrieveRequest request = RetrieveRequest.builder()
                     .collectionName(nodeScore.getNode().getCollectionName())
-                    .query(question)
+                    .query(rewriteQuestion)
                     .topK(searchTopK)
                     .build();
-            List<RetrievedChunk> nodeRetrieveChunks = retrieverService.retrieve(request);
-            nodeRetrieveChunks = rerankService.rerank(question, nodeRetrieveChunks, finalTopK);
 
+            List<RetrievedChunk> nodeRetrieveChunks = retrieverService.retrieve(request);
             if (CollUtil.isNotEmpty(nodeRetrieveChunks)) {
-                retrievedChunks.addAll(nodeRetrieveChunks);
+                allChunks.addAll(nodeRetrieveChunks);
             }
         });
 
         // 如果没有检索到内容，直接 fallback
-        if (retrievedChunks == null || retrievedChunks.isEmpty()) {
+        if (allChunks.isEmpty()) {
             return "未检索到与问题相关的文档内容，请尝试换一个问法。";
         }
 
+        int rerankLimit = finalTopK * 2;
+        List<RetrievedChunk> reranked = rerankService.rerank(rewriteQuestion, allChunks, rerankLimit);
+
+        if (CollUtil.isEmpty(reranked)) {
+            return "文档检索结果Rerank后为空，请稍后重试或联系管理员排查。";
+        }
+
+        List<RetrievedChunk> elbowSelected = selectByElbow(reranked);
+
+        double MIN_SCORE = 0.4;
+        double MARGIN_RATIO = 0.75;
+
+        float bestScore = elbowSelected.get(0).getScore();
+        List<RetrievedChunk> filteredByScore = elbowSelected.stream()
+                .filter(c -> {
+                    Float s = c.getScore();
+                    if (s == null) {
+                        return true;
+                    }
+                    return s >= MIN_SCORE && s >= bestScore * MARGIN_RATIO;
+                })
+                .toList();
+
+        // 如果筛完太少，就退回到 reranked 前 topK 几条
+        if (filteredByScore.isEmpty()) {
+            filteredByScore = reranked.subList(0, Math.min(finalTopK, reranked.size()));
+        }
+
         // 拼接上下文
-        String context = retrievedChunks.stream()
+        String context = filteredByScore.stream()
                 .map(h -> "- " + h.getText())
                 .collect(Collectors.joining("\n"));
 
-        String prompt = ragIntentScores.size() == 1
-                ?
-                (StrUtil.isBlank(ragIntentScores.get(0).getNode().getPromptTemplate())
-                        ? RAG_DEFAULT_PROMPT
-                        : ragIntentScores.get(0).getNode().getPromptTemplate()
-                )
-                : RAG_DEFAULT_PROMPT;
-        prompt = prompt.formatted(context, question);
+        String promptTemplate;
+        if (ragIntentScores.size() == 1 &&
+                StrUtil.isNotBlank(ragIntentScores.get(0).getNode().getPromptTemplate())) {
+            promptTemplate = ragIntentScores.get(0).getNode().getPromptTemplate();
+        } else {
+            promptTemplate = RAG_DEFAULT_PROMPT;
+        }
+
+        String prompt = promptTemplate.formatted(context, rewriteQuestion);
 
         // 调 LLM
         ChatRequest req = ChatRequest.builder()
@@ -188,5 +220,35 @@ public class RAGServiceImpl implements RAGService {
         System.out.println("--------------------------------");
         System.out.println("  TOTAL:           " + total + " ms");
         System.out.println("================================");
+    }
+
+    private List<RetrievedChunk> selectByElbow(List<RetrievedChunk> reranked) {
+        if (reranked.size() <= 1) {
+            return reranked;
+        }
+
+        // 至少保留 1 条
+        int cutIndex = reranked.size();
+
+        // 简单策略：ratio < 0.9 认为是一个“断崖”
+        double DROP_RATIO = 0.9;
+
+        for (int i = 0; i < reranked.size() - 1; i++) {
+            float cur = reranked.get(i).getScore();
+            float next = reranked.get(i + 1).getScore();
+
+            if (cur <= 0) {
+                break;
+            }
+
+            double ratio = next / cur;
+            if (ratio < DROP_RATIO) {
+                // 截到 i（包含 i），后面的认为是另一个“段”
+                cutIndex = i + 1;
+                break;
+            }
+        }
+
+        return reranked.subList(0, cutIndex);
     }
 }
