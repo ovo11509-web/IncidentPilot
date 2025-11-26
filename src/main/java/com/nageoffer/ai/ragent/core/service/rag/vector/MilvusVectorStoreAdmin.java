@@ -87,10 +87,11 @@ public class MilvusVectorStoreAdmin implements VectorStoreAdmin {
                 .build();
 
         CreateCollectionReq createReq = CreateCollectionReq.builder()
-                .collectionName(ragDefaultProperties.getMetricType())
+                .collectionName(logicalName)
                 .collectionSchema(collectionSchema)
                 .primaryFieldName("doc_id")
                 .vectorFieldName("embedding")
+                .metricType(ragDefaultProperties.getMetricType())
                 .consistencyLevel(ConsistencyLevel.BOUNDED)
                 .indexParams(List.of(hnswIndex))
                 .description(spec.getRemark())
