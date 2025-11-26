@@ -49,7 +49,7 @@ public class InvoiceIndexDocumentTests {
 
     @Test
     void indexDocument() throws TikaException, IOException {
-        String filePath = "src/main/resources/file/公司人事/开票信息.md";
+        String filePath = "src/main/resources/file/group/group-finance/开票信息.md";
         String actualDocument = extractText(filePath);
         System.out.println(actualDocument);
         List<String> chunks = splitIntoLineChunks(actualDocument, 5);
