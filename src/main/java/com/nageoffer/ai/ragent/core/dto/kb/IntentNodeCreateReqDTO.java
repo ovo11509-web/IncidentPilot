@@ -13,6 +13,7 @@ import java.util.List;
 @Builder
 public class IntentNodeCreateReqDTO {
 
+    private String kbId;
     private String intentCode;
     private String name;
     /**
@@ -26,4 +27,14 @@ public class IntentNodeCreateReqDTO {
     private Integer kind;
     private Integer sortOrder;
     private Integer enabled;
+
+    /**
+     * 短规则片段（可选）
+     */
+    private String promptSnippet;
+
+    /**
+     * 场景用的完整 Prompt 模板（可选）
+     */
+    private String promptTemplate;
 }

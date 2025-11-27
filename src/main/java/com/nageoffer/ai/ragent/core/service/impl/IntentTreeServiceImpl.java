@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.core.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.gson.Gson;
@@ -10,6 +11,7 @@ import com.nageoffer.ai.ragent.core.dto.kb.IntentNodeTreeRespDTO;
 import com.nageoffer.ai.ragent.core.dto.kb.IntentNodeUpdateReqDTO;
 import com.nageoffer.ai.ragent.core.enums.IntentKind;
 import com.nageoffer.ai.ragent.core.enums.IntentLevel;
+import com.nageoffer.ai.ragent.core.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.core.framework.exception.ServiceException;
 import com.nageoffer.ai.ragent.core.service.IntentTreeService;
 import com.nageoffer.ai.ragent.core.service.rag.intent.IntentNode;
@@ -26,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import static com.nageoffer.ai.ragent.core.enums.IntentLevel.DOMAIN;
 
 @Service
 @RequiredArgsConstructor
@@ -93,11 +97,20 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
                 .eq(IntentNodeDO::getIntentCode, req.getIntentCode())
                 .eq(IntentNodeDO::getDeleted, 0));
         if (count > 0) {
-            throw new ServiceException("intentCode 已存在: " + req.getIntentCode());
+            throw new ClientException("意图标识已存在: " + req.getIntentCode());
+        }
+
+        if (Objects.equals(req.getLevel(), DOMAIN.getCode())
+                && Objects.equals(req.getKind(), IntentKind.KB.getCode())
+                && StrUtil.isBlank(req.getKbId())) {
+            throw new ClientException("Domain类型的RAG检索意图识别时，必须指定目标知识库");
         }
 
         IntentNodeDO node = new IntentNodeDO();
         node.setIntentCode(req.getIntentCode());
+        if (StrUtil.isNotBlank(req.getKbId())) {
+            node.setKbId(Long.parseLong(req.getKbId()));
+        }
         node.setName(req.getName());
         node.setLevel(req.getLevel());
         node.setParentCode(req.getParentCode());
@@ -109,6 +122,8 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
         node.setEnabled(req.getEnabled() == null ? 1 : req.getEnabled());
         node.setCreateBy("");
         node.setUpdateBy("");
+        node.setPromptSnippet(req.getPromptSnippet());
+        node.setPromptTemplate(req.getPromptTemplate());
         node.setDeleted(0);
 
         this.save(node);
@@ -173,6 +188,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
             }
 
             IntentNodeCreateReqDTO dto = new IntentNodeCreateReqDTO();
+            dto.setKbId(node.getKbId());
             dto.setIntentCode(node.getId());
             dto.setName(node.getName());
             dto.setLevel(mapLevel(node.getLevel()));
@@ -183,7 +199,8 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
             dto.setKind(mapKind(node.getKind()));
             dto.setSortOrder(sort++);
             dto.setEnabled(1);
-
+            dto.setPromptTemplate(node.getPromptTemplate());
+            dto.setPromptSnippet(node.getPromptSnippet());
             createNode(dto);
             created++;
         }

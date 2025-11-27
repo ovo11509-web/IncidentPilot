@@ -19,6 +19,11 @@ public class IntentNode {
     private String id;
 
     /**
+     * 知识库 ID
+     */
+    private String kbId;
+
+    /**
      * 展示名称，如「人事」「OA系统」「数据安全」
      */
     private String name;

@@ -51,7 +51,15 @@ public class RAGServiceImpl implements RAGService {
         String rewriteQuestion = queryRewriteService.rewrite(question);
 
         List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
-        log.info("\n意图识别树如下所示:\n{}", JSONUtil.toJsonPrettyStr(nodeScores));
+        log.info("\n意图识别树如下所示:\n{}",
+                JSONUtil.toJsonPrettyStr(
+                        nodeScores.stream().map(each -> {
+                            IntentNode node = each.getNode();
+                            node.setChildren(null);
+                            return each;
+                        }).collect(Collectors.toList())
+                )
+        );
 
         if (nodeScores.size() == 1) {
             if (Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
@@ -103,7 +111,9 @@ public class RAGServiceImpl implements RAGService {
             return "文档检索结果Rerank后为空，请稍后重试或联系管理员排查。";
         }
 
-        List<RetrievedChunk> elbowSelected = selectByElbow(reranked);
+        // List<RetrievedChunk> elbowSelected = selectByElbow(reranked);
+        // 暂时忽略分数排序，因为不同知识库类型召回数据不同，容易误判
+        List<RetrievedChunk> elbowSelected = reranked;
 
         double MIN_SCORE = 0.4;
         double MARGIN_RATIO = 0.75;

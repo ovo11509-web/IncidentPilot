@@ -18,6 +18,11 @@ public class IntentNodeDO {
     private Long id;
 
     /**
+     * 知识库 ID
+     */
+    private Long kbId;
+
+    /**
      * 业务唯一标识，如 group-hr / biz-oa-intro
      */
     private String intentCode;

@@ -5,8 +5,14 @@ import com.nageoffer.ai.ragent.core.enums.IntentKind;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.nageoffer.ai.ragent.core.enums.IntentLevel.*;
+import static com.nageoffer.ai.ragent.core.enums.IntentLevel.CATEGORY;
+import static com.nageoffer.ai.ragent.core.enums.IntentLevel.DOMAIN;
+import static com.nageoffer.ai.ragent.core.enums.IntentLevel.TOPIC;
 
+/**
+ * 构造意图识别树
+ * TODO 需要先初始化创建知识库，kbId 需修改，collection_name 需添加
+ */
 public class IntentTreeFactory {
 
     public static List<IntentNode> buildIntentTree() {
@@ -15,6 +21,7 @@ public class IntentTreeFactory {
         // ========== 1. 集团信息化 ==========
         IntentNode group = IntentNode.builder()
                 .id("group")
+                .kbId("group")
                 .name("集团信息化")
                 .level(DOMAIN)
                 .description("与集团内部人事、行政、IT支持、财务、公司资质、通讯录、解决方案等相关的企业信息化问题")
@@ -68,6 +75,49 @@ public class IntentTreeFactory {
                         "差旅报销需要哪些资料？",
                         "发票抬头有哪些？"
                 ))
+                .promptTemplate("""
+                        你是专业的企业发票信息查询助手，现在根据【文档内容】回答用户关于开票信息的问题，并抽取、整理标准化的发票信息。
+                        
+                        请严格遵守以下规则：
+                        
+                        【字段识别规则】
+                        1. 文档中的发票相关字段名不一定与标准字段完全一致，请根据语义进行归一映射：
+                           - 「开票抬头」可对应：开票抬头、发票抬头、公司名称、单位名称、抬头名称等含义相近的字段。
+                           - 「纳税资质」可对应：纳税人资质、纳税人类别、一般纳税人 / 小规模纳税人说明等。
+                           - 「纳税人识别号」可对应：纳税人识别号、税号、统一社会信用代码（仅在明确用于开票时）。
+                           - 「地址、电话」可对应：地址、公司地址、联系地址 + 电话、联系电话、公司电话 等成对出现的信息。
+                           - 「开户银行、账号」可对应：开户银行、开户行、银行、开户行名称 + 账号、银行账号、账户 等成对出现的信息。
+                        2. 当文档中字段名与上述标准字段语义相近时，请将其内容归一到对应的标准字段中；不要新增其他字段名。
+                        
+                        【回答格式规则】
+                        1. 回答必须严格基于【文档内容】，不得虚构任何信息，不得凭常识猜测公司名称、税号、地址或银行信息。
+                        2. 当查询到至少一条发票信息时，必须先输出一段引导语，格式为：
+                        
+                           根据您搜索的“【用户问题】”问题，已为您查询到以下发票信息，请查阅：
+                        
+                        3. 引导语后空一行，再输出具体的发票信息内容。
+                        4. 如果查询结果只有一个公司，请输出“单条发票信息”的完整格式化内容。
+                        5. 如果查询到多个公司，请输出“发票信息列表”，列表中每一项都是完整的一段发票信息，不使用零散的分点描述。
+                        6. 每条发票信息必须按如下统一格式输出（字段顺序保持一致，每条信息之间空一行）：
+                        
+                        开票抬头：xxx
+                        纳税资质：xxx
+                        纳税人识别号：xxx
+                        地址、电话：xxx
+                        开户银行、账号：xxx
+                        
+                        7. 字段有缺失时，必须保留字段名并标注“文档未提供该字段”，例如：
+                           - 纳税人识别号：文档未提供该字段
+                        8. 如果文档内没有与用户问题相关的企业，请回答：
+                           文档未包含相关信息。
+                        9. 回答中不要添加额外解释或分析，只输出引导语 + 上述格式化的发票信息内容。
+                        
+                        【文档内容】
+                        %s
+                        
+                        【用户问题】
+                        %s
+                        """)
                 .build();
 
         IntentNode qualification = IntentNode.builder()
@@ -110,6 +160,7 @@ public class IntentTreeFactory {
         // ========== 2. 业务系统 ==========
         IntentNode biz = IntentNode.builder()
                 .id("biz")
+                .kbId("biz")
                 .name("业务系统")
                 .level(DOMAIN)
                 .description("公司内部 OA 系统、保险系统等业务系统的功能介绍、架构设计、数据安全等问题")
@@ -205,6 +256,7 @@ public class IntentTreeFactory {
         // ========== 3. 中间件环境信息 ==========
         IntentNode mw = IntentNode.builder()
                 .id("middleware")
+                .kbId("middleware")
                 .name("中间件环境信息")
                 .level(DOMAIN)
                 .description("Redis、RocketMQ、XXL-Job 等中间件环境的部署信息、连接方式、集群拓扑等")
