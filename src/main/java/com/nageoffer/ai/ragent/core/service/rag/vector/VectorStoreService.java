@@ -1,6 +1,6 @@
 package com.nageoffer.ai.ragent.core.service.rag.vector;
 
-import com.nageoffer.ai.ragent.core.service.ChunkService;
+import com.nageoffer.ai.ragent.core.service.rag.chunk.Chunk;
 
 import java.util.List;
 
@@ -9,7 +9,7 @@ public interface VectorStoreService {
     /**
      * 将指定文档的所有 chunk 向量入库（实现里请携带 kbId、docId、chunkIndex、text 等元信息）
      */
-    void upsert(String kbId, String docId, List<ChunkService.Chunk> chunks, float[][] vectors);
+    void upsert(String kbId, String docId, List<Chunk> chunks, float[][] vectors);
 
     /**
      * 删除某文档下所有向量（基于 docId 过滤）

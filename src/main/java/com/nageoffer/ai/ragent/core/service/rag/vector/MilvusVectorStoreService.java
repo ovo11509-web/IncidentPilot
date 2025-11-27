@@ -5,7 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.core.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.core.dao.mapper.KnowledgeBaseMapper;
-import com.nageoffer.ai.ragent.core.service.ChunkService;
+import com.nageoffer.ai.ragent.core.service.rag.chunk.Chunk;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
@@ -27,7 +27,7 @@ public class MilvusVectorStoreService implements VectorStoreService {
     private final KnowledgeBaseMapper kbMapper;
 
     @Override
-    public void upsert(String kbId, String docId, List<ChunkService.Chunk> chunks, float[][] vectors) {
+    public void upsert(String kbId, String docId, List<Chunk> chunks, float[][] vectors) {
         if (chunks == null || chunks.isEmpty()) return;
         if (vectors == null || vectors.length != chunks.size()) {
             throw new IllegalArgumentException("vectors size != chunks size");
@@ -47,11 +47,11 @@ public class MilvusVectorStoreService implements VectorStoreService {
 
         List<JsonObject> rows = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
-            ChunkService.Chunk c = chunks.get(i);
+            Chunk c = chunks.get(i);
 
             String chunkPk = IdUtil.getSnowflakeNextIdStr();
 
-            String content = c.content() == null ? "" : c.content();
+            String content = c.getContent() == null ? "" : c.getContent();
             if (content.length() > 65535) {
                 content = content.substring(0, 65535);
             }
@@ -59,7 +59,7 @@ public class MilvusVectorStoreService implements VectorStoreService {
             JsonObject meta = new JsonObject();
             meta.addProperty("kb_id", kbId);
             meta.addProperty("doc_id", docId);
-            meta.addProperty("chunk_index", c.index());
+            meta.addProperty("chunk_index", c.getIndex());
 
             JsonObject row = new JsonObject();
             row.addProperty("doc_id", chunkPk);
