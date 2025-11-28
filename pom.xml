@@ -6,8 +6,10 @@
     <artifactId>ragent</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
-    <name>ragent-core</name>
-    <description>RAG综合智能体 - 基于Spring Boot的智能文档处理与检索系统，集成向量数据库，拥有智能问答、知识库、会话记忆等功能</description>
+    <name>ragent-ai</name>
+    <description>
+        RAG综合智能体 - 基于Spring Boot的智能文档处理与检索系统，集成向量数据库，拥有智能问答、知识库、会话记忆等功能
+    </description>
 
     <properties>
         <java.version>17</java.version>
@@ -117,6 +119,16 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
             </plugin>
         </plugins>
     </build>
