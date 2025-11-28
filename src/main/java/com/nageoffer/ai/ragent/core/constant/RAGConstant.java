@@ -1,19 +1,42 @@
 package com.nageoffer.ai.ragent.core.constant;
 
+/**
+ * RAG 系统常量类
+ *
+ * <p>
+ * 定义 RAG（Retrieval-Augmented Generation）系统中使用的各种常量配置，包括不限于：
+ * <ul>
+ *   <li>意图识别相关阈值和限制</li>
+ *   <li>查询改写提示词模板</li>
+ *   <li>RAG 问答提示词模板</li>
+ *   <li>系统对话提示词模板</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * 这些常量主要用于控制 RAG 系统的行为和生成质量，包括意图过滤、查询优化、
+ * 文档检索和智能问答等核心流程
+ * </p>
+ */
 public class RAGConstant {
 
     /**
-     * 意图最低分：低于这个就当成“聊偏了”，不拿来跑 RAG
+     * 意图识别最低分数阈值
+     * <p>
+     * 低于这个分数就当成"聊偏了"，不参与 RAG 检索流程
+     * </p>
      */
     public static final double INTENT_MIN_SCORE = 0.35;
 
     /**
-     * 单次最多参与的意图数量，防止拉太多 Collection
+     * 单次查询最多参与的意图数量上限
+     * 防止拉取过多 Collection 导致性能问题
      */
     public static final int MAX_INTENT_COUNT = 3;
 
     /**
-     * 用户问题重写提示词
+     * 用户查询重写提示词模板
+     * 用于将用户的自然语言问题改写成更适合向量检索的查询语句，提高检索准确性和召回率。模板通过 {@code %s} 占位符接收用户问题。
      */
     public static final String QUERY_REWRITE_PROMPT = """
             你是一个“查询改写器（Query Rewriter）”，只用于 RAG 系统的【检索阶段】。
@@ -59,7 +82,8 @@ public class RAGConstant {
             """;
 
     /**
-     * 默认 RAG 提示词
+     * 默认 RAG 问答提示词模板
+     * 用于指导大模型基于检索到的文档内容进行准确回答，包含严格的事实性约束和链接处理规则。模板通过两个 {@code %s} 占位符分别接收文档内容和用户问题。
      */
     public static final String RAG_DEFAULT_PROMPT = """
             你是专业的企业内 RAG 问答助手，只能基于【文档内容】进行回答，不能使用外部知识或网络搜索。
@@ -107,7 +131,8 @@ public class RAGConstant {
             """;
 
     /**
-     * 系统提示词
+     * 系统对话提示词模板
+     * 定义企业知识助手「小码」的角色设定和对话规则，包括打招呼、自我介绍、问题分类处理等场景。模板通过 {@code %s} 占位符接收用户问题。
      */
     public static final String CHAT_SYSTEM_PROMPT = """
             你是企业内部知识助手「小码」。当前系统已经集成人事、行政、IT 支持、业务系统说明和中间件环境等知识库，但并不是所有问题都在知识库中。

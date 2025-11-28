@@ -47,6 +47,11 @@ public class EmbeddingProperties {
      */
     private EmbeddingOllamaProperties ollama;
 
+    /**
+     * SiliconFlow 向量服务配置
+     * <p>
+     * 当 {@link #provider} 设置为 {@code siliconFlow} 时生效。
+     */
     private EmbeddingSiliconFlowProperties siliconFlow;
 
     /**
@@ -58,6 +63,14 @@ public class EmbeddingProperties {
     public record EmbeddingOllamaProperties(String url, String model) {
     }
 
+    /**
+     * SiliconFlow 向量模型配置
+     *
+     * @param url       SiliconFlow 服务访问地址
+     * @param apiKey    SiliconFlow API 密钥，用于身份验证
+     * @param model     默认使用的向量模型名称
+     * @param dimension 向量维度，指定生成向量的维数
+     */
     public record EmbeddingSiliconFlowProperties(String url, String apiKey, String model, Integer dimension) {
     }
 }
