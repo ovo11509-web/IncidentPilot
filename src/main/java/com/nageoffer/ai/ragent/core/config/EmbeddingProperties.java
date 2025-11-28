@@ -47,6 +47,8 @@ public class EmbeddingProperties {
      */
     private EmbeddingOllamaProperties ollama;
 
+    private EmbeddingSiliconFlowProperties siliconFlow;
+
     /**
      * Ollama 向量模型配置
      *
@@ -54,6 +56,9 @@ public class EmbeddingProperties {
      * @param model 默认使用的向量模型名称，例如 {@code qwen3-embedding:8b}
      */
     public record EmbeddingOllamaProperties(String url, String model) {
+    }
+
+    public record EmbeddingSiliconFlowProperties(String url, String apiKey, String model, Integer dimension) {
     }
 }
 

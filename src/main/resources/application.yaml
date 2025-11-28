@@ -23,8 +23,7 @@ milvus:
 
 rag:
   default:
-    # rag_default_store
-    collection-name: rag_hnsw_cosine_test
+    collection-name: rag_default_store
     dimension: 4096
     metric-type: COSINE
 
@@ -33,10 +32,15 @@ rag:
 
 ai:
   embedding:
-    provider: ollama
+    provider: siliconflow
     ollama:
       url: http://localhost:11434
       model: qwen3-embedding:8b-fp16
+    siliconflow:
+      url: https://api.siliconflow.cn/v1/embeddings
+      api-key: REMOVED_HISTORICAL_CREDENTIAL
+      model: Qwen/Qwen3-Embedding-8B
+      dimension: 4096
 
   chat:
     provider: bailian
