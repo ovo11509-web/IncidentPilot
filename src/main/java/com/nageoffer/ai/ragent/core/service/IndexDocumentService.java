@@ -6,7 +6,7 @@ import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.core.config.RAGDefaultProperties;
 import com.nageoffer.ai.ragent.core.dto.DocumentChunk;
 import com.nageoffer.ai.ragent.core.dto.DocumentIndexResult;
-import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
+import com.nageoffer.ai.ragent.core.service.rag.embedding.EmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
@@ -43,7 +43,7 @@ public class IndexDocumentService {
     private static final int MAX_CHUNKS_PER_DOC_QUERY = 2000;
 
     private final MilvusClientV2 milvusClient;
-    private final OllamaEmbeddingService embeddingService;
+    private final EmbeddingService embeddingService;
     private final RAGDefaultProperties ragDefaultProperties;
 
     private final Tika tika = new Tika();

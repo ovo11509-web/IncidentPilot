@@ -2,7 +2,7 @@ package com.nageoffer.ai.ragent.core.service.rag.retrieve;
 
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.core.config.RAGDefaultProperties;
-import com.nageoffer.ai.ragent.core.service.rag.embedding.OllamaEmbeddingService;
+import com.nageoffer.ai.ragent.core.service.rag.embedding.EmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.data.BaseVector;
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MilvusRetrieverService implements RetrieverService {
 
-    private final OllamaEmbeddingService embeddingService;
+    private final EmbeddingService embeddingService;
     private final MilvusClientV2 milvusClient;
     private final RAGDefaultProperties ragDefaultProperties;
 
