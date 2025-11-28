@@ -2,7 +2,6 @@ package com.nageoffer.ai.ragent.core.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.nageoffer.ai.ragent.core.convention.ChatRequest;
 import com.nageoffer.ai.ragent.core.enums.IntentKind;
 import com.nageoffer.ai.ragent.core.service.RAGService;
@@ -45,21 +44,8 @@ public class RAGServiceImpl implements RAGService {
 
     @Override
     public String answer(String question, int topK) {
-        int finalTopK = topK > 0 ? topK : 5;
-        int searchTopK = Math.max(finalTopK * 3, 20); // 至少 20，避免问题很小时候召回太少
-
         String rewriteQuestion = queryRewriteService.rewrite(question);
-
         List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
-        log.info("\n意图识别树如下所示:\n{}",
-                JSONUtil.toJsonPrettyStr(
-                        nodeScores.stream().map(each -> {
-                            IntentNode node = each.getNode();
-                            node.setChildren(null);
-                            return each;
-                        }).collect(Collectors.toList())
-                )
-        );
 
         if (nodeScores.size() == 1) {
             if (Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
@@ -85,6 +71,9 @@ public class RAGServiceImpl implements RAGService {
                 .limit(MAX_INTENT_COUNT)
                 .toList();
 
+        int finalTopK = topK > 0 ? topK : 5;
+        int searchTopK = Math.max(finalTopK * 3, 20); // 至少 20，避免问题很小时候召回太少
+
         List<RetrievedChunk> allChunks = Collections.synchronizedList(new ArrayList<>());
         ragIntentScores.parallelStream().forEach(nodeScore -> {
             RetrieveRequest request = RetrieveRequest.builder()
@@ -106,10 +95,6 @@ public class RAGServiceImpl implements RAGService {
 
         int rerankLimit = finalTopK * 2;
         List<RetrievedChunk> reranked = rerankService.rerank(rewriteQuestion, allChunks, rerankLimit);
-
-        if (CollUtil.isEmpty(reranked)) {
-            return "文档检索结果Rerank后为空，请稍后重试或联系管理员排查。";
-        }
 
         // List<RetrievedChunk> elbowSelected = selectByElbow(reranked);
         // 暂时忽略分数排序，因为不同知识库类型召回数据不同，容易误判
@@ -162,51 +147,89 @@ public class RAGServiceImpl implements RAGService {
 
     @Override
     public void streamAnswer(String question, int topK, StreamCallback callback) {
-        long tStart = System.nanoTime();
+        String rewriteQuestion = queryRewriteService.rewrite(question);
 
-        // ==================== 1. search ====================
-        long tSearchStart = System.nanoTime();
-        int finalTopK = topK;
-        int searchTopK = finalTopK * 3;
+        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
 
-        List<RetrievedChunk> roughRetrievedChunks = retrieverService.retrieve(question, searchTopK);
-        long tSearchEnd = System.nanoTime();
-        System.out.println("[Perf] search(question, topK) 耗时: " + ((tSearchEnd - tSearchStart) / 1_000_000.0) + " ms");
+        // 如果只有一个 SYSTEM 意图，走系统打招呼的流式输出
+        if (nodeScores.size() == 1 && Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
+            String prompt = CHAT_SYSTEM_PROMPT.formatted(rewriteQuestion);
+            ChatRequest req = ChatRequest.builder()
+                    .prompt(prompt)
+                    .temperature(0.7D)
+                    .topP(0.8D)
+                    .thinking(false)
+                    .build();
 
-        List<RetrievedChunk> retrievedChunks = rerankService.rerank(question, roughRetrievedChunks, finalTopK);
+            llmService.streamChat(req, callback);
+            return;
+        }
 
-        // ==================== 2. 构建 context ====================
-        long tContextStart = System.nanoTime();
-        String context = retrievedChunks.stream()
+        List<NodeScore> ragIntentScores = nodeScores.stream()
+                .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
+                .filter(ns -> {
+                    IntentNode node = ns.getNode();
+                    return node.getKind() == null || node.getKind() == IntentKind.KB;
+                })
+                .limit(MAX_INTENT_COUNT)
+                .toList();
+
+        int finalTopK = topK > 0 ? topK : 5;
+        int searchTopK = Math.max(finalTopK * 3, 20); // 至少 20，避免召回过少
+
+        List<RetrievedChunk> allChunks = Collections.synchronizedList(new ArrayList<>());
+        ragIntentScores.parallelStream().forEach(nodeScore -> {
+            RetrieveRequest request = RetrieveRequest.builder()
+                    .collectionName(nodeScore.getNode().getCollectionName())
+                    .query(rewriteQuestion)
+                    .topK(searchTopK)
+                    .build();
+            List<RetrievedChunk> nodeRetrieveChunks = retrieverService.retrieve(request);
+            if (CollUtil.isNotEmpty(nodeRetrieveChunks)) {
+                allChunks.addAll(nodeRetrieveChunks);
+            }
+        });
+
+        if (allChunks.isEmpty()) {
+            callback.onContent("未检索到与问题相关的文档内容，请尝试换一个问法。");
+            return;
+        }
+
+        int rerankLimit = finalTopK * 2;
+        List<RetrievedChunk> reranked = rerankService.rerank(rewriteQuestion, allChunks, rerankLimit);
+
+        // 暂时忽略肘部算法，直接采用 Rerank 排序链表
+        List<RetrievedChunk> elbowSelected = reranked;
+
+        final double MIN_SCORE = 0.4;
+        final double MARGIN_RATIO = 0.75;
+
+        float bestScore = elbowSelected.get(0).getScore();
+        List<RetrievedChunk> filteredByScore = elbowSelected.stream()
+                .filter(c -> {
+                    Float s = c.getScore();
+                    if (s == null) return true;
+                    return s >= MIN_SCORE && s >= bestScore * MARGIN_RATIO;
+                })
+                .toList();
+
+        if (filteredByScore.isEmpty()) {
+            filteredByScore = reranked.subList(0, Math.min(finalTopK, reranked.size()));
+        }
+
+        String context = filteredByScore.stream()
                 .map(h -> "- " + h.getText())
                 .collect(Collectors.joining("\n"));
-        long tContextEnd = System.nanoTime();
-        System.out.println("[Perf] context 构建耗时: " + ((tContextEnd - tContextStart) / 1_000_000.0) + " ms");
 
-        // ==================== 3. 拼接 Prompt ====================
-        long tPromptStart = System.nanoTime();
-        String prompt = """
-                你是专业的企业内 RAG 问答助手，请基于文档内容给出更完整、具备解释性的回答。
-                
-                请遵循以下规则：
-                - 回答必须严格基于【文档内容】
-                - 不得虚构信息
-                - 回答可以适当丰富，但不要过度扩展
-                - 建议采用分点说明、简要解释原因或背景
-                - 若文档中没有明确内容，请说明“文档未包含相关信息。”
-                
-                【文档内容】
-                %s
-                
-                【用户问题】
-                %s
-                """
-                .formatted(context, question);
-        long tPromptEnd = System.nanoTime();
-        System.out.println("[Perf] prompt 拼接耗时: " + ((tPromptEnd - tPromptStart) / 1_000_000.0) + " ms");
+        String promptTemplate;
+        if (ragIntentScores.size() == 1 &&
+                StrUtil.isNotBlank(ragIntentScores.get(0).getNode().getPromptTemplate())) {
+            promptTemplate = ragIntentScores.get(0).getNode().getPromptTemplate();
+        } else {
+            promptTemplate = RAG_DEFAULT_PROMPT;
+        }
+        String prompt = promptTemplate.formatted(context, rewriteQuestion);
 
-        // ==================== 4. 调用流式 LLM ====================
-        long tLlmStart = System.nanoTime();
         ChatRequest chatRequest = ChatRequest.builder()
                 .prompt(prompt)
                 .thinking(false)
@@ -214,22 +237,6 @@ public class RAGServiceImpl implements RAGService {
                 .topP(0.7D)
                 .build();
         llmService.streamChat(chatRequest, callback);
-        long tLlmEnd = System.nanoTime();
-        System.out.println("[Perf] llmStreamService.streamChat 调用耗时: " + ((tLlmEnd - tLlmStart) / 1_000_000.0) + " ms");
-
-        // ==================== 5. 全流程总耗时 ====================
-        long tEnd = System.nanoTime();
-        double total = (tEnd - tStart) / 1_000_000.0;
-
-        System.out.println("================================");
-        System.out.println("[Perf Summary - streamAnswer]");
-        System.out.println("  search:          " + ((tSearchEnd - tSearchStart) / 1_000_000.0) + " ms");
-        System.out.println("  build context:   " + ((tContextEnd - tContextStart) / 1_000_000.0) + " ms");
-        System.out.println("  build prompt:    " + ((tPromptEnd - tPromptStart) / 1_000_000.0) + " ms");
-        System.out.println("  llm call:        " + ((tLlmEnd - tLlmStart) / 1_000_000.0) + " ms");
-        System.out.println("--------------------------------");
-        System.out.println("  TOTAL:           " + total + " ms");
-        System.out.println("================================");
     }
 
     private List<RetrievedChunk> selectByElbow(List<RetrievedChunk> reranked) {
