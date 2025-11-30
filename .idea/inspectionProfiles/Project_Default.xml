@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component name="InspectionProjectProfileManager">
+    <profile version="1.0">
+        <option name="myName" value="Project Default"/>
+
+        <!-- 其他 inspection 配置省略 -->
+
+        <!-- 关键：关闭 “Duplicated code fragment” 检查 -->
+        <inspection_tool
+                class="DuplicatedCode"
+                enabled="false"
+                enabled_by_default="false"
+                level="WEAK WARNING"/>
+    </profile>
+</component>
