@@ -99,7 +99,7 @@ public class RAGServiceImpl implements RAGService {
 
         // 如果没有检索到内容，直接 fallback
         if (allChunks.isEmpty()) {
-            return "未检索到与问题相关的文档内容，请尝试换一个问法。";
+            return "未检索到与问题相关的文档内容。";
         }
 
         int rerankLimit = finalTopK * 2;
@@ -210,7 +210,7 @@ public class RAGServiceImpl implements RAGService {
 
         // 如果没有检索到内容，直接 fallback
         if (allChunks.isEmpty()) {
-            callback.onContent("未检索到与问题相关的文档内容，请尝试换一个问法。");
+            callback.onContent("未检索到与问题相关的文档内容。");
             return;
         }
 
