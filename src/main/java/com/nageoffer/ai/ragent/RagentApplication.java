@@ -9,9 +9,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan("com.nageoffer.ai.ragent.dao.mapper")
-public class RagentCoreApplication {
+public class RagentApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(RagentCoreApplication.class, args);
+        SpringApplication.run(RagentApplication.class, args);
     }
 }

@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: ragent-core
+    name: ragent
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
