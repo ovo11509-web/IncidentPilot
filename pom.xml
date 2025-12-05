@@ -18,6 +18,7 @@
         <tika.version>3.2.3</tika.version>
         <hutool-all.version>5.8.37</hutool-all.version>
         <mybatis-plus-spring-boot3-starter.version>3.5.14</mybatis-plus-spring-boot3-starter.version>
+        <s3.version>2.40.2</s3.version>
     </properties>
 
     <dependencyManagement>
@@ -111,6 +112,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${s3.version}</version>
         </dependency>
     </dependencies>
 
