@@ -5,6 +5,7 @@ import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkBatchRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkCreateRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkPageRequest;
@@ -43,6 +44,14 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
     private final KnowledgeDocumentMapper documentMapper;
     private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
+
+    @Override
+    public Boolean existsByDocId(String docId) {
+        List<KnowledgeChunkDO> chunkDOList = chunkMapper.selectList(
+                Wrappers.lambdaQuery(KnowledgeChunkDO.class).eq(KnowledgeChunkDO::getDocId, docId)
+        );
+        return chunkDOList != null && !chunkDOList.isEmpty();
+    }
 
     @Override
     public IPage<KnowledgeChunkVO> pageQuery(String docId, KnowledgeChunkPageRequest requestParam) {
@@ -88,6 +97,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         int charCount = content.length();
 
         KnowledgeChunkDO chunkDO = KnowledgeChunkDO.builder()
+                .id(Long.parseLong(requestParam.getChunkId()))
                 .kbId(documentDO.getKbId())
                 .docId(Long.parseLong(docId))
                 .chunkIndex(chunkIndex)

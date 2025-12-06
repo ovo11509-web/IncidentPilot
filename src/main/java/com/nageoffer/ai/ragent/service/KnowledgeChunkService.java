@@ -15,6 +15,11 @@ import java.util.List;
 public interface KnowledgeChunkService {
 
     /**
+     * 查询文档是否已 Chunk
+     */
+    Boolean existsByDocId(String docId);
+
+    /**
      * 分页查询 Chunk 列表
      */
     IPage<KnowledgeChunkVO> pageQuery(String docId, KnowledgeChunkPageRequest requestParam);

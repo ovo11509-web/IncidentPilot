@@ -77,6 +77,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         Assert.notNull(documentDO, () -> new ClientException("文档不存在"));
         Assert.isTrue(!DocumentStatus.RUNNING.getCode().equals(documentDO.getStatus()), () -> new ClientException("文档分块进行中"));
 
+        boolean alreadyChunked = knowledgeChunkService.existsByDocId(docId);
+        Assert.isFalse(alreadyChunked, () -> new ClientException("文档已分块"));
+
         patchStatus(documentDO, DocumentStatus.RUNNING);
 
         try (InputStream is = fileStorageService.openStream(documentDO.getFileUrl())) {
