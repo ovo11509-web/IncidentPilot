@@ -11,8 +11,10 @@ import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
+import io.milvus.v2.service.vector.request.UpsertReq;
 import io.milvus.v2.service.vector.response.DeleteResp;
 import io.milvus.v2.service.vector.response.InsertResp;
+import io.milvus.v2.service.vector.response.UpsertResp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -77,6 +79,53 @@ public class MilvusVectorStoreService implements VectorStoreService {
 
         InsertResp resp = milvusClient.insert(req);
         log.info("Milvus chunk 建立/写入向量索引成功, collection={}, rows={}", collection, resp.getInsertCnt());
+    }
+
+    @Override
+    public void updateChunk(String kbId, String docId, Chunk chunk, float[] vector) {
+        Assert.isFalse(chunk == null, () -> new ClientException("Chunk 对象不能为空"));
+        Assert.isFalse(vector == null || vector.length == 0, () -> new ClientException("向量不能为空"));
+
+        KnowledgeBaseDO kbDO = kbMapper.selectById(kbId);
+        Assert.isFalse(kbDO == null, () -> new ClientException("知识库不存在"));
+
+        // 维度校验
+        final int dim = 4096;
+        if (vector.length != dim) {
+            throw new ClientException("向量维度不匹配，期望维度为 " + dim);
+        }
+
+        String chunkPk = chunk.getChunkId() != null ? chunk.getChunkId() : IdUtil.getSnowflakeNextIdStr();
+
+        String content = chunk.getContent() == null ? "" : chunk.getContent();
+        if (content.length() > 65535) {
+            content = content.substring(0, 65535);
+        }
+
+        JsonObject metadata = new JsonObject();
+        metadata.addProperty("kb_id", kbId);
+        metadata.addProperty("doc_id", docId);
+        metadata.addProperty("chunk_index", chunk.getIndex());
+
+        JsonObject row = new JsonObject();
+        row.addProperty("doc_id", chunkPk);
+        row.addProperty("content", content);
+        row.add("metadata", metadata);
+        row.add("embedding", toJsonArray(vector));
+
+        List<JsonObject> rows = List.of(row);
+
+        String collection = kbDO.getCollectionName();
+
+        UpsertReq upsertReq = UpsertReq.builder()
+                .collectionName(collection)
+                .data(rows)
+                .build();
+
+        UpsertResp resp = milvusClient.upsert(upsertReq);
+
+        log.info("Milvus 更新 chunk 向量索引成功, collection={}, kbId={}, docId={}, chunkId={}, upsertCnt={}",
+                collection, kbId, docId, chunkPk, resp.getUpsertCnt());
     }
 
     @Override

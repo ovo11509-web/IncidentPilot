@@ -12,6 +12,11 @@ public interface VectorStoreService {
     void indexDocumentChunks(String kbId, String docId, List<Chunk> chunks, float[][] vectors);
 
     /**
+     * 更新单个 chunk 的向量索引
+     */
+    void updateChunk(String kbId, String docId, Chunk chunk, float[] vector);
+
+    /**
      * 删除指定文档的所有 chunk 向量索引
      */
     void deleteDocumentVectors(String kbId, String docId);

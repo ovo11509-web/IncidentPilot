@@ -141,12 +141,17 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         String kbId = String.valueOf(documentDO.getKbId());
         log.info("更新 Chunk 成功, kbId={}, docId={}, chunkId={}", kbId, docId, chunkId);
 
-        // 同步 Milvus：删除旧向量 + 写入新向量（如果启用）
-        if (chunkDO.getEnabled() == 1) {
-            syncChunkToMilvus(kbId, docId, chunkDO);
-        } else {
-            deleteChunkFromMilvus(kbId, chunkId);
-        }
+        // 同步向量数据库
+        vectorStoreService.updateChunk(
+                String.valueOf(chunkDO.getKbId()),
+                docId,
+                Chunk.builder()
+                        .chunkId(chunkId)
+                        .content(newContent)
+                        .index(chunkDO.getChunkIndex())
+                        .build(),
+                toArray(embeddingService.embed(newContent))
+        );
     }
 
     @Override
