@@ -20,7 +20,7 @@ import java.util.Date;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@TableName("t_knowledge_base_document")
+@TableName("t_knowledge_document")
 public class KnowledgeDocumentDO {
 
     @TableId(type = IdType.AUTO)
