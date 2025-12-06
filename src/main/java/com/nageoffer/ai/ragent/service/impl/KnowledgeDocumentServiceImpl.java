@@ -5,22 +5,24 @@ import cn.hutool.core.lang.Assert;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkCreateRequest;
+import com.nageoffer.ai.ragent.controller.vo.KnowledgeDocumentVO;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
-import com.nageoffer.ai.ragent.controller.vo.KnowledgeDocumentVO;
 import com.nageoffer.ai.ragent.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
-import com.nageoffer.ai.ragent.service.FileStorageService;
-import com.nageoffer.ai.ragent.service.KnowledgeDocumentService;
 import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import com.nageoffer.ai.ragent.rag.chunk.StructureAwareSemanticChunkService;
 import com.nageoffer.ai.ragent.rag.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.rag.extractor.DocumentTextExtractor;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreService;
+import com.nageoffer.ai.ragent.service.FileStorageService;
+import com.nageoffer.ai.ragent.service.KnowledgeChunkService;
+import com.nageoffer.ai.ragent.service.KnowledgeDocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +31,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.util.List;
-import java.util.Objects;
 
 @Slf4j
 @Service
@@ -43,6 +44,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final FileStorageService fileStorageService;
     private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
+    private final KnowledgeChunkService knowledgeChunkService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -78,25 +80,26 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         patchStatus(documentDO, DocumentStatus.RUNNING);
 
         try (InputStream is = fileStorageService.openStream(documentDO.getFileUrl())) {
-
             String text = textExtractor.extract(is, documentDO.getDocName());
 
             List<Chunk> chunks = chunkService.split(text);
+
+            knowledgeChunkService.batchCreate(docId, BeanUtil.copyToList(chunks, KnowledgeChunkCreateRequest.class));
+            documentDO.setChunkCount(chunks.size());
+            patchStatus(documentDO, DocumentStatus.SUCCESS);
+            docMapper.updateById(documentDO);
 
             List<String> texts = chunks.stream().map(Chunk::getContent).toList();
             float[][] vectors = new float[texts.size()][];
             for (int i = 0; i < texts.size(); i++) {
                 vectors[i] = toArray(embeddingService.embed(texts.get(i)));
             }
-            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, chunks, vectors);
 
-            documentDO.setChunkCount(chunks.size());
-            patchStatus(documentDO, DocumentStatus.SUCCESS);
-            docMapper.updateById(documentDO);
+            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, chunks, vectors);
         } catch (Exception e) {
             log.error("文件分块失败：docId={}", docId, e);
             patchStatus(documentDO, DocumentStatus.FAILED);
-            throw new ServiceException("分块失败：" + e.getMessage());
+            throw new ServiceException("分块失败");
         }
     }
 

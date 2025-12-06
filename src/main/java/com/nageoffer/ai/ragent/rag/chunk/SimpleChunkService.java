@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.chunk;
 
+import cn.hutool.core.util.IdUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -21,7 +22,12 @@ public class SimpleChunkService implements ChunkService {
         List<String> pieces = splitIntoChunks(text, chunkSize, overlap);
         List<Chunk> out = new ArrayList<>(pieces.size());
         for (int i = 0; i < pieces.size(); i++) {
-            out.add(new Chunk(i, pieces.get(i)));
+            Chunk chunk = Chunk.builder()
+                    .content(pieces.get(i))
+                    .index(i)
+                    .chunkId(IdUtil.getSnowflakeNextIdStr())
+                    .build();
+            out.add(chunk);
         }
         return out;
     }

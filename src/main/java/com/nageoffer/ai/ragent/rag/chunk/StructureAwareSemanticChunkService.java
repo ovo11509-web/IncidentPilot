@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.chunk;
 
+import cn.hutool.core.util.IdUtil;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
@@ -62,7 +63,12 @@ public class StructureAwareSemanticChunkService implements ChunkService {
         List<Block> blocks = segmentToBlocks(text);
 
         if (blocks.isEmpty()) {
-            return List.of(new Chunk(0, text)); // 极端兜底：整体作为一个块
+            Chunk chunk = Chunk.builder()
+                    .content(text)
+                    .index(0)
+                    .chunkId(IdUtil.getSnowflakeNextIdStr())
+                    .build();
+            return List.of(chunk); // 极端兜底：整体作为一个块
         }
 
         // 2) 依据 min/target/max 打包成 chunk（只在块边界切分）
@@ -73,7 +79,12 @@ public class StructureAwareSemanticChunkService implements ChunkService {
 
         // 编号从 0 递增
         for (int i = 0; i < out.size(); i++) {
-            out.set(i, new Chunk(i, out.get(i).getContent()));
+            Chunk chunk = Chunk.builder()
+                    .content(out.get(i).getContent())
+                    .index(i)
+                    .chunkId(IdUtil.getSnowflakeNextIdStr())
+                    .build();
+            out.set(i, chunk);
         }
         return out;
     }
@@ -263,7 +274,13 @@ public class StructureAwareSemanticChunkService implements ChunkService {
             if (overlap > 0 && prevTail != null && !prevTail.isEmpty()) {
                 body = prevTail + body;
             }
-            out.add(new Chunk(k, body));
+
+            Chunk chunk = Chunk.builder()
+                    .content(body)
+                    .index(k)
+                    .chunkId(IdUtil.getSnowflakeNextIdStr())
+                    .build();
+            out.add(chunk);
 
             // 计算下一块的 overlap 尾部（完全来自本 chunk 原文结尾）
             if (overlap > 0) {

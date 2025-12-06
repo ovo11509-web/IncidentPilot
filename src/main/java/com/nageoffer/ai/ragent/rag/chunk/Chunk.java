@@ -14,4 +14,6 @@ public class Chunk {
     private Integer index;
 
     private String content;
+
+    private String chunkId;
 }
