@@ -15,4 +15,9 @@ public interface VectorStoreService {
      * 删除指定文档的所有 chunk 向量索引
      */
     void deleteDocumentVectors(String kbId, String docId);
+
+    /**
+     * 删除指定的单个 chunk 向量索引
+     */
+    void deleteChunkById(String kbId, String chunkId);
 }

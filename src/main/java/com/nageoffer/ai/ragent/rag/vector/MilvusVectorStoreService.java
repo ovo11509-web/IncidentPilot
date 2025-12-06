@@ -100,6 +100,27 @@ public class MilvusVectorStoreService implements VectorStoreService {
                 collection, kbId, docId, resp.getDeleteCnt());
     }
 
+
+    @Override
+    public void deleteChunkById(String kbId, String chunkId) {
+        KnowledgeBaseDO kbDO = kbMapper.selectById(kbId);
+        Assert.isFalse(kbDO == null, () -> new ClientException("知识库不存在"));
+
+        String collection = kbDO.getCollectionName();
+
+        // chunkId 就是 Milvus 中的 doc_id（主键），直接通过主键删除
+        String filter = "doc_id == \"" + chunkId + "\"";
+
+        DeleteReq deleteReq = DeleteReq.builder()
+                .collectionName(collection)
+                .filter(filter)
+                .build();
+
+        DeleteResp resp = milvusClient.delete(deleteReq);
+        log.info("Milvus 删除指定 chunk 向量索引成功, collection={}, kbId={}, chunkId={}, deleteCnt={}",
+                collection, kbId, chunkId, resp.getDeleteCnt());
+    }
+
     private JsonArray toJsonArray(float[] v) {
         JsonArray arr = new JsonArray(v.length);
         for (float x : v) {
