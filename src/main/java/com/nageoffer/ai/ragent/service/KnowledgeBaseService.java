@@ -8,9 +8,11 @@ public interface KnowledgeBaseService {
 
     String create(KnowledgeBaseCreateRequest requestParam);
 
-    void update(KnowledgeBaseUpdateRequest req);
+    void update(KnowledgeBaseUpdateRequest requestParam);
 
-    void delete(String id);
+    void rename(String kbId, KnowledgeBaseUpdateRequest requestParam);
 
-    KnowledgeBaseDO getById(String id);
+    void delete(String kbId);
+
+    KnowledgeBaseDO getById(String kbId);
 }

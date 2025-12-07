@@ -1,12 +1,14 @@
 package com.nageoffer.ai.ragent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseCreateRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseUpdateRequest;
+import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
 import com.nageoffer.ai.ragent.service.KnowledgeBaseService;
 import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
@@ -100,23 +102,53 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     }
 
     @Override
-    public void delete(String id) {
+    public void rename(String kbId, KnowledgeBaseUpdateRequest requestParam) {
+        KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(kbId);
+        if (kb == null || kb.getDeleted() != null && kb.getDeleted() == 1) {
+            throw new ClientException("知识库不存在");
+        }
+
+        if (!StringUtils.hasText(requestParam.getName())) {
+            throw new ClientException("知识库名称不能为空");
+        }
+
+        // 名称重复校验（排除当前知识库）
+        String name = requestParam.getName().replaceAll("\\s+", "");
+        Long count = knowledgeBaseMapper.selectCount(
+                Wrappers.lambdaQuery(KnowledgeBaseDO.class)
+                        .eq(KnowledgeBaseDO::getName, name)
+                        .ne(KnowledgeBaseDO::getId, kbId)
+                        .eq(KnowledgeBaseDO::getDeleted, 0)
+        );
+        if (count > 0) {
+            throw new ServiceException("知识库名称已存在：" + requestParam.getName());
+        }
+
+        kb.setName(requestParam.getName());
+        kb.setUpdatedBy("");
+        knowledgeBaseMapper.updateById(kb);
+
+        log.info("成功重命名知识库, kbId={}, newName={}", kbId, requestParam.getName());
+    }
+
+    @Override
+    public void delete(String kbId) {
         // 可选：限制删除前需要确保没有文档
         Long docCount = knowledgeDocumentMapper.selectCount(
-                new LambdaQueryWrapper<KnowledgeDocumentDO>()
-                        .eq(KnowledgeDocumentDO::getKbId, id)
+                Wrappers.lambdaQuery(KnowledgeDocumentDO.class)
+                        .eq(KnowledgeDocumentDO::getKbId, kbId)
                         .eq(KnowledgeDocumentDO::getDeleted, 0)
         );
         if (docCount > 0) {
             throw new IllegalStateException("知识库下仍有关联文档，无法删除");
         }
 
-        knowledgeBaseMapper.deleteById(id);
+        knowledgeBaseMapper.deleteById(kbId);
     }
 
     @Override
-    public KnowledgeBaseDO getById(String id) {
-        KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(id);
+    public KnowledgeBaseDO getById(String kbId) {
+        KnowledgeBaseDO kb = knowledgeBaseMapper.selectById(kbId);
         if (kb == null || kb.getDeleted() != null && kb.getDeleted() == 1) {
             return null;
         }
