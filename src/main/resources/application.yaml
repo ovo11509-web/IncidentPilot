@@ -5,7 +5,7 @@ server:
 
 spring:
   application:
-    name: ragent
+    name: ragent-service
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
