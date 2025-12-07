@@ -35,6 +35,31 @@ public class RAGConstant {
     public static final int MAX_INTENT_COUNT = 3;
 
     /**
+     * Rerank 分数过滤的边际比率（相对于最高分）
+     */
+    public static final double SCORE_MARGIN_RATIO = 0.75;
+
+    /**
+     * 默认返回的 TopK
+     */
+    public static final int DEFAULT_TOP_K = 5;
+
+    /**
+     * 检索时的 TopK 扩展倍数
+     */
+    public static final int SEARCH_TOP_K_MULTIPLIER = 3;
+
+    /**
+     * 检索时的最小 TopK
+     */
+    public static final int MIN_SEARCH_TOP_K = 20;
+
+    /**
+     * Rerank 限制倍数
+     */
+    public static final int RERANK_LIMIT_MULTIPLIER = 2;
+
+    /**
      * 用户查询重写提示词模板
      * 用于将用户的自然语言问题改写成更适合向量 / 关键字检索的查询语句，提高检索准确性和召回率
      * 模板通过 {@code %s} 占位符接收用户问题。

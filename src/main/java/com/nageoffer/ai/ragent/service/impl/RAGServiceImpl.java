@@ -25,8 +25,13 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.constant.RAGConstant.CHAT_SYSTEM_PROMPT;
+import static com.nageoffer.ai.ragent.constant.RAGConstant.DEFAULT_TOP_K;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_MIN_SCORE;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.MAX_INTENT_COUNT;
+import static com.nageoffer.ai.ragent.constant.RAGConstant.MIN_SEARCH_TOP_K;
+import static com.nageoffer.ai.ragent.constant.RAGConstant.RERANK_LIMIT_MULTIPLIER;
+import static com.nageoffer.ai.ragent.constant.RAGConstant.SCORE_MARGIN_RATIO;
+import static com.nageoffer.ai.ragent.constant.RAGConstant.SEARCH_TOP_K_MULTIPLIER;
 import static com.nageoffer.ai.ragent.enums.IntentKind.SYSTEM;
 
 @Slf4j
@@ -71,8 +76,8 @@ public class RAGServiceImpl implements RAGService {
                 .limit(MAX_INTENT_COUNT)
                 .toList();
 
-        int finalTopK = topK > 0 ? topK : 5;
-        int searchTopK = Math.max(finalTopK * 3, 20); // 至少 20，避免问题很小时候召回太少
+        int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
+        int searchTopK = Math.max(finalTopK * SEARCH_TOP_K_MULTIPLIER, MIN_SEARCH_TOP_K);
 
         // 跟同步版保持一致：按意图拆分检索结果
         Map<String, List<RetrievedChunk>> intentChunks = new java.util.concurrent.ConcurrentHashMap<>();
@@ -105,36 +110,11 @@ public class RAGServiceImpl implements RAGService {
             return;
         }
 
-        int rerankLimit = finalTopK * 2;
+        int rerankLimit = finalTopK * RERANK_LIMIT_MULTIPLIER;
         List<RetrievedChunk> reranked = rerankService.rerank(rewriteQuestion, allChunks, rerankLimit);
 
         // 暂时忽略肘部算法，直接采用 Rerank 排序链表
-        List<RetrievedChunk> elbowSelected = reranked;
-
-        final double MIN_SCORE = 0.4;
-        final double MARGIN_RATIO = 0.75;
-
-        // 选一个非空的最高分作对比基准（为空则跳过阈值过滤）
-        Float bestScore = elbowSelected.stream()
-                .map(RetrievedChunk::getScore)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
-
-        List<RetrievedChunk> filteredByScore = elbowSelected.stream()
-                .filter(c -> {
-                    Float s = c.getScore();
-                    if (s == null || bestScore == null) {
-                        return true;
-                    }
-                    return s >= MIN_SCORE && s >= bestScore * MARGIN_RATIO;
-                })
-                .toList();
-
-        // 如果筛完太少，就退回到 reranked 前 topK 几条
-        if (filteredByScore.isEmpty()) {
-            filteredByScore = reranked.subList(0, Math.min(finalTopK, reranked.size()));
-        }
+        List<RetrievedChunk> filteredByScore = reranked;
 
         // 拼接上下文
         String context = filteredByScore.stream()
@@ -155,33 +135,40 @@ public class RAGServiceImpl implements RAGService {
         llmService.streamChat(chatRequest, callback);
     }
 
-    private List<RetrievedChunk> selectByElbow(List<RetrievedChunk> reranked) {
-        if (reranked.size() <= 1) {
+    /**
+     * 根据分数过滤检索结果
+     *
+     * @param reranked  已经 rerank 后的结果列表
+     * @param finalTopK 最终需要的 TopK 数量
+     * @return 过滤后的结果列表
+     */
+    private List<RetrievedChunk> filterByScore(List<RetrievedChunk> reranked, int finalTopK) {
+        if (CollUtil.isEmpty(reranked)) {
             return reranked;
         }
 
-        // 至少保留 1 条
-        int cutIndex = reranked.size();
+        // 选一个非空的最高分作对比基准（为空则跳过阈值过滤）
+        Float bestScore = reranked.stream()
+                .map(RetrievedChunk::getScore)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
 
-        // 简单策略：ratio < 0.9 认为是一个“断崖”
-        double DROP_RATIO = 0.9;
+        List<RetrievedChunk> filtered = reranked.stream()
+                .filter(c -> {
+                    Float s = c.getScore();
+                    if (s == null || bestScore == null) {
+                        return true;
+                    }
+                    return s >= INTENT_MIN_SCORE && s >= bestScore * SCORE_MARGIN_RATIO;
+                })
+                .toList();
 
-        for (int i = 0; i < reranked.size() - 1; i++) {
-            float cur = reranked.get(i).getScore();
-            float next = reranked.get(i + 1).getScore();
-
-            if (cur <= 0) {
-                break;
-            }
-
-            double ratio = next / cur;
-            if (ratio < DROP_RATIO) {
-                // 截到 i（包含 i），后面的认为是另一个“段”
-                cutIndex = i + 1;
-                break;
-            }
+        // 如果筛完太少，就退回到 reranked 前 topK 几条
+        if (filtered.isEmpty()) {
+            return reranked.subList(0, Math.min(finalTopK, reranked.size()));
         }
 
-        return reranked.subList(0, cutIndex);
+        return filtered;
     }
 }
