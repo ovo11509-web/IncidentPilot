@@ -23,12 +23,6 @@ public class RAGController {
     private final RAGService ragService;
     private final Executor executor = Executors.newCachedThreadPool();
 
-    @GetMapping("/chat")
-    public String chat(@RequestParam String question,
-                       @RequestParam(defaultValue = "3") Integer topK) {
-        return ragService.answer(question, topK);
-    }
-
     @GetMapping(value = "/stream", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter stream(@RequestParam String question,
                              @RequestParam(defaultValue = "3") Integer topK) {

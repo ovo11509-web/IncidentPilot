@@ -1,27 +1,24 @@
 package com.nageoffer.ai.ragent.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.IntentKind;
-import com.nageoffer.ai.ragent.rag.prompt.RAGPromptService;
-import com.nageoffer.ai.ragent.service.RAGService;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.rag.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.intent.LLMTreeIntentClassifier;
 import com.nageoffer.ai.ragent.rag.intent.NodeScore;
+import com.nageoffer.ai.ragent.rag.prompt.RAGPromptService;
 import com.nageoffer.ai.ragent.rag.rerank.RerankService;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrieveRequest;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.rag.rewrite.QueryRewriteService;
+import com.nageoffer.ai.ragent.service.RAGService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,7 +27,6 @@ import java.util.stream.Collectors;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.CHAT_SYSTEM_PROMPT;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_MIN_SCORE;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.MAX_INTENT_COUNT;
-import static com.nageoffer.ai.ragent.constant.RAGConstant.RAG_DEFAULT_PROMPT;
 import static com.nageoffer.ai.ragent.enums.IntentKind.SYSTEM;
 
 @Slf4j
@@ -44,111 +40,6 @@ public class RAGServiceImpl implements RAGService {
     private final LLMTreeIntentClassifier llmTreeIntentClassifier;
     private final QueryRewriteService queryRewriteService;
     private final RAGPromptService ragPromptService;
-
-    @Override
-    public String answer(String question, int topK) {
-        String rewriteQuestion = queryRewriteService.rewrite(question);
-        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
-
-        if (nodeScores.size() == 1 && Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
-            String prompt = CHAT_SYSTEM_PROMPT.formatted(rewriteQuestion);
-
-            ChatRequest req = ChatRequest.builder()
-                    .prompt(prompt)
-                    .temperature(0.7D) // 打招呼可以稍微活泼一点
-                    .topP(0.8D)
-                    .thinking(false)
-                    .build();
-
-            return llmService.chat(req);
-        }
-
-        List<NodeScore> ragIntentScores = nodeScores.stream()
-                .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
-                .filter(ns -> {
-                    IntentNode node = ns.getNode();
-                    return node.getKind() == null || node.getKind() == IntentKind.KB;
-                })
-                .limit(MAX_INTENT_COUNT)
-                .toList();
-
-        int finalTopK = topK > 0 ? topK : 5;
-        int searchTopK = Math.max(finalTopK * 3, 20); // 至少 20，避免问题很小时候召回太少
-
-        Map<String, List<RetrievedChunk>> intentChunks = new java.util.concurrent.ConcurrentHashMap<>();
-        ragIntentScores.parallelStream().forEach(ns -> {
-            IntentNode node = ns.getNode();
-            RetrieveRequest request = RetrieveRequest.builder()
-                    .collectionName(node.getCollectionName())
-                    .query(rewriteQuestion)
-                    .topK(searchTopK)
-                    .build();
-            List<RetrievedChunk> chunks = retrieverService.retrieve(request);
-            if (CollUtil.isNotEmpty(chunks)) {
-                intentChunks.put(node.getId(), chunks);
-            }
-        });
-
-        List<NodeScore> retainedIntents = ragIntentScores.stream()
-                .filter(ns -> CollUtil.isNotEmpty(intentChunks.get(ns.getNode().getId())))
-                .toList();
-
-        List<RetrievedChunk> allChunks = retainedIntents.stream()
-                .flatMap(ns -> intentChunks.get(ns.getNode().getId()).stream())
-                .collect(Collectors.toList());
-
-        // 如果没有检索到内容，直接 fallback
-        if (allChunks.isEmpty()) {
-            return "未检索到与问题相关的文档内容。";
-        }
-
-        int rerankLimit = finalTopK * 2;
-        List<RetrievedChunk> reranked = rerankService.rerank(rewriteQuestion, allChunks, rerankLimit);
-
-        // List<RetrievedChunk> elbowSelected = selectByElbow(reranked);
-        // 暂时忽略分数排序，因为不同知识库类型召回数据不同，容易误判
-        List<RetrievedChunk> elbowSelected = reranked;
-
-        // 选一个非空的最高分作对比基准（为空则跳过阈值过滤）
-        Float bestScore = elbowSelected.stream()
-                .map(RetrievedChunk::getScore)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(null);
-
-        double MIN_SCORE = 0.4;
-        double MARGIN_RATIO = 0.75;
-
-        List<RetrievedChunk> filteredByScore = elbowSelected.stream()
-                .filter(c -> {
-                    Float s = c.getScore();
-                    if (s == null || bestScore == null) return true;
-                    return s >= MIN_SCORE && s >= bestScore * MARGIN_RATIO;
-                })
-                .toList();
-
-        // 如果筛完太少，就退回到 reranked 前 topK 几条
-        if (filteredByScore.isEmpty()) {
-            filteredByScore = reranked.subList(0, Math.min(finalTopK, reranked.size()));
-        }
-
-        // 拼接上下文
-        String context = filteredByScore.stream()
-                .map(h -> "- " + h.getText())
-                .collect(Collectors.joining("\n"));
-
-        String prompt = ragPromptService.buildPrompt(context, rewriteQuestion, ragIntentScores, intentChunks);
-
-        // 调 LLM
-        ChatRequest req = ChatRequest.builder()
-                .prompt(prompt)
-                .thinking(false)
-                .temperature(0D)
-                .topP(0.7D)
-                .build();
-
-        return llmService.chat(req);
-    }
 
     @Override
     public void streamAnswer(String question, int topK, StreamCallback callback) {

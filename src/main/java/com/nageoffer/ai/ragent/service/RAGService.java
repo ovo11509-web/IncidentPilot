@@ -24,20 +24,6 @@ import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 public interface RAGService {
 
     /**
-     * 同步 RAG 调用：返回完整回答
-     * <p>
-     * 说明：
-     * - 内部会执行完整 RAG 流程（向量检索 + 生成）
-     * - 一次性返回结构化回答对象 RAGAnswer（含回答、命中 chunk、相关性等）
-     * - 适用于对实时展示要求不高的场景
-     *
-     * @param question 用户问题
-     * @param topK     检索返回的 chunk 数量
-     * @return RAGAnswer 包含最终回答的返回信息
-     */
-    String answer(String question, int topK);
-
-    /**
      * 流式 RAG 调用：按片段回调增量内容
      * <p>
      * 流式说明：
