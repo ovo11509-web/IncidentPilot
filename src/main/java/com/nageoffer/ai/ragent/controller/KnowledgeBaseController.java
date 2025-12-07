@@ -1,6 +1,8 @@
 package com.nageoffer.ai.ragent.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseCreateRequest;
+import com.nageoffer.ai.ragent.controller.request.KnowledgeBasePageRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseUpdateRequest;
 import com.nageoffer.ai.ragent.controller.vo.KnowledgeBaseVO;
 import com.nageoffer.ai.ragent.framework.convention.Result;
@@ -54,5 +56,13 @@ public class KnowledgeBaseController {
     @GetMapping("/knowledge-base/{kbId}")
     public Result<KnowledgeBaseVO> queryKnowledgeBase(@PathVariable("kbId") String kbId) {
         return Results.success(knowledgeBaseService.queryById(kbId));
+    }
+
+    /**
+     * 分页查询知识库列表
+     */
+    @GetMapping("/knowledge-base")
+    public Result<IPage<KnowledgeBaseVO>> pageQuery(KnowledgeBasePageRequest requestParam) {
+        return Results.success(knowledgeBaseService.pageQuery(requestParam));
     }
 }

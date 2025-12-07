@@ -1,12 +1,14 @@
 package com.nageoffer.ai.ragent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseCreateRequest;
+import com.nageoffer.ai.ragent.controller.request.KnowledgeBasePageRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseUpdateRequest;
 import com.nageoffer.ai.ragent.controller.vo.KnowledgeBaseVO;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
@@ -155,5 +157,16 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new ClientException("知识库不存在");
         }
         return BeanUtil.toBean(kbDO, KnowledgeBaseVO.class);
+    }
+
+    @Override
+    public IPage<KnowledgeBaseVO> pageQuery(KnowledgeBasePageRequest requestParam) {
+        LambdaQueryWrapper<KnowledgeBaseDO> queryWrapper = Wrappers.lambdaQuery(KnowledgeBaseDO.class)
+                .like(StringUtils.hasText(requestParam.getName()), KnowledgeBaseDO::getName, requestParam.getName())
+                .eq(KnowledgeBaseDO::getDeleted, 0)
+                .orderByDesc(KnowledgeBaseDO::getUpdateTime);
+
+        IPage<KnowledgeBaseDO> result = knowledgeBaseMapper.selectPage(requestParam, queryWrapper);
+        return result.convert(each -> BeanUtil.toBean(each, KnowledgeBaseVO.class));
     }
 }
