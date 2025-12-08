@@ -17,7 +17,7 @@ public class IntentNodeCreateRequest {
     private String intentCode;
     private String name;
     /**
-     * 1=DOMAIN,2=CATEGORY,3=TOPIC
+     * 0=DOMAIN,1=CATEGORY,2=TOPIC
      */
     private Integer level;
     private String parentCode;

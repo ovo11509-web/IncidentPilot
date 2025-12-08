@@ -231,7 +231,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
     }
 
     /**
-     * IntentNode.Level -> Integer（1/2/3）
+     * IntentNode.Level -> Integer（0/1/2）
      */
     private int mapLevel(IntentLevel level) {
         return level.getCode();

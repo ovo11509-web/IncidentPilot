@@ -39,7 +39,7 @@ public class IntentNodeDO {
     private String name;
 
     /**
-     * 层级：1=DOMAIN,2=CATEGORY,3=TOPIC
+     * 层级：0=DOMAIN,1=CATEGORY,2=TOPIC
      */
     private Integer level;
 

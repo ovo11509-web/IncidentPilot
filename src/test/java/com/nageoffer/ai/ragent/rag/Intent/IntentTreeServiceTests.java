@@ -112,14 +112,14 @@ public class IntentTreeServiceTests {
     }
 
     /**
-     * level: 1=DOMAIN, 2=CATEGORY, 3=TOPIC
+     * level: 0=DOMAIN, 1=CATEGORY, 2=TOPIC
      */
     private String levelLabel(Integer level) {
         if (level == null) return "";
         return switch (level) {
-            case 1 -> "DOMAIN";
-            case 2 -> "CATEGORY";
-            case 3 -> "TOPIC";
+            case 0 -> "DOMAIN";
+            case 1 -> "CATEGORY";
+            case 2 -> "TOPIC";
             default -> "";
         };
     }
