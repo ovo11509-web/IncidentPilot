@@ -1,28 +1,31 @@
 package com.nageoffer.ai.ragent.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
-import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
-import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
-import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseCreateRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBasePageRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeBaseUpdateRequest;
 import com.nageoffer.ai.ragent.controller.vo.KnowledgeBaseVO;
+import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
+import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
+import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
+import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
-import com.nageoffer.ai.ragent.service.KnowledgeBaseService;
 import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
 import com.nageoffer.ai.ragent.rag.vector.VectorSpaceSpec;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreAdmin;
-import cn.hutool.core.bean.BeanUtil;
+import com.nageoffer.ai.ragent.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.BucketAlreadyExistsException;
+import software.amazon.awssdk.services.s3.model.BucketAlreadyOwnedByYouException;
 
 @Slf4j
 @Service
@@ -34,6 +37,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final VectorStoreAdmin vectorStoreAdmin;
     private final S3Client s3Client;
 
+    @Transactional
     @Override
     public String create(KnowledgeBaseCreateRequest requestParam) {
         // 名称重复校验
@@ -47,14 +51,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new ServiceException("知识库名称已存在：" + requestParam.getName());
         }
 
-        VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
-                .spaceId(VectorSpaceId.builder()
-                        .logicalName(requestParam.getCollectionName())
-                        .build())
-                .remark(requestParam.getName())
-                .build();
-        vectorStoreAdmin.ensureVectorSpace(spaceSpec);
-
         KnowledgeBaseDO kbDO = KnowledgeBaseDO.builder()
                 .name(requestParam.getName())
                 .embeddingModel(requestParam.getEmbeddingModel())
@@ -67,9 +63,25 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         knowledgeBaseMapper.insert(kbDO);
 
         String bucketName = requestParam.getCollectionName();
-        s3Client.createBucket(builder -> builder.bucket(bucketName));
+        try {
+            s3Client.createBucket(builder -> builder.bucket(bucketName));
+            log.info("成功创建RestFS存储桶，Bucket名称: {}", bucketName);
+        } catch (BucketAlreadyOwnedByYouException | BucketAlreadyExistsException e) {
+            if (e instanceof BucketAlreadyOwnedByYouException) {
+                log.error("RestFS存储桶已存在，Bucket名称: {}", bucketName, e);
+            } else {
+                log.error("RestFS存储桶已存在但由其他账户拥有，Bucket名称: {}", bucketName, e);
+            }
+            throw new ServiceException("存储桶名称已被占用：" + bucketName);
+        }
 
-        log.info("成功创建RestFS存储桶，Bucket名称: {}", bucketName);
+        VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
+                .spaceId(VectorSpaceId.builder()
+                        .logicalName(requestParam.getCollectionName())
+                        .build())
+                .remark(requestParam.getName())
+                .build();
+        vectorStoreAdmin.ensureVectorSpace(spaceSpec);
 
         return String.valueOf(kbDO.getId());
     }
