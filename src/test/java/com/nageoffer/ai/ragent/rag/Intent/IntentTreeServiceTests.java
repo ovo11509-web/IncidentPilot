@@ -1,4 +1,4 @@
-package com.nageoffer.ai.ragent.kb;
+package com.nageoffer.ai.ragent.rag.Intent;
 
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONUtil;
