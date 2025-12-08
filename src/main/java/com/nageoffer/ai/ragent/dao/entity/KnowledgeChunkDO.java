@@ -26,7 +26,7 @@ public class KnowledgeChunkDO {
     /**
      * ID
      */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

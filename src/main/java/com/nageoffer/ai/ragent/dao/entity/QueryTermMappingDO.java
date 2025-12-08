@@ -1,5 +1,7 @@
 package com.nageoffer.ai.ragent.dao.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -9,6 +11,7 @@ import java.util.Date;
 @TableName("t_query_term_mapping")
 public class QueryTermMappingDO {
 
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

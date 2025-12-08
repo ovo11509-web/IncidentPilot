@@ -23,7 +23,7 @@ import java.util.Date;
 @TableName("t_knowledge_base")
 public class KnowledgeBaseDO {
 
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**
