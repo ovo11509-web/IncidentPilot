@@ -60,7 +60,7 @@ public class LLMTreeIntentClassifier {
         this.id2Node = allNodes.stream()
                 .collect(Collectors.toMap(IntentNode::getId, n -> n));
 
-        log.info("[LlmTreeIntentClassifier] init done, allNodes={}, leafNodes={}",
+        log.info("意图分类器初始化完成, 总节点数: {}, 叶子节点数: {}",
                 allNodes.size(), leafNodes.size());
     }
 
@@ -97,7 +97,7 @@ public class LLMTreeIntentClassifier {
                 // 容错：如果模型外面又包了一层 { "results": [...] }
                 arr = root.getAsJsonObject().getAsJsonArray("results");
             } else {
-                log.warn("[LlmTreeIntentClassifier] unexpected LLM json: {}", raw);
+                log.warn("LLM 返回了非预期的 JSON 格式, 原始响应: {}", raw);
                 return List.of();
             }
 
@@ -113,7 +113,7 @@ public class LLMTreeIntentClassifier {
 
                 IntentNode node = id2Node.get(id);
                 if (node == null) {
-                    log.warn("[LlmTreeIntentClassifier] LLM returned unknown id: {}", id);
+                    log.warn("LLM 返回了未知的意图节点 ID: {}, 已跳过", id);
                     continue;
                 }
 
@@ -134,7 +134,7 @@ public class LLMTreeIntentClassifier {
             );
             return scores;
         } catch (Exception e) {
-            log.warn("[LlmTreeIntentClassifier] parse LLM response error, raw={}", raw, e);
+            log.warn("解析 LLM 响应失败, 原始内容: {}", raw, e);
             return List.of();
         }
     }

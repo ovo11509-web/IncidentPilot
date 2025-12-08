@@ -35,7 +35,7 @@ public class QueryTermMappingService {
         );
         cachedMappings = dbList;
 
-        log.info("[QueryTermMapping] 查询归一化映射规则加载完成 - 数量: {}", cachedMappings.size());
+        log.info("查询归一化映射规则加载完成, 共加载 {} 条规则", cachedMappings.size());
     }
 
     /**

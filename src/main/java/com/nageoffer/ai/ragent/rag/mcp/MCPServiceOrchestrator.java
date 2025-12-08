@@ -32,11 +32,11 @@ public class MCPServiceOrchestrator implements MCPService {
         String toolId = request.getToolId();
         long startTime = System.currentTimeMillis();
 
-        log.info("[MCPService] 开始执行工具调用, toolId={}, userId={}", toolId, request.getUserId());
+        log.info("MCP 工具开始执行, toolId: {}, userId: {}", toolId, request.getUserId());
 
         Optional<MCPToolExecutor> executorOpt = toolRegistry.getExecutor(toolId);
         if (executorOpt.isEmpty()) {
-            log.warn("[MCPService] 工具不存在, toolId={}", toolId);
+            log.warn("MCP 工具执行失败, 工具不存在, toolId: {}", toolId);
             return MCPResponse.error(toolId, "TOOL_NOT_FOUND", "工具不存在: " + toolId);
         }
 
@@ -45,7 +45,7 @@ public class MCPServiceOrchestrator implements MCPService {
 
         // 检查是否需要用户身份
         if (tool.isRequireUserId() && (request.getUserId() == null || request.getUserId().isBlank())) {
-            log.warn("[MCPService] 工具需要用户身份但未提供, toolId={}", toolId);
+            log.warn("MCP 工具执行失败, 缺少用户身份信息, toolId: {}", toolId);
             return MCPResponse.error(toolId, "USER_ID_REQUIRED", "该工具需要用户身份信息");
         }
 
@@ -54,12 +54,12 @@ public class MCPServiceOrchestrator implements MCPService {
             long costMs = System.currentTimeMillis() - startTime;
             response.setCostMs(costMs);
 
-            log.info("[MCPService] 工具调用完成, toolId={}, success={}, costMs={}",
+            log.info("MCP 工具执行完成, toolId: {}, 成功: {}, 耗时: {}ms",
                     toolId, response.isSuccess(), costMs);
 
             return response;
         } catch (Exception e) {
-            log.error("[MCPService] 工具调用异常, toolId={}", toolId, e);
+            log.error("MCP 工具执行异常, toolId: {}", toolId, e);
             MCPResponse errorResponse = MCPResponse.error(toolId, "EXECUTION_ERROR", "工具调用异常: " + e.getMessage());
             errorResponse.setCostMs(System.currentTimeMillis() - startTime);
             return errorResponse;
@@ -72,7 +72,7 @@ public class MCPServiceOrchestrator implements MCPService {
             return List.of();
         }
 
-        log.info("[MCPService] 批量执行工具调用, count={}", requests.size());
+        log.info("MCP 工具批量执行开始, 共 {} 个工具", requests.size());
 
         // 并行执行所有请求
         List<CompletableFuture<MCPResponse>> futures = requests.stream()

@@ -42,30 +42,30 @@ public class DefaultMCPToolRegistry implements MCPToolRegistry {
             for (MCPToolExecutor executor : autoDiscoveredExecutors) {
                 register(executor);
             }
-            log.info("[MCPToolRegistry] 自动注册 {} 个 MCP 工具", autoDiscoveredExecutors.size());
+            log.info("MCP 工具自动注册完成, 共注册 {} 个工具", autoDiscoveredExecutors.size());
         } else {
-            log.info("[MCPToolRegistry] 未发现任何 MCP 工具执行器");
+            log.info("MCP 工具注册跳过, 未发现任何工具执行器");
         }
     }
 
     @Override
     public void register(MCPToolExecutor executor) {
         if (executor == null || executor.getToolDefinition() == null) {
-            log.warn("[MCPToolRegistry] 尝试注册空的执行器，已忽略");
+            log.warn("尝试注册空的执行器，已忽略");
             return;
         }
 
         String toolId = executor.getToolId();
         if (toolId == null || toolId.isBlank()) {
-            log.warn("[MCPToolRegistry] 工具 ID 为空，已忽略");
+            log.warn("工具 ID 为空，已忽略");
             return;
         }
 
         MCPToolExecutor existing = executorMap.put(toolId, executor);
         if (existing != null) {
-            log.warn("[MCPToolRegistry] 工具 {} 已存在，已覆盖", toolId);
+            log.warn("工具 {} 已存在，已覆盖", toolId);
         } else {
-            log.info("[MCPToolRegistry] 注册工具: {} - {}", toolId, executor.getToolDefinition().getName());
+            log.info("MCP 工具注册成功, toolId: {}, 工具名称: {}", toolId, executor.getToolDefinition().getName());
         }
     }
 
@@ -73,7 +73,7 @@ public class DefaultMCPToolRegistry implements MCPToolRegistry {
     public void unregister(String toolId) {
         MCPToolExecutor removed = executorMap.remove(toolId);
         if (removed != null) {
-            log.info("[MCPToolRegistry] 注销工具: {}", toolId);
+            log.info("MCP 工具注销成功, toolId: {}", toolId);
         }
     }
 
