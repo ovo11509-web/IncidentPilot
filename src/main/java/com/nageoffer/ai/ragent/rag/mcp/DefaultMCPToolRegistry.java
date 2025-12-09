@@ -3,6 +3,7 @@ package com.nageoffer.ai.ragent.rag.mcp;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -38,14 +39,14 @@ public class DefaultMCPToolRegistry implements MCPToolRegistry {
      */
     @PostConstruct
     public void init() {
-        if (autoDiscoveredExecutors != null && !autoDiscoveredExecutors.isEmpty()) {
-            for (MCPToolExecutor executor : autoDiscoveredExecutors) {
-                register(executor);
-            }
-            log.info("MCP 工具自动注册完成, 共注册 {} 个工具", autoDiscoveredExecutors.size());
-        } else {
+        if (CollectionUtils.isEmpty(autoDiscoveredExecutors)) {
             log.info("MCP 工具注册跳过, 未发现任何工具执行器");
         }
+
+        for (MCPToolExecutor executor : autoDiscoveredExecutors) {
+            register(executor);
+        }
+        log.info("MCP 工具自动注册完成, 共注册 {} 个工具", autoDiscoveredExecutors.size());
     }
 
     @Override
