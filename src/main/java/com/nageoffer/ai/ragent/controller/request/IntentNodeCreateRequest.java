@@ -23,6 +23,7 @@ public class IntentNodeCreateRequest {
     private String parentCode;
     private String description;
     private List<String> examples;
+    private String mcpToolId;
     private Integer kind;
     private Integer sortOrder;
     private Integer enabled;

@@ -109,6 +109,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
                 .level(req.getLevel())
                 .parentCode(req.getParentCode())
                 .description(req.getDescription())
+                .mcpToolId(req.getMcpToolId())
                 .examples(
                         req.getExamples() == null ? null : GSON.toJson(req.getExamples())
                 )
@@ -198,6 +199,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
                     .description(node.getDescription())
                     .examples(node.getExamples())
                     .kind(mapKind(node.getKind()))
+                    .mcpToolId(node.getMcpToolId())
                     .sortOrder(sort++)
                     .enabled(1)
                     .promptTemplate(node.getPromptTemplate())
