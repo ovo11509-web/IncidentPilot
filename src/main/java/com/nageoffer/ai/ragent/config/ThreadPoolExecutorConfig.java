@@ -15,7 +15,7 @@ public class ThreadPoolExecutorConfig {
 
     @Bean
     public ThreadPoolExecutor mcpBatchThreadPoolExecutor() {
-        ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
+        return new ThreadPoolExecutor(
                 CPU_COUNT,
                 CPU_COUNT << 1,
                 60,
@@ -26,6 +26,35 @@ public class ThreadPoolExecutorConfig {
                         .build(),
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
-        return threadPoolExecutor;
+    }
+
+    @Bean
+    public ThreadPoolExecutor ragContextThreadPoolExecutor() {
+        return new ThreadPoolExecutor(
+                2,
+                4,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("rag_context_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
+
+    @Bean
+    public ThreadPoolExecutor ragRetrievalThreadPoolExecutor() {
+        return new ThreadPoolExecutor(
+                CPU_COUNT,
+                CPU_COUNT << 1,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("rag_retrieval_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
     }
 }

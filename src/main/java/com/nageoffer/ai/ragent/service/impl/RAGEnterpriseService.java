@@ -26,8 +26,8 @@ import com.nageoffer.ai.ragent.rag.rewrite.QueryRewriteService;
 import com.nageoffer.ai.ragent.service.RAGService;
 import lombok.Builder;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -37,6 +37,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.constant.RAGConstant.CHAT_SYSTEM_PROMPT;
@@ -55,7 +56,6 @@ import static com.nageoffer.ai.ragent.enums.IntentKind.SYSTEM;
  */
 @Slf4j
 @Service("ragEnterpriseService")
-@RequiredArgsConstructor
 public class RAGEnterpriseService implements RAGService {
 
     private final RetrieverService retrieverService;
@@ -68,6 +68,35 @@ public class RAGEnterpriseService implements RAGService {
     private final MCPService mcpService;
     private final MCPParameterExtractor mcpParameterExtractor;
     private final MCPToolRegistry mcpToolRegistry;
+    private final ThreadPoolExecutor ragContextExecutor;
+    private final ThreadPoolExecutor ragRetrievalExecutor;
+
+    public RAGEnterpriseService(
+            RetrieverService retrieverService,
+            LLMService llmService,
+            RerankService rerankService,
+            LLMTreeIntentClassifier llmTreeIntentClassifier,
+            QueryRewriteService queryRewriteService,
+            RAGPromptService ragPromptService,
+            MCPPromptService mcpPromptService,
+            MCPService mcpService,
+            MCPParameterExtractor mcpParameterExtractor,
+            MCPToolRegistry mcpToolRegistry,
+            @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
+            @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
+        this.retrieverService = retrieverService;
+        this.llmService = llmService;
+        this.rerankService = rerankService;
+        this.llmTreeIntentClassifier = llmTreeIntentClassifier;
+        this.queryRewriteService = queryRewriteService;
+        this.ragPromptService = ragPromptService;
+        this.mcpPromptService = mcpPromptService;
+        this.mcpService = mcpService;
+        this.mcpParameterExtractor = mcpParameterExtractor;
+        this.mcpToolRegistry = mcpToolRegistry;
+        this.ragContextExecutor = ragContextExecutor;
+        this.ragRetrievalExecutor = ragRetrievalExecutor;
+    }
 
     // ==================== 主入口 ====================
 
@@ -134,11 +163,11 @@ public class RAGEnterpriseService implements RAGService {
         // 统一使用 CompletableFuture，空意图直接返回默认值
         CompletableFuture<String> mcpFuture = CollUtil.isEmpty(intentGroup.mcpIntents)
                 ? CompletableFuture.completedFuture("")
-                : CompletableFuture.supplyAsync(() -> executeMcpAndMerge(question, intentGroup.mcpIntents));
+                : CompletableFuture.supplyAsync(() -> executeMcpAndMerge(question, intentGroup.mcpIntents), ragContextExecutor);
 
         CompletableFuture<KbResult> kbFuture = CollUtil.isEmpty(intentGroup.kbIntents)
                 ? CompletableFuture.completedFuture(KbResult.empty())
-                : CompletableFuture.supplyAsync(() -> retrieveAndRerank(question, intentGroup.kbIntents, finalTopK));
+                : CompletableFuture.supplyAsync(() -> retrieveAndRerank(question, intentGroup.kbIntents, finalTopK), ragContextExecutor);
 
         KbResult kbResult = kbFuture.join();
         return RetrievalContext.builder()
@@ -175,20 +204,23 @@ public class RAGEnterpriseService implements RAGService {
         int searchTopK = Math.max(topK * SEARCH_TOP_K_MULTIPLIER, MIN_SEARCH_TOP_K);
         Map<String, List<RetrievedChunk>> intentChunks = new ConcurrentHashMap<>();
 
-        // 并行检索
-        kbIntents.parallelStream().forEach(ns -> {
-            IntentNode node = ns.getNode();
-            List<RetrievedChunk> chunks = retrieverService.retrieve(
-                    RetrieveRequest.builder()
-                            .collectionName(node.getCollectionName())
-                            .query(question)
-                            .topK(searchTopK)
-                            .build()
-            );
-            if (CollUtil.isNotEmpty(chunks)) {
-                intentChunks.put(node.getId(), chunks);
-            }
-        });
+        List<CompletableFuture<Void>> futures = kbIntents.stream()
+                .map(ns -> CompletableFuture.runAsync(() -> {
+                    IntentNode node = ns.getNode();
+                    List<RetrievedChunk> chunks = retrieverService.retrieve(
+                            RetrieveRequest.builder()
+                                    .collectionName(node.getCollectionName())
+                                    .query(question)
+                                    .topK(searchTopK)
+                                    .build()
+                    );
+                    if (CollUtil.isNotEmpty(chunks)) {
+                        intentChunks.put(node.getId(), chunks);
+                    }
+                }, ragRetrievalExecutor))
+                .toList();
+
+        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
 
         // 聚合 + Rerank
         List<RetrievedChunk> allChunks = kbIntents.stream()
