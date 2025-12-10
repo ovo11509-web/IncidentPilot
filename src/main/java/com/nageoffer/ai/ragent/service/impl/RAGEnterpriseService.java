@@ -131,33 +131,18 @@ public class RAGEnterpriseService implements RAGService {
     private RetrievalContext buildRetrievalContext(String question, IntentGroup intentGroup, int topK) {
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
 
-        boolean hasMcpIntents = CollUtil.isNotEmpty(intentGroup.mcpIntents);
-        boolean hasKbIntents = CollUtil.isNotEmpty(intentGroup.kbIntents);
+        // 统一使用 CompletableFuture，空意图直接返回默认值
+        CompletableFuture<String> mcpFuture = CollUtil.isEmpty(intentGroup.mcpIntents)
+                ? CompletableFuture.completedFuture("")
+                : CompletableFuture.supplyAsync(() -> executeMcpAndMerge(question, intentGroup.mcpIntents));
 
-        // 只有当 MCP 和 KB 都存在时才并行执行，否则同步执行
-        if (hasMcpIntents && hasKbIntents) {
-            CompletableFuture<String> mcpFuture = CompletableFuture.supplyAsync(() ->
-                    executeMcpAndMerge(question, intentGroup.mcpIntents));
+        CompletableFuture<KbResult> kbFuture = CollUtil.isEmpty(intentGroup.kbIntents)
+                ? CompletableFuture.completedFuture(KbResult.empty())
+                : CompletableFuture.supplyAsync(() -> retrieveAndRerank(question, intentGroup.kbIntents, finalTopK));
 
-            CompletableFuture<KbResult> kbFuture = CompletableFuture.supplyAsync(() ->
-                    retrieveAndRerank(question, intentGroup.kbIntents, finalTopK));
-
-            String mcpContext = mcpFuture.join();
-            KbResult kbResult = kbFuture.join();
-
-            return RetrievalContext.builder()
-                    .mcpContext(mcpContext)
-                    .kbContext(kbResult.context)
-                    .intentChunks(kbResult.intentChunks)
-                    .build();
-        }
-
-        // 同步执行
-        String mcpContext = hasMcpIntents ? executeMcpAndMerge(question, intentGroup.mcpIntents) : "";
-        KbResult kbResult = hasKbIntents ? retrieveAndRerank(question, intentGroup.kbIntents, finalTopK) : KbResult.empty();
-
+        KbResult kbResult = kbFuture.join();
         return RetrievalContext.builder()
-                .mcpContext(mcpContext)
+                .mcpContext(mcpFuture.join())
                 .kbContext(kbResult.context)
                 .intentChunks(kbResult.intentChunks)
                 .build();
