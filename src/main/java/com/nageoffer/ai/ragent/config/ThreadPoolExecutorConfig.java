@@ -57,4 +57,23 @@ public class ThreadPoolExecutorConfig {
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
     }
+
+    /**
+     * 意图识别并行执行线程池
+     * 用于按 Domain 拆分意图并行调用 LLM
+     */
+    @Bean
+    public ThreadPoolExecutor intentClassifyThreadPoolExecutor() {
+        return new ThreadPoolExecutor(
+                CPU_COUNT,
+                CPU_COUNT << 1,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("intent_classify_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
 }
