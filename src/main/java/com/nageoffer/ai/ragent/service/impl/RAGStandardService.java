@@ -42,7 +42,7 @@ public class RAGStandardService implements RAGService {
     private final RetrieverService retrieverService;
     private final LLMService llmService;
     private final RerankService rerankService;
-    private final IntentClassifier llmTreeIntentClassifier;
+    private final IntentClassifier defaultIntentClassifier;
     private final QueryRewriteService queryRewriteService;
     private final RAGPromptService ragPromptService;
 
@@ -50,7 +50,7 @@ public class RAGStandardService implements RAGService {
     public void streamAnswer(String question, int topK, StreamCallback callback) {
         String rewriteQuestion = queryRewriteService.rewrite(question);
 
-        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
+        List<NodeScore> nodeScores = defaultIntentClassifier.classifyTargets(rewriteQuestion);
 
         // 如果只有一个 SYSTEM 意图，走系统打招呼的流式输出
         if (nodeScores.size() == 1 && Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {

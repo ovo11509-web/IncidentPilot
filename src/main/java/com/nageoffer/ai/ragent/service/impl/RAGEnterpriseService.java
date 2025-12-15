@@ -81,7 +81,7 @@ public class RAGEnterpriseService implements RAGService {
             MCPService mcpService,
             MCPParameterExtractor mcpParameterExtractor,
             MCPToolRegistry mcpToolRegistry,
-            @Qualifier("llmTreeIntentClassifier") IntentClassifier intentClassifier,
+            @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
             @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
         this.retrieverService = retrieverService;

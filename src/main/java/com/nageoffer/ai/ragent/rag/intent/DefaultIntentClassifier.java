@@ -27,20 +27,14 @@ import java.util.stream.Collectors;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_CLASSIFIER_PROMPT;
 
 /**
- * 基于大模型（LLM）的 Tree 意图分类器：
- * - 使用 domain / category / topic 三层 Tree
- * - 只对【叶子节点】做意图分类
- * - 由 LLM 直接输出每个分类的匹配分数 score（0~1）
- */
-/**
  * LLM 树形意图分类器（串行实现）
  * <p>
  * 将所有意图节点一次性发送给 LLM 进行识别打分，适用于意图数量较少的场景
  */
 @Slf4j
-@Service("llmTreeIntentClassifier")
+@Service("defaultIntentClassifier")
 @RequiredArgsConstructor
-public class LLMTreeIntentClassifier implements IntentClassifier {
+public class DefaultIntentClassifier implements IntentClassifier {
 
     private final LLMService llmService;
     private final IntentNodeMapper intentNodeMapper;

@@ -1,7 +1,7 @@
 package com.nageoffer.ai.ragent.rag.Intent;
 
 import com.nageoffer.ai.ragent.rag.intent.IntentNode;
-import com.nageoffer.ai.ragent.rag.intent.LLMTreeIntentClassifier;
+import com.nageoffer.ai.ragent.rag.intent.DefaultIntentClassifier;
 import com.nageoffer.ai.ragent.rag.intent.NodeScore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +14,9 @@ import java.util.List;
 @Slf4j
 @SpringBootTest
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class LLMTreeIntentClassifierTests {
+public class DefaultIntentClassifierTests {
 
-    private final LLMTreeIntentClassifier intentClassifier;
+    private final DefaultIntentClassifier defaultIntentClassifier;
 
     /**
      * 低于这个就认为“不太像”，可以不走向量检索 / RAG
@@ -114,7 +114,7 @@ public class LLMTreeIntentClassifierTests {
     private void runCase(String question) {
         long start = System.nanoTime();
         // 一次性调用：内部已经做了“按分数排序 + 过滤 + 截断 TopN”
-        List<NodeScore> topKScores = intentClassifier.topKAboveThreshold(
+        List<NodeScore> topKScores = defaultIntentClassifier.topKAboveThreshold(
                 question, TOP_N, MIN_SCORE
         );
         long end = System.nanoTime();
