@@ -6,7 +6,7 @@ import com.nageoffer.ai.ragent.enums.IntentKind;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.rag.intent.IntentNode;
-import com.nageoffer.ai.ragent.rag.intent.LLMTreeIntentClassifier;
+import com.nageoffer.ai.ragent.rag.intent.IntentClassifier;
 import com.nageoffer.ai.ragent.rag.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.prompt.RAGPromptService;
 import com.nageoffer.ai.ragent.rag.rerank.RerankService;
@@ -42,7 +42,7 @@ public class RAGStandardService implements RAGService {
     private final RetrieverService retrieverService;
     private final LLMService llmService;
     private final RerankService rerankService;
-    private final LLMTreeIntentClassifier llmTreeIntentClassifier;
+    private final IntentClassifier llmTreeIntentClassifier;
     private final QueryRewriteService queryRewriteService;
     private final RAGPromptService ragPromptService;
 

@@ -32,10 +32,15 @@ import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_CLASSIFIER_PRO
  * - 只对【叶子节点】做意图分类
  * - 由 LLM 直接输出每个分类的匹配分数 score（0~1）
  */
+/**
+ * LLM 树形意图分类器（串行实现）
+ * <p>
+ * 将所有意图节点一次性发送给 LLM 进行识别打分，适用于意图数量较少的场景
+ */
 @Slf4j
-@Service
+@Service("llmTreeIntentClassifier")
 @RequiredArgsConstructor
-public class LLMTreeIntentClassifier {
+public class LLMTreeIntentClassifier implements IntentClassifier {
 
     private final LLMService llmService;
     private final IntentNodeMapper intentNodeMapper;
@@ -89,9 +94,10 @@ public class LLMTreeIntentClassifier {
     }
 
     /**
-     * 对所有“叶子分类节点”做意图识别，由 LLM 输出每个分类的 score
+     * 对所有"叶子分类节点"做意图识别，由 LLM 输出每个分类的 score
      * - 返回结果已按 score 从高到低排序
      */
+    @Override
     public List<NodeScore> classifyTargets(String question) {
         String prompt = buildPrompt(question);
         String raw = llmService.chat(prompt);
@@ -153,6 +159,7 @@ public class LLMTreeIntentClassifier {
      * - 只取前 topN
      * - 过滤掉 score < minScore 的分类
      */
+    @Override
     public List<NodeScore> topKAboveThreshold(String question, int topN, double minScore) {
         return classifyTargets(question).stream()
                 .filter(ns -> ns.getScore() >= minScore)

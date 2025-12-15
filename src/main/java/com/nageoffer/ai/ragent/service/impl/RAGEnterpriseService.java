@@ -7,7 +7,7 @@ import com.nageoffer.ai.ragent.enums.IntentKind;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.rag.intent.IntentNode;
-import com.nageoffer.ai.ragent.rag.intent.LLMTreeIntentClassifier;
+import com.nageoffer.ai.ragent.rag.intent.IntentClassifier;
 import com.nageoffer.ai.ragent.rag.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.mcp.MCPParameterExtractor;
 import com.nageoffer.ai.ragent.rag.mcp.MCPRequest;
@@ -61,7 +61,7 @@ public class RAGEnterpriseService implements RAGService {
     private final RetrieverService retrieverService;
     private final LLMService llmService;
     private final RerankService rerankService;
-    private final LLMTreeIntentClassifier llmTreeIntentClassifier;
+    private final IntentClassifier intentClassifier;
     private final QueryRewriteService queryRewriteService;
     private final RAGPromptService ragPromptService;
     private final MCPPromptService mcpPromptService;
@@ -75,25 +75,25 @@ public class RAGEnterpriseService implements RAGService {
             RetrieverService retrieverService,
             LLMService llmService,
             RerankService rerankService,
-            LLMTreeIntentClassifier llmTreeIntentClassifier,
             QueryRewriteService queryRewriteService,
             RAGPromptService ragPromptService,
             MCPPromptService mcpPromptService,
             MCPService mcpService,
             MCPParameterExtractor mcpParameterExtractor,
             MCPToolRegistry mcpToolRegistry,
+            @Qualifier("llmTreeIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
             @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
         this.retrieverService = retrieverService;
         this.llmService = llmService;
         this.rerankService = rerankService;
-        this.llmTreeIntentClassifier = llmTreeIntentClassifier;
         this.queryRewriteService = queryRewriteService;
         this.ragPromptService = ragPromptService;
         this.mcpPromptService = mcpPromptService;
         this.mcpService = mcpService;
         this.mcpParameterExtractor = mcpParameterExtractor;
         this.mcpToolRegistry = mcpToolRegistry;
+        this.intentClassifier = intentClassifier;
         this.ragContextExecutor = ragContextExecutor;
         this.ragRetrievalExecutor = ragRetrievalExecutor;
     }
@@ -103,7 +103,7 @@ public class RAGEnterpriseService implements RAGService {
     @Override
     public void streamAnswer(String question, int topK, StreamCallback callback) {
         String rewriteQuestion = queryRewriteService.rewrite(question);
-        List<NodeScore> nodeScores = llmTreeIntentClassifier.classifyTargets(rewriteQuestion);
+        List<NodeScore> nodeScores = intentClassifier.classifyTargets(rewriteQuestion);
 
         // SYSTEM 意图单独处理
         if (isSystemOnly(nodeScores)) {
