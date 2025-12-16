@@ -4,6 +4,7 @@ import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.service.RAGService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +18,7 @@ import java.util.concurrent.Executors;
 /**
  * RAGStandardController + MCP工具调用 + 记忆系统 + 上下文管理
  */
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class RAGEnterpriseController {
@@ -37,7 +39,7 @@ public class RAGEnterpriseController {
                             // 使用 SSE 格式发送，前端需要用 EventSource 解析
                             emitter.send(chunk);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            log.error("SSE 发送失败", e);
                             emitter.completeWithError(e);
                         }
                     }
@@ -87,12 +89,12 @@ public class RAGEnterpriseController {
 
                 @Override
                 public void onError(Throwable t) {
-                    t.printStackTrace();
+                    log.error("流式输出异常", t);
                     writer.close();
                 }
             });
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("流式处理失败", e);
             writer.close();
         }
     }
