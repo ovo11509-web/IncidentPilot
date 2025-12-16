@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -70,6 +71,7 @@ public class RAGEnterpriseService implements RAGService {
     private final MCPToolRegistry mcpToolRegistry;
     private final ThreadPoolExecutor ragContextExecutor;
     private final ThreadPoolExecutor ragRetrievalExecutor;
+    private final ThreadPoolExecutor intentClassifyExecutor;
 
     public RAGEnterpriseService(
             RetrieverService retrieverService,
@@ -80,10 +82,11 @@ public class RAGEnterpriseService implements RAGService {
             MCPService mcpService,
             MCPParameterExtractor mcpParameterExtractor,
             MCPToolRegistry mcpToolRegistry,
-            @Qualifier("defaultQueryRewriteService") QueryRewriteService queryRewriteService,
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
+            @Qualifier("multiQuestionRewriteService") QueryRewriteService queryRewriteService,
             @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
-            @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
+            @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor,
+            @Qualifier("intentClassifyThreadPoolExecutor") ThreadPoolExecutor intentClassifyExecutor) {
         this.retrieverService = retrieverService;
         this.llmService = llmService;
         this.rerankService = rerankService;
@@ -92,18 +95,25 @@ public class RAGEnterpriseService implements RAGService {
         this.mcpService = mcpService;
         this.mcpParameterExtractor = mcpParameterExtractor;
         this.mcpToolRegistry = mcpToolRegistry;
-        this.queryRewriteService = queryRewriteService;
         this.intentClassifier = intentClassifier;
+        this.queryRewriteService = queryRewriteService;
         this.ragContextExecutor = ragContextExecutor;
         this.ragRetrievalExecutor = ragRetrievalExecutor;
+        this.intentClassifyExecutor = intentClassifyExecutor;
     }
 
     // ==================== 主入口 ====================
 
     @Override
     public void streamAnswer(String question, int topK, StreamCallback callback) {
-        String rewriteQuestion = queryRewriteService.rewrite(question);
-        List<NodeScore> nodeScores = intentClassifier.classifyTargets(rewriteQuestion);
+        QueryRewriteService.RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question);
+        String rewriteQuestion = rewriteResult.rewrittenQuestion();
+
+        List<String> intentQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
+                ? rewriteResult.subQuestions()
+                : List.of(rewriteQuestion);
+
+        List<NodeScore> nodeScores = classifyIntents(intentQuestions);
 
         // SYSTEM 意图单独处理
         if (isSystemOnly(nodeScores)) {
@@ -127,6 +137,35 @@ public class RAGEnterpriseService implements RAGService {
     }
 
     // ==================== 意图分离 ====================
+
+    /**
+     * 多问句意图分类：对子问题逐个分类，合并高分意图。
+     */
+
+    private List<NodeScore> classifyIntents(List<String> intentQuestions) {
+        Map<String, NodeScore> merged = new ConcurrentHashMap<>();
+
+        List<CompletableFuture<Void>> tasks = intentQuestions.stream()
+                .filter(StrUtil::isNotBlank)
+                .map(q -> CompletableFuture.supplyAsync(() -> intentClassifier.classifyTargets(q), intentClassifyExecutor)
+                        .thenAccept(scores -> {
+                            if (scores != null) {
+                                scores.stream()
+                                        .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
+                                        .limit(MAX_INTENT_COUNT)
+                                        .forEach(ns -> merged.merge(ns.getNode().getId(), ns,
+                                                (oldVal, newVal) -> oldVal.getScore() >= newVal.getScore() ? oldVal : newVal));
+                            }
+                        }))
+                .toList();
+
+        CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
+
+        return merged.values().stream()
+                .sorted(Comparator.comparingDouble(NodeScore::getScore).reversed())
+                .limit(MAX_INTENT_COUNT)
+                .collect(Collectors.toList());
+    }
 
     private boolean isSystemOnly(List<NodeScore> nodeScores) {
         return nodeScores.size() == 1 && Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM);

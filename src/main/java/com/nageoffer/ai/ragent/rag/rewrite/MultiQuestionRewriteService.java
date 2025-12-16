@@ -1,0 +1,143 @@
+package com.nageoffer.ai.ragent.rag.rewrite;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.nageoffer.ai.ragent.config.RAGConfigProperties;
+import com.nageoffer.ai.ragent.constant.RAGConstant;
+import com.nageoffer.ai.ragent.convention.ChatRequest;
+import com.nageoffer.ai.ragent.rag.chat.LLMService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * 查询预处理：改写 + 拆分多问句
+ */
+@Slf4j
+@Service("multiQuestionRewriteService")
+@RequiredArgsConstructor
+public class MultiQuestionRewriteService implements QueryRewriteService {
+
+    private final LLMService llmService;
+    private final RAGConfigProperties ragConfigProperties;
+    private final QueryTermMappingService queryTermMappingService;
+
+    @Override
+    public String rewrite(String userQuestion) {
+        return rewriteAndSplit(userQuestion).rewrittenQuestion();
+    }
+
+    @Override
+    public RewriteResult rewriteWithSplit(String userQuestion) {
+        return rewriteAndSplit(userQuestion);
+    }
+
+    /**
+     * 先用默认改写做归一化，再进行多问句拆分。
+     */
+    public RewriteResult rewriteAndSplit(String userQuestion) {
+        // 开关关闭：直接做规则归一化 + 规则拆分
+        if (!ragConfigProperties.getQueryRewriteEnabled()) {
+            String normalized = queryTermMappingService.normalize(userQuestion);
+            List<String> subs = ruleBasedSplit(normalized);
+            return new RewriteResult(normalized, subs);
+        }
+
+        String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
+
+        RewriteResult llmResult = callLlmRewriteAndSplit(normalizedQuestion);
+        if (llmResult != null) {
+            return llmResult;
+        }
+
+        // 兜底：使用归一化结果 + 规则拆分
+        List<String> subQuestions = ruleBasedSplit(normalizedQuestion);
+        return new RewriteResult(normalizedQuestion, subQuestions);
+    }
+
+    private RewriteResult callLlmRewriteAndSplit(String question) {
+        String prompt = RAGConstant.QUERY_REWRITE_AND_SPLIT_PROMPT.formatted(question);
+
+        ChatRequest req = ChatRequest.builder()
+                .prompt(prompt)
+                .temperature(0.1D)
+                .topP(0.3D)
+                .thinking(false)
+                .build();
+
+        try {
+            String raw = llmService.chat(req);
+            RewriteResult parsed = parseRewriteAndSplit(raw);
+            if (parsed != null) {
+                log.info("""
+                        查询改写+拆分：
+                        原始问题：{}
+                        归一化后：{}
+                        改写结果：{}
+                        子问题：{}
+                        """, question, question, parsed.rewrittenQuestion(), parsed.subQuestions());
+                return parsed;
+            }
+        } catch (Exception e) {
+            log.warn("查询改写+拆分 LLM 调用失败，question={}", question, e);
+        }
+        return null;
+    }
+
+    private RewriteResult parseRewriteAndSplit(String raw) {
+        try {
+            JsonElement root = JsonParser.parseString(raw.trim());
+            if (!root.isJsonObject()) {
+                return null;
+            }
+            JsonObject obj = root.getAsJsonObject();
+            String rewrite = obj.has("rewrite") ? obj.get("rewrite").getAsString().trim() : "";
+            List<String> subs = new ArrayList<>();
+            if (obj.has("sub_questions") && obj.get("sub_questions").isJsonArray()) {
+                JsonArray arr = obj.getAsJsonArray("sub_questions");
+                for (JsonElement el : arr) {
+                    if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
+                        String s = el.getAsString().trim();
+                        if (StrUtil.isNotBlank(s)) {
+                            subs.add(s);
+                        }
+                    }
+                }
+            }
+            if (StrUtil.isBlank(rewrite)) {
+                return null;
+            }
+            if (CollUtil.isEmpty(subs)) {
+                subs = List.of(rewrite);
+            }
+            return new RewriteResult(rewrite, subs);
+        } catch (Exception e) {
+            log.warn("解析改写+拆分结果失败，raw={}", raw, e);
+            return null;
+        }
+    }
+
+    private List<String> ruleBasedSplit(String question) {
+        // 兜底：按常见分隔符拆分
+        List<String> parts = Arrays.stream(question.split("[?？。；;\\n]+"))
+                .map(String::trim)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toList());
+
+        if (CollUtil.isEmpty(parts)) {
+            return List.of(question);
+        }
+        return parts.stream()
+                .map(s -> s.endsWith("？") || s.endsWith("?") ? s : s + "？")
+                .toList();
+    }
+}
