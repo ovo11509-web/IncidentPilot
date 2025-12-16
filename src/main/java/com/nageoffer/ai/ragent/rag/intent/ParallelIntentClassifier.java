@@ -33,10 +33,13 @@ import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_CLASSIFIER_DOM
  * 并行意图分类器
  * <p>
  * 按 Domain（根节点）拆分意图，每个 Domain 独立构建 Prompt 并行调用 LLM，
- * 最后合并所有结果并排序返回。适用于意图数量较多的场景。
+ * 最后合并所有结果并排序返回。适用于意图数量较多的场景
+ * <p>
+ * 暂时废弃，并行调用存在一个问题，多个 Domain 之间可能会存在逻辑依赖，拆分后无法全局判断
  */
 @Slf4j
 @Service("parallelIntentClassifier")
+@Deprecated
 public class ParallelIntentClassifier implements IntentClassifier {
 
     private final LLMService llmService;
