@@ -17,7 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 public class QueryRewriteTests {
 
     private final LLMService llmService;
-    private final QueryRewriteService queryRewriteService;
+    private final QueryRewriteService defaultQueryRewriteService;
 
     private static final String QUERY_REWRITE_PROMPT = """
             你是一个“查询改写器（Query Rewriter）”，只用于 RAG 系统的【检索阶段】。
@@ -75,7 +75,7 @@ public class QueryRewriteTests {
 
     @Test
     public void testQueryTermMapping() {
-        queryRewriteService.rewrite("阿里使用的是钉钉么？");
+        defaultQueryRewriteService.rewrite("阿里使用的是钉钉么？");
     }
 
     /**

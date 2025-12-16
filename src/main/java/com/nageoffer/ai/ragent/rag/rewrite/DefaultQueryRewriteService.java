@@ -1,6 +1,5 @@
 package com.nageoffer.ai.ragent.rag.rewrite;
 
-
 import com.nageoffer.ai.ragent.config.RAGConfigProperties;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
@@ -9,12 +8,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import static com.nageoffer.ai.ragent.constant.RAGConstant.QUERY_REWRITE_PROMPT;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class LLMQueryRewriteService implements QueryRewriteService {
+public class DefaultQueryRewriteService implements QueryRewriteService {
 
     private final LLMService llmService;
     private final RAGConfigProperties ragConfigProperties;

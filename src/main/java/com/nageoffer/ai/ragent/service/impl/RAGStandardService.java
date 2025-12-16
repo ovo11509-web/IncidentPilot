@@ -43,12 +43,12 @@ public class RAGStandardService implements RAGService {
     private final LLMService llmService;
     private final RerankService rerankService;
     private final IntentClassifier defaultIntentClassifier;
-    private final QueryRewriteService queryRewriteService;
+    private final QueryRewriteService defaultQueryRewriteService;
     private final RAGPromptService ragPromptService;
 
     @Override
     public void streamAnswer(String question, int topK, StreamCallback callback) {
-        String rewriteQuestion = queryRewriteService.rewrite(question);
+        String rewriteQuestion = defaultQueryRewriteService.rewrite(question);
 
         List<NodeScore> nodeScores = defaultIntentClassifier.classifyTargets(rewriteQuestion);
 

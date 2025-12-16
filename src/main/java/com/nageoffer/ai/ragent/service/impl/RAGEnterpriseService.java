@@ -75,24 +75,24 @@ public class RAGEnterpriseService implements RAGService {
             RetrieverService retrieverService,
             LLMService llmService,
             RerankService rerankService,
-            QueryRewriteService queryRewriteService,
             RAGPromptService ragPromptService,
             MCPPromptService mcpPromptService,
             MCPService mcpService,
             MCPParameterExtractor mcpParameterExtractor,
             MCPToolRegistry mcpToolRegistry,
+            @Qualifier("defaultQueryRewriteService") QueryRewriteService queryRewriteService,
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
             @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
         this.retrieverService = retrieverService;
         this.llmService = llmService;
         this.rerankService = rerankService;
-        this.queryRewriteService = queryRewriteService;
         this.ragPromptService = ragPromptService;
         this.mcpPromptService = mcpPromptService;
         this.mcpService = mcpService;
         this.mcpParameterExtractor = mcpParameterExtractor;
         this.mcpToolRegistry = mcpToolRegistry;
+        this.queryRewriteService = queryRewriteService;
         this.intentClassifier = intentClassifier;
         this.ragContextExecutor = ragContextExecutor;
         this.ragRetrievalExecutor = ragRetrievalExecutor;
