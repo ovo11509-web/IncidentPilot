@@ -211,7 +211,7 @@ public class RAGEnterpriseService implements RAGService {
         KbResult kbResult = kbFuture.join();
         return RetrievalContext.builder()
                 .mcpContext(mcpFuture.join())
-                .kbContext(kbResult.context)
+                .kbContext(kbResult.groupedContext)
                 .intentChunks(kbResult.intentChunks)
                 .build();
     }
@@ -242,43 +242,59 @@ public class RAGEnterpriseService implements RAGService {
 
         int searchTopK = Math.max(topK * SEARCH_TOP_K_MULTIPLIER, MIN_SEARCH_TOP_K);
         Map<String, List<RetrievedChunk>> intentChunks = new ConcurrentHashMap<>();
+        Map<String, List<RetrievedChunk>> rerankedByIntent = new ConcurrentHashMap<>();
 
-        List<CompletableFuture<Void>> futures = kbIntents.stream()
-                .map(ns -> CompletableFuture.runAsync(() -> {
-                    IntentNode node = ns.getNode();
-                    List<RetrievedChunk> chunks = retrieverService.retrieve(
-                            RetrieveRequest.builder()
-                                    .collectionName(node.getCollectionName())
-                                    .query(question)
-                                    .topK(searchTopK)
-                                    .build()
-                    );
-                    if (CollUtil.isNotEmpty(chunks)) {
-                        intentChunks.put(node.getId(), chunks);
-                    }
-                }, ragRetrievalExecutor))
+        List<CompletableFuture<Void>> tasks = kbIntents.stream()
+                .map(ns -> CompletableFuture.supplyAsync(() -> {
+                            IntentNode node = ns.getNode();
+                            List<RetrievedChunk> chunks = retrieverService.retrieve(
+                                    RetrieveRequest.builder()
+                                            .collectionName(node.getCollectionName())
+                                            .query(question)
+                                            .topK(searchTopK)
+                                            .build()
+                            );
+                            return chunks;
+                        }, ragRetrievalExecutor)
+                        .thenApply(chunks -> {
+                            if (CollUtil.isEmpty(chunks)) {
+                                return List.<RetrievedChunk>of();
+                            }
+                            int rerankLimit = topK * RERANK_LIMIT_MULTIPLIER;
+                            return rerankService.rerank(question, chunks, rerankLimit);
+                        })
+                        .thenAccept(perIntent -> {
+                            if (CollUtil.isNotEmpty(perIntent)) {
+                                intentChunks.put(ns.getNode().getId(), perIntent);
+                                rerankedByIntent.put(ns.getNode().getId(), perIntent);
+                            }
+                        }))
                 .toList();
 
-        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+        CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new)).join();
 
-        // 聚合 + Rerank
-        List<RetrievedChunk> allChunks = kbIntents.stream()
-                .filter(ns -> CollUtil.isNotEmpty(intentChunks.get(ns.getNode().getId())))
-                .flatMap(ns -> intentChunks.get(ns.getNode().getId()).stream())
-                .collect(Collectors.toList());
-
-        if (allChunks.isEmpty()) {
+        if (rerankedByIntent.isEmpty()) {
             return KbResult.empty();
         }
 
-        int rerankLimit = topK * RERANK_LIMIT_MULTIPLIER;
-        List<RetrievedChunk> reranked = rerankService.rerank(question, allChunks, rerankLimit);
+        String groupedContext = kbIntents.stream()
+                .map(ns -> {
+                    List<RetrievedChunk> chunks = rerankedByIntent.get(ns.getNode().getId());
+                    if (CollUtil.isEmpty(chunks)) {
+                        return "";
+                    }
+                    List<RetrievedChunk> topByScore = chunks.stream()
+                            .limit(topK)
+                            .toList();
+                    String body = topByScore.stream()
+                            .map(c -> "- " + c.getText())
+                            .collect(Collectors.joining("\n"));
+                    return "【" + ns.getNode().getName() + "】\n" + body;
+                })
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining("\n\n"));
 
-        String context = reranked.stream()
-                .map(h -> "- " + h.getText())
-                .collect(Collectors.joining("\n"));
-
-        return new KbResult(context, intentChunks);
+        return new KbResult(groupedContext, intentChunks);
     }
 
     // ==================== LLM 响应 ====================
@@ -379,7 +395,7 @@ public class RAGEnterpriseService implements RAGService {
     /**
      * KB 检索结果
      */
-    private record KbResult(String context, Map<String, List<RetrievedChunk>> intentChunks) {
+    private record KbResult(String groupedContext, Map<String, List<RetrievedChunk>> intentChunks) {
         static KbResult empty() {
             return new KbResult("", Map.of());
         }
