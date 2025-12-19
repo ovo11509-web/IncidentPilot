@@ -11,8 +11,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_RULES_SECTION;
-import static com.nageoffer.ai.ragent.constant.RAGConstant.MCP_KB_MIXED_PROMPT;
-import static com.nageoffer.ai.ragent.constant.RAGConstant.MCP_ONLY_PROMPT;
+import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.MCP_KB_MIXED_PROMPT;
+import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.MCP_ONLY_PROMPT;
 
 /**
  * MCP 提示词服务默认实现（V3 Enterprise 专用）

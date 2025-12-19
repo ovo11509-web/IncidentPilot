@@ -31,7 +31,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -71,22 +70,20 @@ public class RAGEnterpriseService implements RAGService {
     private final MCPToolRegistry mcpToolRegistry;
     private final ThreadPoolExecutor ragContextExecutor;
     private final ThreadPoolExecutor ragRetrievalExecutor;
-    private final ThreadPoolExecutor intentClassifyExecutor;
 
     public RAGEnterpriseService(
             RetrieverService retrieverService,
             LLMService llmService,
             RerankService rerankService,
-            RAGPromptService ragPromptService,
             MCPPromptService mcpPromptService,
             MCPService mcpService,
             MCPParameterExtractor mcpParameterExtractor,
             MCPToolRegistry mcpToolRegistry,
+            @Qualifier("ragEnterprisePromptService") RAGPromptService ragPromptService,
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("multiQuestionRewriteService") QueryRewriteService queryRewriteService,
             @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
-            @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor,
-            @Qualifier("intentClassifyThreadPoolExecutor") ThreadPoolExecutor intentClassifyExecutor) {
+            @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
         this.retrieverService = retrieverService;
         this.llmService = llmService;
         this.rerankService = rerankService;
@@ -99,7 +96,6 @@ public class RAGEnterpriseService implements RAGService {
         this.queryRewriteService = queryRewriteService;
         this.ragContextExecutor = ragContextExecutor;
         this.ragRetrievalExecutor = ragRetrievalExecutor;
-        this.intentClassifyExecutor = intentClassifyExecutor;
     }
 
     // ==================== 主入口 ====================
@@ -109,62 +105,51 @@ public class RAGEnterpriseService implements RAGService {
         QueryRewriteService.RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question);
         String rewriteQuestion = rewriteResult.rewrittenQuestion();
 
-        List<String> intentQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
+        List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
                 ? rewriteResult.subQuestions()
                 : List.of(rewriteQuestion);
 
-        List<NodeScore> nodeScores = classifyIntents(intentQuestions);
+        List<SubQuestionIntent> subIntents = subQuestions.stream()
+                .map(q -> new SubQuestionIntent(q, classifyIntents(q)))
+                .toList();
 
-        // SYSTEM 意图单独处理
-        if (isSystemOnly(nodeScores)) {
+        boolean allSystemOnly = subIntents.stream()
+                .allMatch(si -> isSystemOnly(si.nodeScores));
+        if (allSystemOnly) {
             streamSystemResponse(rewriteQuestion, callback);
             return;
         }
 
-        // 分离意图
-        IntentGroup intentGroup = separateIntents(nodeScores);
-        log.info("意图分离 - MCP: {}, KB: {}", intentGroup.mcpIntents.size(), intentGroup.kbIntents.size());
-
-        // 统一处理：获取上下文 → 构建 Prompt → 流式输出
-        RetrievalContext ctx = buildRetrievalContext(rewriteQuestion, intentGroup, topK);
-
+        RetrievalContext ctx = buildPerQuestionContext(subIntents, topK);
         if (ctx.isEmpty()) {
             callback.onContent("未检索到与问题相关的文档内容。");
             return;
         }
 
-        streamLLMResponse(rewriteResult, ctx, intentGroup, callback);
+        // 聚合所有意图用于 prompt 规划
+        List<NodeScore> allIntents = subIntents.stream()
+                .flatMap(si -> separateIntents(si.nodeScores).allIntents().stream())
+                .toList();
+
+        IntentGroup mergedGroup = new IntentGroup(
+                allIntents.stream().filter(ns -> ns.getNode().isMCP()).toList(),
+                allIntents.stream().filter(ns -> ns.getNode().isKB()).toList()
+        );
+
+        streamLLMResponse(rewriteResult, ctx, mergedGroup, callback);
     }
 
     // ==================== 意图分离 ====================
 
     /**
-     * 多问句意图分类：对子问题逐个分类，合并高分意图。
+     * 单个子问题意图分类
      */
-
-    private List<NodeScore> classifyIntents(List<String> intentQuestions) {
-        Map<String, NodeScore> merged = new ConcurrentHashMap<>();
-
-        List<CompletableFuture<Void>> tasks = intentQuestions.stream()
-                .filter(StrUtil::isNotBlank)
-                .map(q -> CompletableFuture.supplyAsync(() -> intentClassifier.classifyTargets(q), intentClassifyExecutor)
-                        .thenAccept(scores -> {
-                            if (scores != null) {
-                                scores.stream()
-                                        .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
-                                        .limit(MAX_INTENT_COUNT)
-                                        .forEach(ns -> merged.merge(ns.getNode().getId(), ns,
-                                                (oldVal, newVal) -> oldVal.getScore() >= newVal.getScore() ? oldVal : newVal));
-                            }
-                        }))
-                .toList();
-
-        CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
-
-        return merged.values().stream()
-                .sorted(Comparator.comparingDouble(NodeScore::getScore).reversed())
+    private List<NodeScore> classifyIntents(String question) {
+        List<NodeScore> scores = intentClassifier.classifyTargets(question);
+        return scores.stream()
+                .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
                 .limit(MAX_INTENT_COUNT)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private boolean isSystemOnly(List<NodeScore> nodeScores) {
@@ -196,23 +181,43 @@ public class RAGEnterpriseService implements RAGService {
     /**
      * 统一构建检索上下文（MCP + KB 并行执行）
      */
-    private RetrievalContext buildRetrievalContext(String question, IntentGroup intentGroup, int topK) {
+    private RetrievalContext buildPerQuestionContext(List<SubQuestionIntent> subIntents, int topK) {
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
+        Map<String, List<RetrievedChunk>> mergedIntentChunks = new ConcurrentHashMap<>();
+        StringBuilder kbBuilder = new StringBuilder();
+        StringBuilder mcpBuilder = new StringBuilder();
 
-        // 统一使用 CompletableFuture，空意图直接返回默认值
-        CompletableFuture<String> mcpFuture = CollUtil.isEmpty(intentGroup.mcpIntents)
-                ? CompletableFuture.completedFuture("")
-                : CompletableFuture.supplyAsync(() -> executeMcpAndMerge(question, intentGroup.mcpIntents), ragContextExecutor);
+        List<CompletableFuture<Void>> tasks = subIntents.stream()
+                .map(si -> CompletableFuture.runAsync(() -> {
+                    IntentGroup group = separateIntents(si.nodeScores);
 
-        CompletableFuture<KbResult> kbFuture = CollUtil.isEmpty(intentGroup.kbIntents)
-                ? CompletableFuture.completedFuture(KbResult.empty())
-                : CompletableFuture.supplyAsync(() -> retrieveAndRerank(question, intentGroup.kbIntents, finalTopK), ragContextExecutor);
+                    if (CollUtil.isNotEmpty(group.kbIntents)) {
+                        KbResult kbResult = retrieveAndRerank(si.subQuestion, group.kbIntents, finalTopK);
+                        if (StrUtil.isNotBlank(kbResult.groupedContext)) {
+                            synchronized (kbBuilder) {
+                                kbBuilder.append(kbResult.groupedContext).append("\n\n");
+                            }
+                            mergedIntentChunks.putAll(kbResult.intentChunks);
+                        }
+                    }
 
-        KbResult kbResult = kbFuture.join();
+                    if (CollUtil.isNotEmpty(group.mcpIntents)) {
+                        String mcpContext = executeMcpAndMerge(si.subQuestion, group.mcpIntents);
+                        if (StrUtil.isNotBlank(mcpContext)) {
+                            synchronized (mcpBuilder) {
+                                mcpBuilder.append(mcpContext).append("\n\n");
+                            }
+                        }
+                    }
+                }, ragContextExecutor))
+                .toList();
+
+        CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new)).join();
+
         return RetrievalContext.builder()
-                .mcpContext(mcpFuture.join())
-                .kbContext(kbResult.groupedContext)
-                .intentChunks(kbResult.intentChunks)
+                .mcpContext(mcpBuilder.toString().trim())
+                .kbContext(kbBuilder.toString().trim())
+                .intentChunks(mergedIntentChunks)
                 .build();
     }
 
@@ -283,13 +288,11 @@ public class RAGEnterpriseService implements RAGService {
                     if (CollUtil.isEmpty(chunks)) {
                         return "";
                     }
-                    List<RetrievedChunk> topByScore = chunks.stream()
+                    String body = chunks.stream()
                             .limit(topK)
-                            .toList();
-                    String body = topByScore.stream()
-                            .map(c -> "- " + c.getText())
+                            .map(RetrievedChunk::getText)
                             .collect(Collectors.joining("\n"));
-                    return "【" + ns.getNode().getName() + "】\n" + body;
+                    return "#### 意图：" + ns.getNode().getName() + "\n````text\n" + body + "\n````";
                 })
                 .filter(StrUtil::isNotBlank)
                 .collect(Collectors.joining("\n\n"));
@@ -390,6 +393,19 @@ public class RAGEnterpriseService implements RAGService {
      * 意图分组
      */
     private record IntentGroup(List<NodeScore> mcpIntents, List<NodeScore> kbIntents) {
+        List<NodeScore> allIntents() {
+            List<NodeScore> all = new ArrayList<>();
+            if (mcpIntents != null) {
+                all.addAll(mcpIntents);
+            }
+            if (kbIntents != null) {
+                all.addAll(kbIntents);
+            }
+            return all;
+        }
+    }
+
+    private record SubQuestionIntent(String subQuestion, List<NodeScore> nodeScores) {
     }
 
     /**

@@ -30,21 +30,18 @@ public interface QueryRewriteService {
     record RewriteResult(String rewrittenQuestion, List<String> subQuestions) {
 
         public String joinSubQuestions() {
-            if (subQuestions == null || subQuestions.isEmpty()) {
-                return "";
-            }
-
-            // 如果只有一个子问题，直接返回
-            if (subQuestions.size() == 1) {
-                return subQuestions.get(0);
-            }
-
             StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < subQuestions.size(); i++) {
-                sb.append(i + 1).append(". ").append(subQuestions.get(i));
-                if (i < subQuestions.size() - 1) {
-                    sb.append("\n");
+            sb.append("## 用户问题\n");
+            if (rewrittenQuestion != null && !rewrittenQuestion.isBlank()) {
+                sb.append(rewrittenQuestion.trim()).append("\n\n");
+            }
+            sb.append("### 子问句（逐条回答）\n");
+            if (subQuestions != null && !subQuestions.isEmpty()) {
+                for (int i = 0; i < subQuestions.size(); i++) {
+                    sb.append(i + 1).append(". ").append(subQuestions.get(i)).append("\n");
                 }
+            } else {
+                sb.append("1. ").append(rewrittenQuestion != null ? rewrittenQuestion : "").append("\n");
             }
             return sb.toString();
         }

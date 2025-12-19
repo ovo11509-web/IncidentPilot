@@ -54,7 +54,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
 
         String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
 
-        RewriteResult llmResult = callLlmRewriteAndSplit(normalizedQuestion);
+        RewriteResult llmResult = callLlmRewriteAndSplit(normalizedQuestion, userQuestion);
         if (llmResult != null) {
             return llmResult;
         }
@@ -64,8 +64,8 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
         return new RewriteResult(normalizedQuestion, subQuestions);
     }
 
-    private RewriteResult callLlmRewriteAndSplit(String question) {
-        String prompt = RAGConstant.QUERY_REWRITE_AND_SPLIT_PROMPT.formatted(question);
+    private RewriteResult callLlmRewriteAndSplit(String normalizedQuestion, String originalQuestion) {
+        String prompt = RAGConstant.QUERY_REWRITE_AND_SPLIT_PROMPT.formatted(normalizedQuestion);
 
         ChatRequest req = ChatRequest.builder()
                 .prompt(prompt)
@@ -84,11 +84,11 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
                         归一化后：{}
                         改写结果：{}
                         子问题：{}
-                        """, question, question, parsed.rewrittenQuestion(), parsed.subQuestions());
+                        """, originalQuestion, normalizedQuestion, parsed.rewrittenQuestion(), parsed.subQuestions());
                 return parsed;
             }
         } catch (Exception e) {
-            log.warn("查询改写+拆分 LLM 调用失败，question={}", question, e);
+            log.warn("查询改写+拆分 LLM 调用失败，question={}", originalQuestion, e);
         }
         return null;
     }
