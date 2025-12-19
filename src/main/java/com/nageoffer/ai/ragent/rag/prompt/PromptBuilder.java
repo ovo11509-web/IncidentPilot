@@ -19,13 +19,10 @@ import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.RAG_ENTERPR
 public class PromptBuilder {
 
     private final RAGPromptService ragPromptService;
-    private final MCPPromptService mcpPromptService;
 
     public PromptBuilder(
-            MCPPromptService mcpPromptService,
             @Qualifier("ragEnterprisePromptService") RAGPromptService ragPromptService) {
         this.ragPromptService = ragPromptService;
-        this.mcpPromptService = mcpPromptService;
     }
 
     public String buildPrompt(PromptContext context) {
@@ -54,7 +51,6 @@ public class PromptBuilder {
         return PromptBuildPlan.builder()
                 .scene(PromptScene.KB_ONLY)
                 .baseTemplate(plan.getBaseTemplate())
-                .intentRules("")
                 .slots(slots)
                 .build();
     }
@@ -62,18 +58,12 @@ public class PromptBuilder {
     private PromptBuildPlan planMcpOnly(PromptContext context) {
         List<NodeScore> intents = context.getMcpIntents();
         String baseTemplate = null;
-        String intentRules = "";
-
         if (CollUtil.isNotEmpty(intents) && intents.size() == 1) {
             IntentNode node = intents.get(0).getNode();
             String tpl = StrUtil.emptyIfNull(node.getPromptTemplate()).trim();
             if (StrUtil.isNotBlank(tpl)) {
                 baseTemplate = tpl;
             }
-        }
-
-        if (StrUtil.isBlank(baseTemplate)) {
-            intentRules = mcpPromptService.mergeSnippets(intents);
         }
 
         Map<String, String> slots = new HashMap<>();
@@ -83,14 +73,11 @@ public class PromptBuilder {
         return PromptBuildPlan.builder()
                 .scene(PromptScene.MCP_ONLY)
                 .baseTemplate(baseTemplate)
-                .intentRules(intentRules)
                 .slots(slots)
                 .build();
     }
 
     private PromptBuildPlan planMixed(PromptContext context) {
-        String intentRules = mcpPromptService.mergeSnippets(context.getMcpIntents());
-
         Map<String, String> slots = new HashMap<>();
         slots.put(PromptSlots.MCP_CONTEXT, context.getMcpContext());
         slots.put(PromptSlots.KB_CONTEXT, context.getKbContext());
@@ -98,7 +85,6 @@ public class PromptBuilder {
 
         return PromptBuildPlan.builder()
                 .scene(PromptScene.MIXED)
-                .intentRules(intentRules)
                 .slots(slots)
                 .build();
     }
@@ -112,8 +98,7 @@ public class PromptBuilder {
             return "";
         }
 
-        String withRules = PromptTemplateUtils.injectIntentRules(template, plan.getIntentRules());
-        String prompt = formatByScene(withRules, plan.getScene(), plan.getSlots());
+        String prompt = formatByScene(template, plan.getScene(), plan.getSlots());
         return PromptTemplateUtils.cleanupPrompt(prompt);
     }
 
@@ -145,4 +130,5 @@ public class PromptBuilder {
         }
         return StrUtil.emptyIfNull(slots.get(key)).trim();
     }
+
 }

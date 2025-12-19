@@ -297,7 +297,7 @@ public class RAGEnterpriseService implements RAGService {
             return "";
         }
 
-        return contextFormatter.formatMcpContext(responses);
+        return contextFormatter.formatMcpContext(responses, mcpIntents);
     }
 
     /**

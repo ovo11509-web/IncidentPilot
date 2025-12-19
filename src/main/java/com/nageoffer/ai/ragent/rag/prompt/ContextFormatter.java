@@ -10,5 +10,5 @@ import java.util.Map;
 public interface ContextFormatter {
     String formatKbContext(List<NodeScore> kbIntents, Map<String, List<RetrievedChunk>> rerankedByIntent, int topK);
 
-    String formatMcpContext(List<MCPResponse> responses);
+    String formatMcpContext(List<MCPResponse> responses, List<NodeScore> mcpIntents);
 }

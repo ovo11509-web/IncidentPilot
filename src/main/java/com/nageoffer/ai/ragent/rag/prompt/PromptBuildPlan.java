@@ -13,7 +13,5 @@ public class PromptBuildPlan {
 
     private String baseTemplate;
 
-    private String intentRules;
-
     private Map<String, String> slots;
 }
