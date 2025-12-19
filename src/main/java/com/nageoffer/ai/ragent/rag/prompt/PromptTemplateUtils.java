@@ -4,7 +4,7 @@ import cn.hutool.core.util.StrUtil;
 
 import java.util.regex.Pattern;
 
-import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_RULES_SECTION;
+import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.INTENT_RULES_SECTION;
 
 public final class PromptTemplateUtils {
     private static final Pattern MULTI_BLANK_LINES = Pattern.compile("(\\n){3,}");

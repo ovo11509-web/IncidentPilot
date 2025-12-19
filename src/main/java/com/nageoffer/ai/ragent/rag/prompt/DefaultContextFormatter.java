@@ -31,11 +31,21 @@ public class DefaultContextFormatter implements ContextFormatter {
                     if (CollUtil.isEmpty(chunks)) {
                         return "";
                     }
+                    String title = StrUtil.isNotBlank(ns.getNode().getFullPath())
+                            ? ns.getNode().getFullPath()
+                            : ns.getNode().getName();
+                    String snippet = StrUtil.emptyIfNull(ns.getNode().getPromptSnippet()).trim();
                     String body = chunks.stream()
                             .limit(topK)
                             .map(RetrievedChunk::getText)
                             .collect(Collectors.joining("\n"));
-                    return "#### 意图：" + ns.getNode().getName() + "\n````text\n" + body + "\n````";
+                    StringBuilder block = new StringBuilder();
+                    block.append("#### 意图：").append(title).append("\n");
+                    if (StrUtil.isNotBlank(snippet)) {
+                        block.append("##### 意图规则\n").append(snippet).append("\n");
+                    }
+                    block.append("##### 文档内容\n````text\n").append(body).append("\n````");
+                    return block.toString();
                 })
                 .filter(StrUtil::isNotBlank)
                 .collect(Collectors.joining("\n\n"));

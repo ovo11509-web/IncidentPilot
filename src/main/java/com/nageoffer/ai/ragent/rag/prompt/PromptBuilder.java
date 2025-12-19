@@ -7,7 +7,6 @@ import com.nageoffer.ai.ragent.rag.intent.NodeScore;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +54,7 @@ public class PromptBuilder {
         return PromptBuildPlan.builder()
                 .scene(PromptScene.KB_ONLY)
                 .baseTemplate(plan.getBaseTemplate())
-                .intentRules(plan.getIntentRules())
+                .intentRules("")
                 .slots(slots)
                 .build();
     }
@@ -90,15 +89,7 @@ public class PromptBuilder {
     }
 
     private PromptBuildPlan planMixed(PromptContext context) {
-        List<NodeScore> allIntents = new ArrayList<>();
-        if (CollUtil.isNotEmpty(context.getMcpIntents())) {
-            allIntents.addAll(context.getMcpIntents());
-        }
-        if (CollUtil.isNotEmpty(context.getKbIntents())) {
-            allIntents.addAll(context.getKbIntents());
-        }
-
-        String intentRules = mcpPromptService.mergeSnippets(allIntents);
+        String intentRules = mcpPromptService.mergeSnippets(context.getMcpIntents());
 
         Map<String, String> slots = new HashMap<>();
         slots.put(PromptSlots.MCP_CONTEXT, context.getMcpContext());

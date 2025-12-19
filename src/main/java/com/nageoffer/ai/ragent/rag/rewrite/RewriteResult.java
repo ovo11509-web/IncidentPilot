@@ -22,11 +22,10 @@ public class RewriteResult {
 
     public String joinSubQuestions() {
         StringBuilder sb = new StringBuilder();
-        sb.append("## 用户问题\n");
         if (rewrittenQuestion != null && !rewrittenQuestion.isBlank()) {
             sb.append(rewrittenQuestion.trim()).append("\n\n");
         }
-        sb.append("### 子问句（逐条回答）\n");
+        sb.append("### 子问题\n");
         if (subQuestions != null && !subQuestions.isEmpty()) {
             for (int i = 0; i < subQuestions.size(); i++) {
                 sb.append(i + 1).append(". ").append(subQuestions.get(i)).append("\n");
