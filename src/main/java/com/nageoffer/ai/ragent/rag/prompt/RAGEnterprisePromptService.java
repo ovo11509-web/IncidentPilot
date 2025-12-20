@@ -28,15 +28,14 @@ public class RAGEnterprisePromptService implements RAGPromptService {
     public String buildPrompt(String docContent, String userQuestion, String intentRules, String baseTemplate) {
         String tpl = StrUtil.isNotBlank(baseTemplate) ? baseTemplate : RAG_ENTERPRISE_PROMPT;
 
-        String withIntent = PromptTemplateUtils.injectIntentRules(tpl, intentRules);
         String prompt;
-        if (withIntent.contains("{{")) {
+        if (tpl.contains("{{")) {
             Map<String, String> slots = new HashMap<>();
             slots.put("KB_CONTEXT", defaultString(docContent).trim());
             slots.put("QUESTION", defaultString(userQuestion).trim());
-            prompt = PromptTemplateUtils.fillSlots(withIntent, slots);
+            prompt = PromptTemplateUtils.fillSlots(tpl, slots);
         } else {
-            prompt = withIntent.formatted(
+            prompt = tpl.formatted(
                     defaultString(docContent).trim(),
                     defaultString(userQuestion).trim()
             );
