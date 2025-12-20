@@ -7,7 +7,9 @@ import com.nageoffer.ai.ragent.rag.intent.NodeScore;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.MCP_KB_MIXED_PROMPT;
 import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.MCP_ONLY_PROMPT;
@@ -119,6 +121,14 @@ public class PromptBuilder {
         String mcp = StrUtil.emptyIfNull(safe.mcpContext()).trim();
         String kb = StrUtil.emptyIfNull(safe.kbContext()).trim();
         String question = StrUtil.emptyIfNull(safe.question()).trim();
+        Map<String, String> slotValues = new HashMap<>();
+        slotValues.put("MCP_CONTEXT", mcp);
+        slotValues.put("KB_CONTEXT", kb);
+        slotValues.put("QUESTION", question);
+
+        if (template.contains("{{")) {
+            return PromptTemplateUtils.fillSlots(template, slotValues);
+        }
 
         return switch (scene) {
             case KB_ONLY -> template.formatted(kb, question);

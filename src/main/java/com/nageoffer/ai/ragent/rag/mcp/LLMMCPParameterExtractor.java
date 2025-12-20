@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
+import com.nageoffer.ai.ragent.rag.prompt.PromptTemplateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,12 +46,21 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
         String toolDefinition = buildToolDefinition(tool);
 
         // 构建 Prompt：优先使用自定义提示词
-        String prompt;
+        String promptTemplate = StrUtil.isNotBlank(customPromptTemplate)
+                ? customPromptTemplate
+                : MCP_PARAMETER_EXTRACT_PROMPT;
         if (StrUtil.isNotBlank(customPromptTemplate)) {
-            prompt = customPromptTemplate.formatted(toolDefinition, userQuestion);
             log.debug("MCP 参数提取使用自定义提示词, toolId: {}", tool.getToolId());
+        }
+
+        String prompt;
+        if (promptTemplate.contains("{{")) {
+            Map<String, String> slots = new HashMap<>();
+            slots.put("TOOL_DEFINITION", toolDefinition);
+            slots.put("USER_QUERY", userQuestion);
+            prompt = PromptTemplateUtils.fillSlots(promptTemplate, slots);
         } else {
-            prompt = MCP_PARAMETER_EXTRACT_PROMPT.formatted(toolDefinition, userQuestion);
+            prompt = promptTemplate.formatted(toolDefinition, userQuestion);
         }
 
         log.debug("MCP 参数提取 Prompt: {}", prompt);

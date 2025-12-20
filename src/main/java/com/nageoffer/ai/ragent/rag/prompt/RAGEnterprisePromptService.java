@@ -8,6 +8,7 @@ import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,10 +29,18 @@ public class RAGEnterprisePromptService implements RAGPromptService {
         String tpl = StrUtil.isNotBlank(baseTemplate) ? baseTemplate : RAG_ENTERPRISE_PROMPT;
 
         String withIntent = PromptTemplateUtils.injectIntentRules(tpl, intentRules);
-        String prompt = withIntent.formatted(
-                defaultString(docContent).trim(),
-                defaultString(userQuestion).trim()
-        );
+        String prompt;
+        if (withIntent.contains("{{")) {
+            Map<String, String> slots = new HashMap<>();
+            slots.put("KB_CONTEXT", defaultString(docContent).trim());
+            slots.put("QUESTION", defaultString(userQuestion).trim());
+            prompt = PromptTemplateUtils.fillSlots(withIntent, slots);
+        } else {
+            prompt = withIntent.formatted(
+                    defaultString(docContent).trim(),
+                    defaultString(userQuestion).trim()
+            );
+        }
 
         return PromptTemplateUtils.cleanupPrompt(prompt);
     }

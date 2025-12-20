@@ -2,6 +2,7 @@ package com.nageoffer.ai.ragent.rag.prompt;
 
 import cn.hutool.core.util.StrUtil;
 
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import static com.nageoffer.ai.ragent.constant.RAGConstant.INTENT_RULES_SECTION;
@@ -32,5 +33,20 @@ public final class PromptTemplateUtils {
             return "";
         }
         return MULTI_BLANK_LINES.matcher(prompt).replaceAll("\n\n").trim();
+    }
+
+    public static String fillSlots(String template, Map<String, String> slots) {
+        if (template == null) {
+            return "";
+        }
+        if (slots == null || slots.isEmpty()) {
+            return template;
+        }
+        String result = template;
+        for (Map.Entry<String, String> entry : slots.entrySet()) {
+            String value = StrUtil.emptyIfNull(entry.getValue());
+            result = result.replace("{{" + entry.getKey() + "}}", value);
+        }
+        return result;
     }
 }
