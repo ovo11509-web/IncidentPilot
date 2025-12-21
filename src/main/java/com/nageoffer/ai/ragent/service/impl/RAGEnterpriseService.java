@@ -40,7 +40,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.Executor;
 
 import static com.nageoffer.ai.ragent.constant.RAGConstant.CHAT_SYSTEM_PROMPT;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.DEFAULT_TOP_K;
@@ -70,9 +70,9 @@ public class RAGEnterpriseService implements RAGService {
     private final MCPService mcpService;
     private final MCPParameterExtractor mcpParameterExtractor;
     private final MCPToolRegistry mcpToolRegistry;
-    private final ThreadPoolExecutor intentClassifyExecutor;
-    private final ThreadPoolExecutor ragContextExecutor;
-    private final ThreadPoolExecutor ragRetrievalExecutor;
+    private final Executor intentClassifyExecutor;
+    private final Executor ragContextExecutor;
+    private final Executor ragRetrievalExecutor;
 
     public RAGEnterpriseService(
             RetrieverService retrieverService,
@@ -85,9 +85,9 @@ public class RAGEnterpriseService implements RAGService {
             ContextFormatter contextFormatter,
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("multiQuestionRewriteService") QueryRewriteService queryRewriteService,
-            @Qualifier("intentClassifyThreadPoolExecutor") ThreadPoolExecutor intentClassifyExecutor,
-            @Qualifier("ragContextThreadPoolExecutor") ThreadPoolExecutor ragContextExecutor,
-            @Qualifier("ragRetrievalThreadPoolExecutor") ThreadPoolExecutor ragRetrievalExecutor) {
+            @Qualifier("intentClassifyThreadPoolExecutor") Executor intentClassifyExecutor,
+            @Qualifier("ragContextThreadPoolExecutor") Executor ragContextExecutor,
+            @Qualifier("ragRetrievalThreadPoolExecutor") Executor ragRetrievalExecutor) {
         this.retrieverService = retrieverService;
         this.llmService = llmService;
         this.rerankService = rerankService;

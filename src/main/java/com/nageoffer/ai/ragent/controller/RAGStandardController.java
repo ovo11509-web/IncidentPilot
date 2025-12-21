@@ -12,8 +12,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 /**
  * RAGQuickController + 意图识别 + Query重写 + Rerank
@@ -24,40 +22,37 @@ import java.util.concurrent.Executors;
 public class RAGStandardController {
 
     private final RAGService ragStandardService;
-    private final Executor executor = Executors.newCachedThreadPool();
 
     @GetMapping(value = "/rag/v2/stream", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter stream(@RequestParam String question,
                              @RequestParam(defaultValue = "3") Integer topK) {
         SseEmitter emitter = new SseEmitter(0L);
-        executor.execute(() -> {
-            try {
-                ragStandardService.streamAnswer(question, topK, new StreamCallback() {
-                    @Override
-                    public void onContent(String chunk) {
-                        try {
-                            // 使用 SSE 格式发送，前端需要用 EventSource 解析
-                            emitter.send(chunk);
-                        } catch (Exception e) {
-                            log.error("SSE 发送失败", e);
-                            emitter.completeWithError(e);
-                        }
+        try {
+            ragStandardService.streamAnswer(question, topK, new StreamCallback() {
+                @Override
+                public void onContent(String chunk) {
+                    try {
+                        // 使用 SSE 格式发送，前端需要用 EventSource 解析
+                        emitter.send(chunk);
+                    } catch (Exception e) {
+                        log.error("SSE 发送失败", e);
+                        emitter.completeWithError(e);
                     }
+                }
 
-                    @Override
-                    public void onComplete() {
-                        emitter.complete();
-                    }
+                @Override
+                public void onComplete() {
+                    emitter.complete();
+                }
 
-                    @Override
-                    public void onError(Throwable t) {
-                        emitter.completeWithError(t);
-                    }
-                });
-            } catch (Exception e) {
-                emitter.completeWithError(e);
-            }
-        });
+                @Override
+                public void onError(Throwable t) {
+                    emitter.completeWithError(t);
+                }
+            });
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+        }
 
         return emitter;
     }
