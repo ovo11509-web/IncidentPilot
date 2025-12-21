@@ -5,8 +5,12 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.google.gson.Gson;
 import com.nageoffer.ai.ragent.config.MemoryProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
+import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.dao.entity.ConversationMessageDO;
+import com.nageoffer.ai.ragent.dao.entity.ConversationDO;
+import com.nageoffer.ai.ragent.dao.mapper.ConversationMapper;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationMessageMapper;
+import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -17,6 +21,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.CONVERSATION_SUMMARY_PROMPT;
+
 @Service
 @RequiredArgsConstructor
 public class RedisConversationMemoryService implements ConversationMemoryService {
@@ -25,7 +31,9 @@ public class RedisConversationMemoryService implements ConversationMemoryService
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ConversationMessageMapper messageMapper;
+    private final ConversationMapper conversationMapper;
     private final MemoryProperties memoryProperties;
+    private final LLMService llmService;
     private final Gson gson = new Gson();
 
     @Override
@@ -38,11 +46,12 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         if (size == 0) {
             return List.of();
         }
+        ChatMessage summary = loadLatestSummary(conversationId, userId);
         List<String> raw = stringRedisTemplate.opsForList().range(key, -size, -1);
         if (raw != null && !raw.isEmpty()) {
             List<ChatMessage> cached = parseMessages(raw);
             if (!cached.isEmpty()) {
-                return cached;
+                return attachSummary(summary, cached);
             }
         }
 
@@ -50,11 +59,13 @@ public class RedisConversationMemoryService implements ConversationMemoryService
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, normalizeUserId(userId))
+                        .eq(ConversationMessageDO::getIsSummary, 0)
+                        .eq(ConversationMessageDO::getDeleted, 0)
                         .orderByDesc(ConversationMessageDO::getCreateTime)
                         .last("limit " + size)
         );
         if (dbMessages == null || dbMessages.isEmpty()) {
-            return List.of();
+            return attachSummary(summary, List.of());
         }
         dbMessages.sort(Comparator.comparing(ConversationMessageDO::getCreateTime));
         List<ChatMessage> result = dbMessages.stream()
@@ -68,7 +79,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             stringRedisTemplate.opsForList().rightPushAll(key, payloads);
             applyExpire(key);
         }
-        return result;
+        return attachSummary(summary, result);
     }
 
     @Override
@@ -81,6 +92,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         String payload = gson.toJson(message);
         stringRedisTemplate.opsForList().rightPush(key, payload);
         applyExpire(key);
+        compressIfNeeded(conversationId, userId, message);
     }
 
     private String buildKey(String conversationId, String userId) {
@@ -119,8 +131,184 @@ public class RedisConversationMemoryService implements ConversationMemoryService
                 .userId(normalizeUserId(userId))
                 .role(message.getRole() == null ? null : message.getRole().name().toLowerCase())
                 .content(message.getContent())
+                .isSummary(0)
                 .build();
         messageMapper.insert(record);
+        upsertConversation(conversationId, userId, message);
+    }
+
+    private void compressIfNeeded(String conversationId, String userId, ChatMessage message) {
+        if (!memoryProperties.isSummaryEnabled()) {
+            return;
+        }
+        if (message.getRole() != ChatMessage.Role.ASSISTANT) {
+            return;
+        }
+        int triggerTurns = memoryProperties.getSummaryTriggerTurns();
+        int keepTurns = memoryProperties.getSummaryKeepTurns();
+        int maxTurns = memoryProperties.getMaxTurns();
+        if (triggerTurns <= 0 || keepTurns < 0) {
+            return;
+        }
+        if (maxTurns > 0) {
+            keepTurns = Math.min(keepTurns, maxTurns);
+        }
+        int triggerMessages = triggerTurns * 2;
+        int keepMessages = keepTurns * 2;
+        long total = messageMapper.selectCount(
+                Wrappers.lambdaQuery(ConversationMessageDO.class)
+                        .eq(ConversationMessageDO::getConversationId, conversationId)
+                        .eq(ConversationMessageDO::getUserId, normalizeUserId(userId))
+                        .eq(ConversationMessageDO::getIsSummary, 0)
+                        .eq(ConversationMessageDO::getDeleted, 0)
+        );
+        if (total <= triggerMessages) {
+            return;
+        }
+        ConversationMessageDO latestSummary = loadLatestSummaryRecord(conversationId, userId);
+        if (latestSummary != null) {
+            return;
+        }
+        int summarizeCount = (int) Math.max(0, total - keepMessages);
+        if (summarizeCount <= 0) {
+            return;
+        }
+        List<ConversationMessageDO> toSummarize = messageMapper.selectList(
+                Wrappers.lambdaQuery(ConversationMessageDO.class)
+                        .eq(ConversationMessageDO::getConversationId, conversationId)
+                        .eq(ConversationMessageDO::getUserId, normalizeUserId(userId))
+                        .eq(ConversationMessageDO::getIsSummary, 0)
+                        .eq(ConversationMessageDO::getDeleted, 0)
+                        .orderByAsc(ConversationMessageDO::getCreateTime)
+                        .last("limit " + summarizeCount)
+        );
+        if (toSummarize == null || toSummarize.isEmpty()) {
+            return;
+        }
+        String summary = summarizeMessages(toSummarize);
+        if (StrUtil.isBlank(summary)) {
+            return;
+        }
+        ConversationMessageDO first = toSummarize.get(0);
+        ConversationMessageDO summaryRecord = ConversationMessageDO.builder()
+                .conversationId(conversationId)
+                .userId(normalizeUserId(userId))
+                .role(ChatMessage.Role.SYSTEM.name().toLowerCase())
+                .content(summary)
+                .isSummary(1)
+                .createTime(first.getCreateTime())
+                .build();
+        messageMapper.insert(summaryRecord);
+        refreshCache(conversationId, userId);
+    }
+
+    private String summarizeMessages(List<ConversationMessageDO> messages) {
+        String content = buildSummaryContent(messages);
+        if (StrUtil.isBlank(content)) {
+            return "";
+        }
+        String prompt = CONVERSATION_SUMMARY_PROMPT.formatted(content);
+        ChatRequest request = ChatRequest.builder()
+                .prompt(prompt)
+                .temperature(0.1D)
+                .topP(0.3D)
+                .thinking(false)
+                .build();
+        try {
+            String result = llmService.chat(request);
+            return result == null ? "" : result.trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String buildSummaryContent(List<ConversationMessageDO> messages) {
+        StringBuilder sb = new StringBuilder();
+        for (ConversationMessageDO item : messages) {
+            if (item == null || StrUtil.isBlank(item.getContent())) {
+                continue;
+            }
+            sb.append(toRoleLabel(item.getRole()))
+                    .append(item.getContent().trim())
+                    .append("\n");
+        }
+        return sb.toString().trim();
+    }
+
+    private String toRoleLabel(String role) {
+        if (StrUtil.isBlank(role)) {
+            return "";
+        }
+        return switch (role.trim().toLowerCase()) {
+            case "user" -> "用户：";
+            case "assistant" -> "助手：";
+            case "system" -> "系统：";
+            default -> "";
+        };
+    }
+
+    private void refreshCache(String conversationId, String userId) {
+        String key = buildKey(conversationId, userId);
+        if (key == null) {
+            return;
+        }
+        stringRedisTemplate.delete(key);
+        int maxMessages = memoryProperties.getMaxTurns() * 2;
+        if (maxMessages <= 0) {
+            return;
+        }
+        List<ConversationMessageDO> dbMessages = messageMapper.selectList(
+                Wrappers.lambdaQuery(ConversationMessageDO.class)
+                        .eq(ConversationMessageDO::getConversationId, conversationId)
+                        .eq(ConversationMessageDO::getUserId, normalizeUserId(userId))
+                        .eq(ConversationMessageDO::getIsSummary, 0)
+                        .eq(ConversationMessageDO::getDeleted, 0)
+                        .orderByAsc(ConversationMessageDO::getCreateTime)
+                        .last("limit " + maxMessages)
+        );
+        if (dbMessages == null || dbMessages.isEmpty()) {
+            return;
+        }
+        List<String> payloads = dbMessages.stream()
+                .map(this::toChatMessage)
+                .filter(item -> item != null && StrUtil.isNotBlank(item.getContent()))
+                .map(gson::toJson)
+                .toList();
+        if (!payloads.isEmpty()) {
+            stringRedisTemplate.opsForList().rightPushAll(key, payloads);
+            applyExpire(key);
+        }
+    }
+
+    private List<ChatMessage> attachSummary(ChatMessage summary, List<ChatMessage> messages) {
+        if (summary == null) {
+            return messages;
+        }
+        List<ChatMessage> result = new ArrayList<>();
+        result.add(summary);
+        result.addAll(messages);
+        return result;
+    }
+
+    private ChatMessage loadLatestSummary(String conversationId, String userId) {
+        ConversationMessageDO summary = loadLatestSummaryRecord(conversationId, userId);
+        return toChatMessage(summary);
+    }
+
+    private ConversationMessageDO loadLatestSummaryRecord(String conversationId, String userId) {
+        List<ConversationMessageDO> summaries = messageMapper.selectList(
+                Wrappers.lambdaQuery(ConversationMessageDO.class)
+                        .eq(ConversationMessageDO::getConversationId, conversationId)
+                        .eq(ConversationMessageDO::getUserId, normalizeUserId(userId))
+                        .eq(ConversationMessageDO::getIsSummary, 1)
+                        .eq(ConversationMessageDO::getDeleted, 0)
+                        .orderByDesc(ConversationMessageDO::getCreateTime)
+                        .last("limit 1")
+        );
+        if (summaries == null || summaries.isEmpty()) {
+            return null;
+        }
+        return summaries.get(0);
     }
 
     private ChatMessage toChatMessage(ConversationMessageDO record) {
@@ -141,5 +329,48 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         } catch (IllegalArgumentException ex) {
             return ChatMessage.Role.USER;
         }
+    }
+
+    private void upsertConversation(String conversationId, String userId, ChatMessage message) {
+        String safeUserId = normalizeUserId(userId);
+        ConversationDO existing = conversationMapper.selectOne(
+                Wrappers.lambdaQuery(ConversationDO.class)
+                        .eq(ConversationDO::getConversationId, conversationId)
+                        .eq(ConversationDO::getUserId, safeUserId)
+                        .eq(ConversationDO::getDeleted, 0)
+        );
+        String content = message.getContent() == null ? "" : message.getContent().trim();
+        if (existing == null) {
+            String title = null;
+            if (message.getRole() == ChatMessage.Role.USER && StrUtil.isNotBlank(content)) {
+                title = limitLength(content, 30);
+            }
+            if (StrUtil.isBlank(title)) {
+                title = "新会话";
+            }
+            ConversationDO record = ConversationDO.builder()
+                    .conversationId(conversationId)
+                    .userId(safeUserId)
+                    .title(title)
+                    .lastTime(new java.util.Date())
+                    .build();
+            conversationMapper.insert(record);
+            return;
+        }
+        existing.setLastTime(new java.util.Date());
+        if (StrUtil.isBlank(existing.getTitle()) && message.getRole() == ChatMessage.Role.USER) {
+            existing.setTitle(limitLength(content, 30));
+        }
+        conversationMapper.updateById(existing);
+    }
+
+    private String limitLength(String text, int maxLen) {
+        if (StrUtil.isBlank(text)) {
+            return text;
+        }
+        if (text.length() <= maxLen) {
+            return text;
+        }
+        return text.substring(0, maxLen);
     }
 }

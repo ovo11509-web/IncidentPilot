@@ -18,4 +18,19 @@ public class MemoryProperties {
      * 缓存过期时间（分钟）
      */
     private int ttlMinutes = 60;
+
+    /**
+     * 是否启用对话记忆压缩
+     */
+    private boolean summaryEnabled = false;
+
+    /**
+     * 触发摘要的轮数阈值
+     */
+    private int summaryTriggerTurns = 12;
+
+    /**
+     * 摘要后保留的最近轮数
+     */
+    private int summaryKeepTurns = 4;
 }

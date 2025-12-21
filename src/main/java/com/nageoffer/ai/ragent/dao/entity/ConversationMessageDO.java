@@ -34,6 +34,11 @@ public class ConversationMessageDO {
 
     private String content;
 
+    /**
+     * 是否为摘要消息：0-否，1-是
+     */
+    private Integer isSummary;
+
     @TableField(fill = FieldFill.INSERT)
     private Date createTime;
 

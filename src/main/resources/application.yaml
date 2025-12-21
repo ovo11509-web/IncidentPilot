@@ -43,6 +43,9 @@ rag:
   memory:
     max-turns: 5
     ttl-minutes: 60
+    summary-enabled: true
+    summary-trigger-turns: 4
+    summary-keep-turns: 2
 
 ai:
   embedding:
