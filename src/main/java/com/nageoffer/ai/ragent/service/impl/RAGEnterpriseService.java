@@ -123,8 +123,8 @@ public class RAGEnterpriseService implements RAGService {
     }
 
     @Override
-    public void streamAnswer(String question, int topK, String sessionId, StreamCallback callback) {
-        List<ChatMessage> history = loadMemory(sessionId);
+    public void streamAnswer(String question, int topK, String conversationId, StreamCallback callback) {
+        List<ChatMessage> history = loadMemory(conversationId);
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
         String rewriteQuestion = rewriteResult.rewrittenQuestion();
 
@@ -147,10 +147,10 @@ public class RAGEnterpriseService implements RAGService {
         IntentGroup mergedGroup = mergeIntentGroup(subIntents);
 
         ChatMessage userMessage = ChatMessage.user(question);
-        if (StrUtil.isNotBlank(sessionId)) {
-            memoryService.append(sessionId, UserContext.getUserId(), userMessage);
+        if (StrUtil.isNotBlank(conversationId)) {
+            memoryService.append(conversationId, UserContext.getUserId(), userMessage);
         }
-        StreamCallback wrapped = wrapWithMemory(sessionId, callback);
+        StreamCallback wrapped = wrapWithMemory(conversationId, callback);
         streamLLMResponse(rewriteResult, ctx, mergedGroup, history, wrapped);
     }
 
@@ -442,16 +442,16 @@ public class RAGEnterpriseService implements RAGService {
                 .build();
     }
 
-    private List<ChatMessage> loadMemory(String sessionId) {
-        if (StrUtil.isBlank(sessionId) || memoryMaxTurns <= 0) {
+    private List<ChatMessage> loadMemory(String conversationId) {
+        if (StrUtil.isBlank(conversationId) || memoryMaxTurns <= 0) {
             return List.of();
         }
         int maxMessages = memoryMaxTurns * ROLE_HISTORY_MULTIPLIER;
-        return memoryService.load(sessionId, UserContext.getUserId(), maxMessages);
+        return memoryService.load(conversationId, UserContext.getUserId(), maxMessages);
     }
 
-    private StreamCallback wrapWithMemory(String sessionId, StreamCallback delegate) {
-        if (StrUtil.isBlank(sessionId)) {
+    private StreamCallback wrapWithMemory(String conversationId, StreamCallback delegate) {
+        if (StrUtil.isBlank(conversationId)) {
             return delegate;
         }
         StringBuilder answer = new StringBuilder();
@@ -467,7 +467,7 @@ public class RAGEnterpriseService implements RAGService {
             @Override
             public void onComplete() {
                 if (!answer.isEmpty()) {
-                    memoryService.append(sessionId, UserContext.getUserId(), ChatMessage.assistant(answer.toString()));
+                    memoryService.append(conversationId, UserContext.getUserId(), ChatMessage.assistant(answer.toString()));
                 }
                 delegate.onComplete();
             }

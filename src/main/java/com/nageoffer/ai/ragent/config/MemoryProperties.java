@@ -15,7 +15,7 @@ public class MemoryProperties {
     private int maxTurns = 5;
 
     /**
-     * 记忆过期时间（分钟）
+     * 缓存过期时间（分钟）
      */
     private int ttlMinutes = 60;
 }

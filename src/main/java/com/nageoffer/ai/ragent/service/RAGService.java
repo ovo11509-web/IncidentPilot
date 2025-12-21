@@ -46,12 +46,12 @@ public interface RAGService {
     /**
      * 流式 RAG 调用：支持会话上下文
      *
-     * @param question  用户问题
-     * @param topK      检索返回的 chunk 数量
-     * @param sessionId 会话 ID（可选）
-     * @param callback  用于接收流式增量内容的回调接口
+     * @param question       用户问题
+     * @param topK           检索返回的 chunk 数量
+     * @param conversationId 会话 ID（可选）
+     * @param callback       用于接收流式增量内容的回调接口
      */
-    default void streamAnswer(String question, int topK, String sessionId, StreamCallback callback) {
+    default void streamAnswer(String question, int topK, String conversationId, StreamCallback callback) {
         streamAnswer(question, topK, callback);
     }
 }

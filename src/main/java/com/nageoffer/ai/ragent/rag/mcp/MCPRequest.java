@@ -32,7 +32,7 @@ public class MCPRequest {
     /**
      * 会话 ID（可选，用于上下文关联）
      */
-    private String sessionId;
+    private String conversationId;
 
     /**
      * 原始用户问题

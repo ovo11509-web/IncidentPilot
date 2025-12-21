@@ -6,6 +6,7 @@
       <option name="customHeaders">
         <set>
           <option value="X-Session-Id" />
+          <option value="X-Conversation-Id" />
         </set>
       </option>
     </inspection_tool>
