@@ -20,6 +20,7 @@
         <mybatis-plus-spring-boot3-starter.version>3.5.14</mybatis-plus-spring-boot3-starter.version>
         <s3.version>2.40.2</s3.version>
         <mockito-core.version>5.20.0</mockito-core.version>
+        <sa-token.version>1.43.0</sa-token.version>
     </properties>
 
     <dependencyManagement>
@@ -131,6 +132,18 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
+            <version>${sa-token.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-redis-template</artifactId>
+            <version>${sa-token.version}</version>
         </dependency>
     </dependencies>
 

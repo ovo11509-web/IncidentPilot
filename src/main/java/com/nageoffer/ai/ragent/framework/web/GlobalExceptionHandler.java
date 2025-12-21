@@ -2,6 +2,8 @@ package com.nageoffer.ai.ragent.framework.web;
 
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotRoleException;
 import com.nageoffer.ai.ragent.framework.convention.Result;
 import com.nageoffer.ai.ragent.framework.errorcode.BaseErrorCode;
 import com.nageoffer.ai.ragent.framework.exception.AbstractException;
@@ -57,6 +59,24 @@ public class GlobalExceptionHandler {
         }
         log.error("[{}] {} [ex] {} \n\n{}", request.getMethod(), request.getRequestURL().toString(), ex, stackTraceBuilder);
         return Results.failure(ex);
+    }
+
+    /**
+     * 拦截未登录异常
+     */
+    @ExceptionHandler(value = NotLoginException.class)
+    public Result notLoginException(HttpServletRequest request, NotLoginException ex) {
+        log.warn("[{}] {} [auth] {}", request.getMethod(), getUrl(request), ex.getMessage());
+        return Results.failure(BaseErrorCode.CLIENT_ERROR.code(), "未登录或登录已过期");
+    }
+
+    /**
+     * 拦截无角色权限异常
+     */
+    @ExceptionHandler(value = NotRoleException.class)
+    public Result notRoleException(HttpServletRequest request, NotRoleException ex) {
+        log.warn("[{}] {} [auth] {}", request.getMethod(), getUrl(request), ex.getMessage());
+        return Results.failure(BaseErrorCode.CLIENT_ERROR.code(), "权限不足");
     }
 
     /**

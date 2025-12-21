@@ -74,3 +74,12 @@ rustfs:
   url: http://localhost:9000
   access-key-id: rustfsadmin
   secret-access-key: rustfsadmin
+
+sa-token:
+  token-name: Authorization
+  timeout: 2592000
+  is-concurrent: true
+  is-share: false
+  token-style: simple-uuid
+  is-log: false
+  is-print: false
