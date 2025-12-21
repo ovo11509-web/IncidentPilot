@@ -228,6 +228,9 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (item == null || StrUtil.isBlank(item.getContent())) {
                 continue;
             }
+            if (!"user".equalsIgnoreCase(item.getRole())) {
+                continue;
+            }
             sb.append(toRoleLabel(item.getRole()))
                     .append(item.getContent().trim())
                     .append("\n");

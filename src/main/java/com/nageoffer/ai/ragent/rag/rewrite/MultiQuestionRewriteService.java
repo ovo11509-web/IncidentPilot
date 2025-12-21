@@ -8,6 +8,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nageoffer.ai.ragent.config.RAGConfigProperties;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
+import com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
@@ -19,8 +20,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.QUERY_REWRITE_AND_SPLIT_WITH_HISTORY_PROMPT;
 
 /**
  * 查询预处理：改写 + 拆分多问句
@@ -126,7 +125,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
                                                             String originalQuestion,
                                                             List<ChatMessage> history) {
         String historyText = buildHistoryContext(history);
-        String prompt = QUERY_REWRITE_AND_SPLIT_WITH_HISTORY_PROMPT.formatted(historyText, normalizedQuestion);
+        String prompt = RAGEnterpriseConstant.QUERY_REWRITE_AND_SPLIT_WITH_HISTORY_PROMPT.formatted(historyText, normalizedQuestion);
 
         ChatRequest req = ChatRequest.builder()
                 .prompt(prompt)
