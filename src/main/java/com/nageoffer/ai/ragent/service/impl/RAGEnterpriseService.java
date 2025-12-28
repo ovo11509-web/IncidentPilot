@@ -64,7 +64,7 @@ import static com.nageoffer.ai.ragent.enums.IntentKind.SYSTEM;
 @Service("ragEnterpriseService")
 public class RAGEnterpriseService implements RAGService {
 
-    private static final int ROLE_HISTORY_MULTIPLIER = 2;
+    private static final int ROLE_HISTORY_MULTIPLIER = 1;
 
     private final RetrieverService retrieverService;
     private final LLMService llmService;

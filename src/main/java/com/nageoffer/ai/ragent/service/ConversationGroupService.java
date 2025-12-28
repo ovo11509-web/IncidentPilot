@@ -7,13 +7,13 @@ import java.util.List;
 
 public interface ConversationGroupService {
 
-    List<ConversationMessageDO> listLatestMessages(String conversationId, String userId, int limit);
+    List<ConversationMessageDO> listLatestUserMessages(String conversationId, String userId, int limit);
 
-    List<ConversationMessageDO> listMessagesAsc(String conversationId, String userId, int limit);
+    List<ConversationMessageDO> listUserMessagesAsc(String conversationId, String userId, int limit);
 
-    long countMessages(String conversationId, String userId);
+    long countUserMessages(String conversationId, String userId);
 
-    List<ConversationMessageDO> listEarliestMessages(String conversationId, String userId, int limit);
+    List<ConversationMessageDO> listEarliestUserMessages(String conversationId, String userId, int limit);
 
     ConversationMessageDO findLatestSummary(String conversationId, String userId);
 

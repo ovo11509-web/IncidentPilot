@@ -69,13 +69,13 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         ChatMessage summary = loadLatestSummary(conversationId, userId);
         List<String> raw = stringRedisTemplate.opsForList().range(key, -size, -1);
         if (raw != null && !raw.isEmpty()) {
-            List<ChatMessage> cached = parseMessages(raw);
+            List<ChatMessage> cached = filterUserMessages(parseMessages(raw));
             if (!cached.isEmpty()) {
                 return attachSummary(summary, cached);
             }
         }
 
-        List<ConversationMessageDO> dbMessages = conversationGroupService.listLatestMessages(
+        List<ConversationMessageDO> dbMessages = conversationGroupService.listLatestUserMessages(
                 conversationId,
                 userId,
                 (int) size
@@ -86,7 +86,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         dbMessages.sort(Comparator.comparing(ConversationMessageDO::getCreateTime));
         List<ChatMessage> result = dbMessages.stream()
                 .map(this::toChatMessage)
-                .filter(item -> item != null && StrUtil.isNotBlank(item.getContent()))
+                .filter(this::isUserMessage)
                 .collect(Collectors.toList());
         if (!result.isEmpty()) {
             List<String> payloads = result.stream()
@@ -102,10 +102,12 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     public void append(String conversationId, String userId, ChatMessage message) {
         String key = buildKey(conversationId, userId);
         persistToDB(conversationId, userId, message);
-        String payload = gson.toJson(message);
-        stringRedisTemplate.opsForList().rightPush(key, payload);
-        trimToMaxSize(key);
-        applyExpire(key);
+        if (message.getRole() == ChatMessage.Role.USER) {
+            String payload = gson.toJson(message);
+            stringRedisTemplate.opsForList().rightPush(key, payload);
+            trimToMaxSize(key);
+            applyExpire(key);
+        }
         compressIfNeeded(conversationId, userId, message);
     }
 
@@ -117,10 +119,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         if (maxTurns <= 0) {
             return;
         }
-        // 一轮对话包含 user + assistant 两条消息
-        int maxSize = maxTurns * 2;
-        // LTRIM 保留最新的 maxSize 条消息（从 -maxSize 到 -1）
-        stringRedisTemplate.opsForList().trim(key, -maxSize, -1);
+        stringRedisTemplate.opsForList().trim(key, -maxTurns, -1);
     }
 
     private String buildKey(String conversationId, String userId) {
@@ -188,7 +187,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         try {
             int triggerMessages = triggerTurns * 2;
             int keepMessages = maxTurns * 2;
-            long total = conversationGroupService.countMessages(conversationId, userId);
+            long total = conversationGroupService.countUserMessages(conversationId, userId);
             if (total <= triggerMessages || total <= keepMessages) {
                 return;
             }
@@ -197,7 +196,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (summarizeCount <= 0) {
                 return;
             }
-            List<ConversationMessageDO> toSummarize = conversationGroupService.listEarliestMessages(
+            List<ConversationMessageDO> toSummarize = conversationGroupService.listEarliestUserMessages(
                     conversationId,
                     userId,
                     summarizeCount
@@ -332,7 +331,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         if (maxMessages <= 0) {
             return;
         }
-        List<ConversationMessageDO> dbMessages = conversationGroupService.listMessagesAsc(
+        List<ConversationMessageDO> dbMessages = conversationGroupService.listUserMessagesAsc(
                 conversationId,
                 userId,
                 maxMessages
@@ -342,7 +341,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         List<String> payloads = dbMessages.stream()
                 .map(this::toChatMessage)
-                .filter(item -> item != null && StrUtil.isNotBlank(item.getContent()))
+                .filter(this::isUserMessage)
                 .map(gson::toJson)
                 .toList();
         if (!payloads.isEmpty()) {
@@ -376,6 +375,21 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         ChatMessage.Role role = parseRole(record.getRole());
         return new ChatMessage(role, record.getContent());
+    }
+
+    private List<ChatMessage> filterUserMessages(List<ChatMessage> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        return messages.stream()
+                .filter(this::isUserMessage)
+                .collect(Collectors.toList());
+    }
+
+    private boolean isUserMessage(ChatMessage message) {
+        return message != null
+                && message.getRole() == ChatMessage.Role.USER
+                && StrUtil.isNotBlank(message.getContent());
     }
 
     private ChatMessage.Role parseRole(String role) {

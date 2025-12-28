@@ -20,7 +20,7 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
     private final ConversationMapper conversationMapper;
 
     @Override
-    public List<ConversationMessageDO> listLatestMessages(String conversationId, String userId, int limit) {
+    public List<ConversationMessageDO> listLatestUserMessages(String conversationId, String userId, int limit) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId) || limit <= 0) {
             return List.of();
         }
@@ -28,6 +28,7 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, userId)
+                        .eq(ConversationMessageDO::getRole, "user")
                         .eq(ConversationMessageDO::getIsSummary, 0)
                         .eq(ConversationMessageDO::getDeleted, 0)
                         .orderByDesc(ConversationMessageDO::getCreateTime)
@@ -36,14 +37,16 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
     }
 
     @Override
-    public List<ConversationMessageDO> listMessagesAsc(String conversationId, String userId, int limit) {
+    public List<ConversationMessageDO> listUserMessagesAsc(String conversationId, String userId, int limit) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId) || limit <= 0) {
             return List.of();
         }
+        String safeUserId = userId.trim();
         return messageMapper.selectList(
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
-                        .eq(ConversationMessageDO::getUserId, userId)
+                        .eq(ConversationMessageDO::getUserId, safeUserId)
+                        .eq(ConversationMessageDO::getRole, "user")
                         .eq(ConversationMessageDO::getIsSummary, 0)
                         .eq(ConversationMessageDO::getDeleted, 0)
                         .orderByAsc(ConversationMessageDO::getCreateTime)
@@ -52,7 +55,7 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
     }
 
     @Override
-    public long countMessages(String conversationId, String userId) {
+    public long countUserMessages(String conversationId, String userId) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return 0;
         }
@@ -60,14 +63,15 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, userId)
+                        .eq(ConversationMessageDO::getRole, "user")
                         .eq(ConversationMessageDO::getIsSummary, 0)
                         .eq(ConversationMessageDO::getDeleted, 0)
         );
     }
 
     @Override
-    public List<ConversationMessageDO> listEarliestMessages(String conversationId, String userId, int limit) {
-        return listMessagesAsc(conversationId, userId, limit);
+    public List<ConversationMessageDO> listEarliestUserMessages(String conversationId, String userId, int limit) {
+        return listUserMessagesAsc(conversationId, userId, limit);
     }
 
     @Override
