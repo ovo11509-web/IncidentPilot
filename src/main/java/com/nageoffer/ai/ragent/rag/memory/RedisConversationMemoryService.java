@@ -460,9 +460,6 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (message.getRole() == ChatMessage.Role.USER && StrUtil.isNotBlank(content)) {
                 title = generateTitleFromQuestion(content);
             }
-            if (StrUtil.isBlank(title)) {
-                title = "新会话";
-            }
             ConversationDO record = ConversationDO.builder()
                     .conversationId(conversationId)
                     .userId(safeUserId)
