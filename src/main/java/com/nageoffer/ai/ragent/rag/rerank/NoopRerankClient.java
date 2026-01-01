@@ -1,26 +1,22 @@
 package com.nageoffer.ai.ragent.rag.rerank;
 
+import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * 默认 Rerank：不做任何重排，直接截取前 topN。
- * <p>
- * 配置示例：
- * rag:
- * rerank:
- * enabled: false
- */
 @Service
-@ConditionalOnProperty(name = "ai.rerank.provider", havingValue = "noop")
-public class NoopRerankService implements RerankService {
+public class NoopRerankClient implements RerankClient {
 
     @Override
-    public List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN) {
+    public String provider() {
+        return "noop";
+    }
+
+    @Override
+    public List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN, ModelTarget target) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -32,4 +28,3 @@ public class NoopRerankService implements RerankService {
                 .collect(Collectors.toList());
     }
 }
-

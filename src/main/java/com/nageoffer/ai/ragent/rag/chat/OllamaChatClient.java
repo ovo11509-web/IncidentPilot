@@ -4,11 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.nageoffer.ai.ragent.config.ChatProperties;
+import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
-import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -24,11 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
-@RequiredArgsConstructor
-@ConditionalOnProperty(name = "ai.chat.provider", havingValue = "ollama")
-public class OllamaLLMService implements LLMService {
-
-    private final ChatProperties chatProperties;
+public class OllamaChatClient implements ChatClient {
 
     private final Gson gson = new GsonBuilder()
             .disableHtmlEscaping()
@@ -37,19 +32,22 @@ public class OllamaLLMService implements LLMService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
-    public String chat(ChatRequest request) {
-        ChatProperties.ChatOllamaProperties properties = chatProperties.getOllama();
-        String url = properties.url() + "/api/chat";
+    public String provider() {
+        return "ollama";
+    }
+
+    @Override
+    public String chat(ChatRequest request, ModelTarget target) {
+        AIModelProperties.ProviderConfig provider = requireProvider(target);
+        String url = provider.getUrl() + "/api/chat";
 
         JsonObject body = new JsonObject();
-        body.addProperty("model", properties.model());
+        body.addProperty("model", requireModel(target));
         body.addProperty("stream", false);
 
-        // 构造 messages（system + RAG context + history + user）
         JsonArray messages = buildMessages(request);
         body.add("messages", messages);
 
-        // 可选参数：temperature、top_p、num_predict（maxTokens）等
         if (request.getTemperature() != null) {
             body.addProperty("temperature", request.getTemperature());
         }
@@ -77,19 +75,18 @@ public class OllamaLLMService implements LLMService {
     }
 
     @Override
-    public StreamHandle streamChat(ChatRequest request, StreamCallback callback) {
+    public StreamHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target) {
         AtomicBoolean cancelled = new AtomicBoolean(false);
-        // 直接在当前线程执行，直到流结束
-        doStream(request, callback, cancelled);
-        // 如果你暂时不需要 cancel，其实返回值都可以先不用
+        doStream(request, callback, cancelled, target);
         return () -> cancelled.set(true);
     }
 
-    private void doStream(ChatRequest request, StreamCallback callback, AtomicBoolean cancelled) {
+    private void doStream(ChatRequest request, StreamCallback callback, AtomicBoolean cancelled, ModelTarget target) {
+        AIModelProperties.ProviderConfig provider = requireProvider(target);
         HttpURLConnection conn = null;
         try {
             JsonObject body = new JsonObject();
-            body.addProperty("model", chatProperties.getOllama().model());
+            body.addProperty("model", requireModel(target));
             body.addProperty("stream", true);
 
             JsonArray messages = buildMessages(request);
@@ -105,7 +102,7 @@ public class OllamaLLMService implements LLMService {
                 body.addProperty("num_predict", request.getMaxTokens());
             }
 
-            URL url = new URL(chatProperties.getOllama().url() + "/api/chat");
+            URL url = new URL(provider.getUrl() + "/api/chat");
             conn = (HttpURLConnection) url.openConnection();
             conn.setDoOutput(true);
             conn.setRequestMethod("POST");
@@ -141,11 +138,6 @@ public class OllamaLLMService implements LLMService {
                         }
                     }
                 }
-
-                // 如果是外部 cancel 触发，可以选择在这里调用 onComplete()
-                if (cancelled.get()) {
-                    // 视业务需求决定要不要 onComplete
-                }
             }
         } catch (Exception e) {
             callback.onError(e);
@@ -157,7 +149,6 @@ public class OllamaLLMService implements LLMService {
     private JsonArray buildMessages(ChatRequest request) {
         JsonArray arr = new JsonArray();
 
-        // systemPrompt
         if (request.getSystemPrompt() != null &&
                 !request.getSystemPrompt().isEmpty()) {
             JsonObject sys = new JsonObject();
@@ -166,7 +157,6 @@ public class OllamaLLMService implements LLMService {
             arr.add(sys);
         }
 
-        // RAG 上下文（你可以选择拼到 system 里，也可以当成单独一条 system）
         if (request.getContext() != null && !request.getContext().isEmpty()) {
             JsonObject ctx = new JsonObject();
             ctx.addProperty("role", "system");
@@ -174,7 +164,6 @@ public class OllamaLLMService implements LLMService {
             arr.add(ctx);
         }
 
-        // 历史对话
         if (request.getHistory() != null) {
             for (ChatMessage m : request.getHistory()) {
                 JsonObject msg = new JsonObject();
@@ -184,7 +173,6 @@ public class OllamaLLMService implements LLMService {
             }
         }
 
-        // 当前用户输入
         JsonObject userMsg = new JsonObject();
         userMsg.addProperty("role", "user");
         userMsg.addProperty("content", request.getPrompt());
@@ -200,6 +188,18 @@ public class OllamaLLMService implements LLMService {
             case ASSISTANT -> "assistant";
         };
     }
+
+    private AIModelProperties.ProviderConfig requireProvider(ModelTarget target) {
+        if (target == null || target.provider() == null || target.provider().getUrl() == null) {
+            throw new IllegalStateException("Ollama provider config is missing");
+        }
+        return target.provider();
+    }
+
+    private String requireModel(ModelTarget target) {
+        if (target == null || target.candidate() == null || target.candidate().getModel() == null) {
+            throw new IllegalStateException("Ollama model name is missing");
+        }
+        return target.candidate().getModel();
+    }
 }
-
-

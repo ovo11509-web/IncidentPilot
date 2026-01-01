@@ -5,11 +5,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.nageoffer.ai.ragent.config.EmbeddingProperties;
-import lombok.RequiredArgsConstructor;
+import com.nageoffer.ai.ragent.config.AIModelProperties;
+import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -27,22 +26,23 @@ import java.util.Map;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
-@ConditionalOnProperty(name = "ai.embedding.provider", havingValue = "siliconflow")
-public class SiliconFlowEmbeddingService implements EmbeddingService {
+public class SiliconFlowEmbeddingClient implements EmbeddingClient {
 
-    private final EmbeddingProperties embeddingProperties;
-
-    private RestTemplate restTemplate = new RestTemplate();
-    private Gson gson = new Gson();
+    private final RestTemplate restTemplate = new RestTemplate();
+    private final Gson gson = new Gson();
 
     @Override
-    public List<Float> embed(String text) {
-        return embedBatch(List.of(text)).get(0);
+    public String provider() {
+        return "siliconflow";
     }
 
     @Override
-    public List<List<Float>> embedBatch(List<String> texts) {
+    public List<Float> embed(String text, ModelTarget target) {
+        return embedBatch(List.of(text), target).get(0);
+    }
+
+    @Override
+    public List<List<Float>> embedBatch(List<String> texts, ModelTarget target) {
         if (CollectionUtils.isEmpty(texts)) {
             return Collections.emptyList();
         }
@@ -53,14 +53,14 @@ public class SiliconFlowEmbeddingService implements EmbeddingService {
             int end = Math.min(i + maxBatch, n);
             List<String> slice = texts.subList(i, end);
             try {
-                List<List<Float>> part = doEmbedOnce(slice);
+                List<List<Float>> part = doEmbedOnce(slice, target);
                 for (int k = 0; k < part.size(); k++) {
                     results.set(i + k, part.get(k));
                 }
             } catch (RestClientResponseException e) {
                 String body = e.getResponseBodyAsString();
-                log.error("SiliconFlow embeddings HTTP error: status={}, body={}", e.getRawStatusCode(), body);
-                throw new RuntimeException("调用 SiliconFlow Embedding 失败: HTTP " + e.getRawStatusCode() + " - " + body, e);
+                log.error("SiliconFlow embeddings HTTP error: status={}, body={}", e.getStatusCode(), body);
+                throw new RuntimeException("调用 SiliconFlow Embedding 失败: HTTP " + e.getStatusCode() + " - " + body, e);
             } catch (Exception e) {
                 log.error("SiliconFlow embeddings 调用失败", e);
                 throw new RuntimeException("调用 SiliconFlow Embedding 失败: " + e.getMessage(), e);
@@ -75,20 +75,22 @@ public class SiliconFlowEmbeddingService implements EmbeddingService {
         return results;
     }
 
-    private List<List<Float>> doEmbedOnce(List<String> slice) {
-        EmbeddingProperties.EmbeddingSiliconFlowProperties properties = embeddingProperties.getSiliconFlow();
+    private List<List<Float>> doEmbedOnce(List<String> slice, ModelTarget target) {
+        AIModelProperties.ProviderConfig provider = requireProvider(target);
         Map<String, Object> req = new HashMap<>();
-        req.put("model", properties.model());
+        req.put("model", requireModel(target));
         req.put("input", slice);
-        req.put("dimensions", properties.dimension());
+        if (target.candidate().getDimension() != null) {
+            req.put("dimensions", target.candidate().getDimension());
+        }
         req.put("encoding_format", "float");
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(new MediaType("application", "json", StandardCharsets.UTF_8));
-        headers.setBearerAuth(properties.apiKey());
+        headers.setBearerAuth(provider.getApiKey());
 
         HttpEntity<String> entity = new HttpEntity<>(gson.toJson(req), headers);
-        ResponseEntity<String> resp = restTemplate.postForEntity(properties.url(), entity, String.class);
+        ResponseEntity<String> resp = restTemplate.postForEntity(provider.getUrl(), entity, String.class);
 
         if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
             throw new RuntimeException("SiliconFlow Embedding 非 2xx 响应: " + resp.getStatusCode());
@@ -96,7 +98,6 @@ public class SiliconFlowEmbeddingService implements EmbeddingService {
 
         JsonObject root = JsonParser.parseString(resp.getBody()).getAsJsonObject();
 
-        // OpenAI 兼容错误结构
         if (root.has("error")) {
             JsonObject err = root.getAsJsonObject("error");
             String code = err.has("code") ? err.get("code").getAsString() : "unknown";
@@ -123,5 +124,19 @@ public class SiliconFlowEmbeddingService implements EmbeddingService {
         }
 
         return vectors;
+    }
+
+    private AIModelProperties.ProviderConfig requireProvider(ModelTarget target) {
+        if (target == null || target.provider() == null || target.provider().getUrl() == null) {
+            throw new IllegalStateException("SiliconFlow provider config is missing");
+        }
+        return target.provider();
+    }
+
+    private String requireModel(ModelTarget target) {
+        if (target == null || target.candidate() == null || target.candidate().getModel() == null) {
+            throw new IllegalStateException("SiliconFlow model name is missing");
+        }
+        return target.candidate().getModel();
     }
 }

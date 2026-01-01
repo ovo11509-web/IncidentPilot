@@ -4,10 +4,9 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.nageoffer.ai.ragent.config.RerankProperties;
+import com.nageoffer.ai.ragent.config.AIModelProperties;
+import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
-import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -22,17 +21,18 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
-@ConditionalOnProperty(name = "ai.rerank.provider", havingValue = "bailian")
-public class RerankBaiLianService implements RerankService {
-
-    private final RerankProperties rerankProperties;
+public class BaiLianRerankClient implements RerankClient {
 
     private final Gson gson = new Gson();
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
-    public List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN) {
+    public String provider() {
+        return "bailian";
+    }
+
+    @Override
+    public List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN, ModelTarget target) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -49,19 +49,18 @@ public class RerankBaiLianService implements RerankService {
             return dedup;
         }
 
-        return chat(query, dedup, topN);
+        return doRerank(query, dedup, topN, target);
     }
 
-    public List<RetrievedChunk> chat(String query, List<RetrievedChunk> candidates, int topN) {
-        RerankProperties.ChatBaiLianProperties properties = rerankProperties.getBailian();
+    private List<RetrievedChunk> doRerank(String query, List<RetrievedChunk> candidates, int topN, ModelTarget target) {
+        AIModelProperties.ProviderConfig provider = requireProvider(target);
 
         if (candidates == null || candidates.isEmpty() || topN <= 0) {
             return List.of();
         }
 
-        // 1. 构造请求体
         JsonObject reqBody = new JsonObject();
-        reqBody.addProperty("model", properties.model());
+        reqBody.addProperty("model", requireModel(target));
 
         JsonObject input = new JsonObject();
         input.addProperty("query", query);
@@ -79,20 +78,17 @@ public class RerankBaiLianService implements RerankService {
         reqBody.add("input", input);
         reqBody.add("parameters", parameters);
 
-        // 2. 发送请求
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(properties.apiKey());
+        headers.setBearerAuth(provider.getApiKey());
 
         HttpEntity<String> httpEntity = new HttpEntity<>(reqBody.toString(), headers);
         ResponseEntity<String> response =
-                restTemplate.postForEntity(properties.url(), httpEntity, String.class);
+                restTemplate.postForEntity(provider.getUrl(), httpEntity, String.class);
 
-        // 3. 解析返回
         JsonObject respJson = gson.fromJson(response.getBody(), JsonObject.class);
         JsonObject output = respJson.getAsJsonObject("output");
         if (output == null || !output.has("results")) {
-            // 兜底：如果没有 results，就直接返回原 candidates 前 topN
             return candidates.stream().limit(topN).collect(Collectors.toList());
         }
 
@@ -109,32 +105,24 @@ public class RerankBaiLianService implements RerankService {
             }
             JsonObject item = elem.getAsJsonObject();
 
-            // 3.1 拿 index（注意一般是 0-based）
             if (!item.has("index")) {
                 continue;
             }
             int idx = item.get("index").getAsInt();
 
             if (idx < 0 || idx >= candidates.size()) {
-                // 防止越界
                 continue;
             }
 
-            // 3.2 从原 candidates 里取出对应的命中
             RetrievedChunk src = candidates.get(idx);
 
-            // 3.3 取 relevance_score（可选）
             Float score = null;
             if (item.has("relevance_score") && !item.get("relevance_score").isJsonNull()) {
                 score = item.get("relevance_score").getAsFloat();
             }
 
-            // 这里看你的 RAGHit 是不可变还是可变的：
-            // - 如果 RAGHit 有 setScore，可在原对象上直接设置；
-            // - 如果是不可变对象，就 new 一个拷贝。
             RetrievedChunk hit;
             if (score != null) {
-                // 举例：假设 RAGHit 有 (docId, text, score) 这样的构造器
                 hit = new RetrievedChunk(src.getId(), src.getText(), score);
             } else {
                 hit = src;
@@ -147,7 +135,6 @@ public class RerankBaiLianService implements RerankService {
             }
         }
 
-        // 如果因为解析问题没拿够 topN，就用原 candidates 补齐
         if (reranked.size() < topN) {
             for (RetrievedChunk c : candidates) {
                 if (!reranked.contains(c)) {
@@ -160,5 +147,19 @@ public class RerankBaiLianService implements RerankService {
         }
 
         return reranked;
+    }
+
+    private AIModelProperties.ProviderConfig requireProvider(ModelTarget target) {
+        if (target == null || target.provider() == null || target.provider().getUrl() == null) {
+            throw new IllegalStateException("BaiLian rerank provider config is missing");
+        }
+        return target.provider();
+    }
+
+    private String requireModel(ModelTarget target) {
+        if (target == null || target.candidate() == null || target.candidate().getModel() == null) {
+            throw new IllegalStateException("BaiLian rerank model name is missing");
+        }
+        return target.candidate().getModel();
     }
 }

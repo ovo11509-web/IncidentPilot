@@ -13,7 +13,7 @@ import java.util.List;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class SiliconFlowEmbeddingServiceTests {
 
-    private final SiliconFlowEmbeddingService embeddingService;
+    private final EmbeddingService embeddingService;
 
     @Test
     public void embeddingSiliconFlow() {

@@ -49,36 +49,58 @@ rag:
     title-max-length: 30
 
 ai:
-  embedding:
-    provider: siliconflow
+  providers:
     ollama:
       url: http://localhost:11434
-      model: qwen3-embedding:8b-fp16
-    siliconflow:
-      url: https://api.siliconflow.cn/v1/embeddings
-      api-key: REMOVED_HISTORICAL_CREDENTIAL
-      model: Qwen/Qwen3-Embedding-8B
-      dimension: 4096
-
-  chat:
-    provider: bailian
-    ollama:
-      url: http://localhost:11434
-      model: qwen3:8b-fp16
     bailian:
       url: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
-      api-key: REMOVED_HISTORICAL_CREDENTIAL
-      model: qwen-plus-latest
+      api-key: ${BAILIAN_API_KEY:}
+    siliconflow:
+      url: https://api.siliconflow.cn/v1/embeddings
+      api-key: ${SILICONFLOW_API_KEY:}
+
+  selection:
+    failure-threshold: 2
+    open-duration-ms: 30000
+
+  chat:
+    default-model: qwen-plus
+    candidates:
+      - id: qwen-plus
+        provider: bailian
+        model: qwen-plus-latest
+        priority: 1
+      - id: qwen3-local
+        provider: ollama
+        model: qwen3:8b-fp16
+        priority: 2
+
+  embedding:
+    default-model: qwen-emb-8b
+    candidates:
+      - id: qwen-emb-8b
+        provider: siliconflow
+        model: Qwen/Qwen3-Embedding-8B
+        dimension: 4096
+        priority: 1
+      - id: qwen-emb-local
+        provider: ollama
+        model: qwen3-embedding:8b-fp16
+        dimension: 4096
+        priority: 2
 
   rerank:
-    provider: bailian
-    ollama:
-      url: http://localhost:11434
-      model: dengcao/Qwen3-Reranker-8B:F16
-    bailian:
-      url: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
-      api-key: REMOVED_HISTORICAL_CREDENTIAL
-      model: qwen3-rerank
+    default-model: qwen3-rerank
+    candidates:
+      - id: qwen3-rerank
+        provider: bailian
+        url: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+        model: qwen3-rerank
+        priority: 1
+      - id: rerank-noop
+        provider: noop
+        model: noop
+        priority: 100
 
 rustfs:
   url: http://localhost:9000
