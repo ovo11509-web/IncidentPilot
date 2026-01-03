@@ -9,6 +9,8 @@ import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import com.nageoffer.ai.ragent.enums.ModelCapability;
 import com.nageoffer.ai.ragent.rag.http.ModelUrlResolver;
+import com.nageoffer.ai.ragent.rag.http.ModelClientErrorType;
+import com.nageoffer.ai.ragent.rag.http.ModelClientException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -70,7 +72,7 @@ public class SiliconFlowEmbeddingClient implements EmbeddingClient {
 
         for (int i = 0; i < results.size(); i++) {
             if (results.get(i) == null) {
-                throw new IllegalStateException("Embedding 结果缺失，index=" + i);
+                throw new ModelClientException("Embedding 结果缺失，index=" + i, ModelClientErrorType.INVALID_RESPONSE, null);
             }
         }
         return results;
@@ -98,23 +100,27 @@ public class SiliconFlowEmbeddingClient implements EmbeddingClient {
             if (!response.isSuccessful()) {
                 String errBody = readBody(response.body());
                 log.error("SiliconFlow embeddings HTTP error: status={}, body={}", response.code(), errBody);
-                throw new RuntimeException("调用 SiliconFlow Embedding 失败: HTTP " + response.code() + " - " + errBody);
+                throw new ModelClientException(
+                        "调用 SiliconFlow Embedding 失败: HTTP " + response.code() + " - " + errBody,
+                        classifyStatus(response.code()),
+                        response.code()
+                );
             }
             root = parseJsonBody(response.body());
         } catch (IOException e) {
-            throw new RuntimeException("调用 SiliconFlow Embedding 失败: " + e.getMessage(), e);
+            throw new ModelClientException("调用 SiliconFlow Embedding 失败: " + e.getMessage(), ModelClientErrorType.NETWORK_ERROR, null, e);
         }
 
         if (root.has("error")) {
             JsonObject err = root.getAsJsonObject("error");
             String code = err.has("code") ? err.get("code").getAsString() : "unknown";
             String msg = err.has("message") ? err.get("message").getAsString() : "unknown";
-            throw new RuntimeException("SiliconFlow Embedding 错误: " + code + " - " + msg);
+            throw new ModelClientException("SiliconFlow Embedding 错误: " + code + " - " + msg, ModelClientErrorType.PROVIDER_ERROR, null);
         }
 
         JsonArray data = root.getAsJsonArray("data");
         if (data == null) {
-            throw new RuntimeException("SiliconFlow Embedding 响应中缺少 data 数组");
+            throw new ModelClientException("SiliconFlow Embedding 响应中缺少 data 数组", ModelClientErrorType.INVALID_RESPONSE, null);
         }
 
         List<List<Float>> vectors = new ArrayList<>(data.size());
@@ -122,7 +128,7 @@ public class SiliconFlowEmbeddingClient implements EmbeddingClient {
             JsonObject obj = el.getAsJsonObject();
             JsonArray emb = obj.getAsJsonArray("embedding");
             if (emb == null) {
-                throw new RuntimeException("SiliconFlow Embedding 响应中缺少 embedding 字段");
+                throw new ModelClientException("SiliconFlow Embedding 响应中缺少 embedding 字段", ModelClientErrorType.INVALID_RESPONSE, null);
             }
 
             List<Float> v = new ArrayList<>(emb.size());
@@ -153,7 +159,7 @@ public class SiliconFlowEmbeddingClient implements EmbeddingClient {
 
     private JsonObject parseJsonBody(ResponseBody body) throws IOException {
         if (body == null) {
-            throw new RuntimeException("SiliconFlow Embedding 响应为空");
+            throw new ModelClientException("SiliconFlow Embedding 响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
         }
         String content = body.string();
         return JsonParser.parseString(content).getAsJsonObject();
@@ -164,5 +170,18 @@ public class SiliconFlowEmbeddingClient implements EmbeddingClient {
             return "";
         }
         return new String(body.bytes(), StandardCharsets.UTF_8);
+    }
+
+    private ModelClientErrorType classifyStatus(int status) {
+        if (status == 401 || status == 403) {
+            return ModelClientErrorType.UNAUTHORIZED;
+        }
+        if (status == 429) {
+            return ModelClientErrorType.RATE_LIMITED;
+        }
+        if (status >= 500) {
+            return ModelClientErrorType.SERVER_ERROR;
+        }
+        return ModelClientErrorType.CLIENT_ERROR;
     }
 }

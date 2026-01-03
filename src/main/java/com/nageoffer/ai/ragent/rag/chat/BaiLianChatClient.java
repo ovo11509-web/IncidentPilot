@@ -8,6 +8,8 @@ import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.ModelCapability;
+import com.nageoffer.ai.ragent.rag.http.ModelClientErrorType;
+import com.nageoffer.ai.ragent.rag.http.ModelClientException;
 import com.nageoffer.ai.ragent.rag.http.ModelUrlResolver;
 import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import lombok.RequiredArgsConstructor;
@@ -56,19 +58,18 @@ public class BaiLianChatClient implements ChatClient {
             if (!response.isSuccessful()) {
                 String body = readBody(response.body());
                 log.warn("百炼同步请求失败: status={}, body={}", response.code(), body);
-                throw new IllegalStateException("百炼同步请求失败: HTTP " + response.code());
+                throw new ModelClientException(
+                        "百炼同步请求失败: HTTP " + response.code(),
+                        classifyStatus(response.code()),
+                        response.code()
+                );
             }
             respJson = parseJsonBody(response.body());
         } catch (IOException e) {
-            throw new IllegalStateException("百炼同步请求失败: " + e.getMessage(), e);
+            throw new ModelClientException("百炼同步请求失败: " + e.getMessage(), ModelClientErrorType.NETWORK_ERROR, null, e);
         }
 
-        return respJson
-                .getAsJsonArray("choices")
-                .get(0).getAsJsonObject()
-                .getAsJsonObject("message")
-                .get("content")
-                .getAsString();
+        return extractChatContent(respJson);
     }
 
     @Override
@@ -86,11 +87,15 @@ public class BaiLianChatClient implements ChatClient {
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) {
                 String body = readBody(response.body());
-                throw new IllegalStateException("百炼流式请求失败: HTTP " + response.code() + " - " + body);
+                throw new ModelClientException(
+                        "百炼流式请求失败: HTTP " + response.code() + " - " + body,
+                        classifyStatus(response.code()),
+                        response.code()
+                );
             }
             ResponseBody body = response.body();
             if (body == null) {
-                throw new IllegalStateException("百炼流式响应为空");
+                throw new ModelClientException("百炼流式响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
             }
             BufferedSource source = body.source();
             while (!cancelled.get()) {
@@ -261,7 +266,7 @@ public class BaiLianChatClient implements ChatClient {
 
     private JsonObject parseJsonBody(ResponseBody body) throws IOException {
         if (body == null) {
-            throw new IllegalStateException("百炼响应为空");
+            throw new ModelClientException("百炼响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
         }
         String content = body.string();
         return gson.fromJson(content, JsonObject.class);
@@ -276,5 +281,37 @@ public class BaiLianChatClient implements ChatClient {
 
     private String resolveUrl(AIModelProperties.ProviderConfig provider, ModelTarget target) {
         return ModelUrlResolver.resolveUrl(provider, target.candidate(), ModelCapability.CHAT);
+    }
+
+    private String extractChatContent(JsonObject respJson) {
+        if (respJson == null || !respJson.has("choices")) {
+            throw new ModelClientException("百炼响应缺少 choices", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        JsonArray choices = respJson.getAsJsonArray("choices");
+        if (choices == null || choices.isEmpty()) {
+            throw new ModelClientException("百炼响应 choices 为空", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        JsonObject choice0 = choices.get(0).getAsJsonObject();
+        if (choice0 == null || !choice0.has("message")) {
+            throw new ModelClientException("百炼响应缺少 message", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        JsonObject message = choice0.getAsJsonObject("message");
+        if (message == null || !message.has("content") || message.get("content").isJsonNull()) {
+            throw new ModelClientException("百炼响应缺少 content", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        return message.get("content").getAsString();
+    }
+
+    private ModelClientErrorType classifyStatus(int status) {
+        if (status == 401 || status == 403) {
+            return ModelClientErrorType.UNAUTHORIZED;
+        }
+        if (status == 429) {
+            return ModelClientErrorType.RATE_LIMITED;
+        }
+        if (status >= 500) {
+            return ModelClientErrorType.SERVER_ERROR;
+        }
+        return ModelClientErrorType.CLIENT_ERROR;
     }
 }

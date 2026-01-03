@@ -8,6 +8,8 @@ import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import com.nageoffer.ai.ragent.enums.ModelCapability;
 import com.nageoffer.ai.ragent.rag.http.ModelUrlResolver;
+import com.nageoffer.ai.ragent.rag.http.ModelClientErrorType;
+import com.nageoffer.ai.ragent.rag.http.ModelClientException;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -99,20 +101,22 @@ public class BaiLianRerankClient implements RerankClient {
             if (!response.isSuccessful()) {
                 String body = readBody(response.body());
                 log.warn("百炼 rerank 请求失败: status={}, body={}", response.code(), body);
-                throw new IllegalStateException("百炼 rerank 请求失败: HTTP " + response.code());
+                throw new ModelClientException(
+                        "百炼 rerank 请求失败: HTTP " + response.code(),
+                        classifyStatus(response.code()),
+                        response.code()
+                );
             }
             respJson = parseJsonBody(response.body());
         } catch (IOException e) {
-            throw new IllegalStateException("百炼 rerank 请求失败: " + e.getMessage(), e);
+            throw new ModelClientException("百炼 rerank 请求失败: " + e.getMessage(), ModelClientErrorType.NETWORK_ERROR, null, e);
         }
-        JsonObject output = respJson.getAsJsonObject("output");
-        if (output == null || !output.has("results")) {
-            return candidates.stream().limit(topN).collect(Collectors.toList());
-        }
+
+        JsonObject output = requireOutput(respJson);
 
         JsonArray results = output.getAsJsonArray("results");
         if (results == null || results.size() == 0) {
-            return candidates.stream().limit(topN).collect(Collectors.toList());
+            throw new ModelClientException("百炼 rerank results 为空", ModelClientErrorType.INVALID_RESPONSE, null);
         }
 
         List<RetrievedChunk> reranked = new ArrayList<>();
@@ -187,7 +191,7 @@ public class BaiLianRerankClient implements RerankClient {
 
     private JsonObject parseJsonBody(ResponseBody body) throws IOException {
         if (body == null) {
-            throw new IllegalStateException("百炼 rerank 响应为空");
+            throw new ModelClientException("百炼 rerank 响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
         }
         String content = body.string();
         return gson.fromJson(content, JsonObject.class);
@@ -198,5 +202,29 @@ public class BaiLianRerankClient implements RerankClient {
             return "";
         }
         return new String(body.bytes(), StandardCharsets.UTF_8);
+    }
+
+    private JsonObject requireOutput(JsonObject respJson) {
+        if (respJson == null || !respJson.has("output")) {
+            throw new ModelClientException("百炼 rerank 响应缺少 output", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        JsonObject output = respJson.getAsJsonObject("output");
+        if (output == null || !output.has("results")) {
+            throw new ModelClientException("百炼 rerank 响应缺少 results", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        return output;
+    }
+
+    private ModelClientErrorType classifyStatus(int status) {
+        if (status == 401 || status == 403) {
+            return ModelClientErrorType.UNAUTHORIZED;
+        }
+        if (status == 429) {
+            return ModelClientErrorType.RATE_LIMITED;
+        }
+        if (status >= 500) {
+            return ModelClientErrorType.SERVER_ERROR;
+        }
+        return ModelClientErrorType.CLIENT_ERROR;
     }
 }

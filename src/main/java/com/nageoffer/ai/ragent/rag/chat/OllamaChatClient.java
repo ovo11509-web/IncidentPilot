@@ -8,6 +8,8 @@ import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.ModelCapability;
+import com.nageoffer.ai.ragent.rag.http.ModelClientErrorType;
+import com.nageoffer.ai.ragent.rag.http.ModelClientException;
 import com.nageoffer.ai.ragent.rag.http.ModelUrlResolver;
 import com.nageoffer.ai.ragent.rag.model.ModelTarget;
 import lombok.RequiredArgsConstructor;
@@ -74,17 +76,18 @@ public class OllamaChatClient implements ChatClient {
             if (!response.isSuccessful()) {
                 String errBody = readBody(response.body());
                 log.warn("Ollama chat 请求失败: status={}, body={}", response.code(), errBody);
-                throw new IllegalStateException("Ollama chat 请求失败: HTTP " + response.code());
+                throw new ModelClientException(
+                        "Ollama chat 请求失败: HTTP " + response.code(),
+                        classifyStatus(response.code()),
+                        response.code()
+                );
             }
             json = parseJsonBody(response.body());
         } catch (IOException e) {
-            throw new IllegalStateException("Ollama chat 请求失败: " + e.getMessage(), e);
+            throw new ModelClientException("Ollama chat 请求失败: " + e.getMessage(), ModelClientErrorType.NETWORK_ERROR, null, e);
         }
 
-        return json
-                .getAsJsonObject("message")
-                .get("content")
-                .getAsString();
+        return extractChatContent(json);
     }
 
     @Override
@@ -102,11 +105,15 @@ public class OllamaChatClient implements ChatClient {
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) {
                 String body = readBody(response.body());
-                throw new IllegalStateException("Ollama 流式请求失败: HTTP " + response.code() + " - " + body);
+                throw new ModelClientException(
+                        "Ollama 流式请求失败: HTTP " + response.code() + " - " + body,
+                        classifyStatus(response.code()),
+                        response.code()
+                );
             }
             ResponseBody body = response.body();
             if (body == null) {
-                throw new IllegalStateException("Ollama 流式响应为空");
+                throw new ModelClientException("Ollama 流式响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
             }
             BufferedSource source = body.source();
             while (!cancelled.get()) {
@@ -231,7 +238,7 @@ public class OllamaChatClient implements ChatClient {
 
     private JsonObject parseJsonBody(ResponseBody body) throws IOException {
         if (body == null) {
-            throw new IllegalStateException("Ollama 响应为空");
+            throw new ModelClientException("Ollama 响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
         }
         String content = body.string();
         return gson.fromJson(content, JsonObject.class);
@@ -242,5 +249,29 @@ public class OllamaChatClient implements ChatClient {
             return "";
         }
         return new String(body.bytes(), StandardCharsets.UTF_8);
+    }
+
+    private String extractChatContent(JsonObject json) {
+        if (json == null || !json.has("message")) {
+            throw new ModelClientException("Ollama 响应缺少 message", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        JsonObject message = json.getAsJsonObject("message");
+        if (message == null || !message.has("content") || message.get("content").isJsonNull()) {
+            throw new ModelClientException("Ollama 响应缺少 content", ModelClientErrorType.INVALID_RESPONSE, null);
+        }
+        return message.get("content").getAsString();
+    }
+
+    private ModelClientErrorType classifyStatus(int status) {
+        if (status == 401 || status == 403) {
+            return ModelClientErrorType.UNAUTHORIZED;
+        }
+        if (status == 429) {
+            return ModelClientErrorType.RATE_LIMITED;
+        }
+        if (status >= 500) {
+            return ModelClientErrorType.SERVER_ERROR;
+        }
+        return ModelClientErrorType.CLIENT_ERROR;
     }
 }
