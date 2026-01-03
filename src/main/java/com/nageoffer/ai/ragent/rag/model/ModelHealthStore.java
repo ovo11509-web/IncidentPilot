@@ -20,7 +20,40 @@ public class ModelHealthStore {
         if (health == null) {
             return false;
         }
-        return health.openUntil > System.currentTimeMillis();
+        return health.state == State.OPEN && health.openUntil > System.currentTimeMillis();
+    }
+
+    public boolean allowCall(String id) {
+        if (id == null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        final boolean[] allowed = {false};
+        healthById.compute(id, (k, v) -> {
+            if (v == null) {
+                v = new ModelHealth();
+            }
+            if (v.state == State.OPEN) {
+                if (v.openUntil > now) {
+                    return v;
+                }
+                v.state = State.HALF_OPEN;
+                v.halfOpenInFlight = true;
+                allowed[0] = true;
+                return v;
+            }
+            if (v.state == State.HALF_OPEN) {
+                if (v.halfOpenInFlight) {
+                    return v;
+                }
+                v.halfOpenInFlight = true;
+                allowed[0] = true;
+                return v;
+            }
+            allowed[0] = true;
+            return v;
+        });
+        return allowed[0];
     }
 
     public void markSuccess(String id) {
@@ -29,10 +62,12 @@ public class ModelHealthStore {
         }
         healthById.compute(id, (k, v) -> {
             if (v == null) {
-                return new ModelHealth(0, 0L);
+                return new ModelHealth();
             }
+            v.state = State.CLOSED;
             v.consecutiveFailures = 0;
             v.openUntil = 0L;
+            v.halfOpenInFlight = false;
             return v;
         });
     }
@@ -44,10 +79,18 @@ public class ModelHealthStore {
         long now = System.currentTimeMillis();
         healthById.compute(id, (k, v) -> {
             if (v == null) {
-                v = new ModelHealth(0, 0L);
+                v = new ModelHealth();
+            }
+            if (v.state == State.HALF_OPEN) {
+                v.state = State.OPEN;
+                v.openUntil = now + properties.getSelection().getOpenDurationMs();
+                v.consecutiveFailures = 0;
+                v.halfOpenInFlight = false;
+                return v;
             }
             v.consecutiveFailures++;
             if (v.consecutiveFailures >= properties.getSelection().getFailureThreshold()) {
+                v.state = State.OPEN;
                 v.openUntil = now + properties.getSelection().getOpenDurationMs();
                 v.consecutiveFailures = 0;
             }
@@ -58,10 +101,20 @@ public class ModelHealthStore {
     private static class ModelHealth {
         private int consecutiveFailures;
         private long openUntil;
+        private boolean halfOpenInFlight;
+        private State state;
 
-        private ModelHealth(int consecutiveFailures, long openUntil) {
-            this.consecutiveFailures = consecutiveFailures;
-            this.openUntil = openUntil;
+        private ModelHealth() {
+            this.consecutiveFailures = 0;
+            this.openUntil = 0L;
+            this.halfOpenInFlight = false;
+            this.state = State.CLOSED;
         }
+    }
+
+    private enum State {
+        CLOSED,
+        OPEN,
+        HALF_OPEN
     }
 }
