@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.Builder.Default;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +24,6 @@ import java.util.List;
  *     .prompt("帮我总结下这段文本")
  *     .systemPrompt("你是一个企业内部知识库助手")
  *     .context(ragContext)          // 可选：RAG 召回的文档内容
- *     .history(historyMessages)     // 可选：对话历史
  *     .temperature(0.3)
  *     .maxTokens(512)
  *     .build();
@@ -54,13 +54,15 @@ public class ChatRequest {
     private String systemPrompt;
 
     /**
-     * 对话历史消息列表
+     * 完整消息列表
      * <p>
-     * 一般包含用户（user）和助手（assistant）的多轮对话记录，
-     * 用于让大模型理解上下文，生成连贯的回复
+     * 用于直接传入 system/user/assistant 消息序列。
+     * 当 messages 非空时，适配层使用该字段构造请求；
+     * prompt 会作为额外的 user 消息追加。
      * </p>
      */
-    private List<ChatMessage> history = new ArrayList<>();
+    @Default
+    private List<ChatMessage> messages = new ArrayList<>();
 
     /**
      * 可选：RAG 召回的上下文内容
@@ -125,5 +127,5 @@ public class ChatRequest {
      * 具体工具列表、调用结果处理由上层或实现层定义
      * </p>
      */
-    private boolean enableTools;
+    private Boolean enableTools;
 }

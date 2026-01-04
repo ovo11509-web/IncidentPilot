@@ -9,6 +9,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nageoffer.ai.ragent.dao.entity.IntentNodeDO;
 import com.nageoffer.ai.ragent.dao.mapper.IntentNodeMapper;
+import com.nageoffer.ai.ragent.convention.ChatMessage;
+import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -93,8 +95,17 @@ public class DefaultIntentClassifier implements IntentClassifier {
      */
     @Override
     public List<NodeScore> classifyTargets(String question) {
-        String prompt = buildPrompt(question);
-        String raw = llmService.chat(prompt);
+        String systemPrompt = buildPrompt();
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(
+                        ChatMessage.system(systemPrompt),
+                        ChatMessage.user(question)
+                ))
+                .temperature(0.1D)
+                .topP(0.3D)
+                .thinking(false)
+                .build();
+        String raw = llmService.chat(request);
 
         try {
             JsonElement root = JsonParser.parseString(raw.trim());
@@ -168,7 +179,7 @@ public class DefaultIntentClassifier implements IntentClassifier {
      * - 特别强调：如果问题里只提到 "OA系统"，不要选 "保险系统" 的分类
      * - 如果存在 MCP 类型节点，使用增强版 Prompt 并添加 type/toolId 标识
      */
-    private String buildPrompt(String question) {
+    private String buildPrompt() {
         StringBuilder sb = new StringBuilder();
 
         for (IntentNode node : leafNodes) {
@@ -196,7 +207,7 @@ public class DefaultIntentClassifier implements IntentClassifier {
             sb.append("\n");
         }
 
-        return INTENT_CLASSIFIER_PROMPT.formatted(sb.toString(), question);
+        return INTENT_CLASSIFIER_PROMPT.formatted(sb.toString());
     }
 
     private List<IntentNode> loadIntentTreeFromDB() {

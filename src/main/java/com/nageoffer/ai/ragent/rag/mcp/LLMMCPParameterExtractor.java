@@ -5,6 +5,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.nageoffer.ai.ragent.convention.ChatMessage;
+import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.prompt.PromptTemplateUtils;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.MCP_PARAMETER_EXTRACT_PROMPT;
@@ -67,7 +70,13 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
 
         try {
             // 调用 LLM 提取参数
-            String raw = llmService.chat(prompt);
+            ChatRequest request = ChatRequest.builder()
+                    .messages(List.of(ChatMessage.user(prompt)))
+                    .temperature(0.1D)
+                    .topP(0.3D)
+                    .thinking(false)
+                    .build();
+            String raw = llmService.chat(request);
             log.debug("MCP 参数提取 LLM 响应: {}", raw);
 
             // 解析 JSON 响应

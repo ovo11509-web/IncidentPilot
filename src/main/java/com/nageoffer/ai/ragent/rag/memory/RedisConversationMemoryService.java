@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.memory;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.google.gson.Gson;
 import com.nageoffer.ai.ragent.config.MemoryProperties;
@@ -62,11 +63,11 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     @Override
     public List<ChatMessage> load(String conversationId, String userId) {
         String key = buildKey(conversationId, userId);
-        int maxTurns = memoryProperties.getMaxTurns();
+        int maxMessages = resolveMaxHistoryMessages();
         ChatMessage summary = loadLatestSummary(conversationId, userId);
-        List<String> raw = stringRedisTemplate.opsForList().range(key, -maxTurns, -1);
+        List<String> raw = stringRedisTemplate.opsForList().range(key, -maxMessages, -1);
         if (raw != null && !raw.isEmpty()) {
-            List<ChatMessage> cached = filterUserMessages(parseMessages(raw));
+            List<ChatMessage> cached = filterHistoryMessages(parseMessages(raw));
             if (!cached.isEmpty()) {
                 return attachSummary(summary, cached);
             }
@@ -75,17 +76,17 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         List<ConversationMessageDO> dbMessages = conversationGroupService.listLatestUserMessages(
                 conversationId,
                 userId,
-                maxTurns
+                maxMessages
         );
-        if (dbMessages == null || dbMessages.isEmpty()) {
+        if (CollUtil.isEmpty(dbMessages)) {
             return attachSummary(summary, List.of());
         }
         dbMessages.sort(Comparator.comparing(ConversationMessageDO::getCreateTime));
         List<ChatMessage> result = dbMessages.stream()
                 .map(this::toChatMessage)
-                .filter(this::isUserMessage)
+                .filter(this::isHistoryMessage)
                 .collect(Collectors.toList());
-        if (!result.isEmpty()) {
+        if (CollUtil.isNotEmpty(result)) {
             List<String> payloads = result.stream()
                     .map(gson::toJson)
                     .toList();
@@ -99,7 +100,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     public void append(String conversationId, String userId, ChatMessage message) {
         String key = buildKey(conversationId, userId);
         persistToDB(conversationId, userId, message);
-        if (message.getRole() == ChatMessage.Role.USER) {
+        if (isHistoryMessage(message)) {
             String payload = gson.toJson(message);
             stringRedisTemplate.opsForList().rightPush(key, payload);
             trimToMaxSize(key);
@@ -112,11 +113,11 @@ public class RedisConversationMemoryService implements ConversationMemoryService
      * 限制 Redis List 最大长度，防止无界增长
      */
     private void trimToMaxSize(String key) {
-        int maxTurns = memoryProperties.getMaxTurns();
-        if (maxTurns <= 0) {
+        int maxMessages = resolveMaxHistoryMessages();
+        if (maxMessages <= 0) {
             return;
         }
-        stringRedisTemplate.opsForList().trim(key, -maxTurns, -1);
+        stringRedisTemplate.opsForList().trim(key, -maxMessages, -1);
     }
 
     private String buildKey(String conversationId, String userId) {
@@ -191,15 +192,19 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (summarizeCount <= 0) {
                 return;
             }
+            int fetchLimit = Math.max(1, summarizeCount * 2 + 2);
             List<ConversationMessageDO> toSummarize = conversationGroupService.listEarliestUserMessages(
                     conversationId,
                     userId,
-                    summarizeCount
+                    fetchLimit
             );
             if (toSummarize == null || toSummarize.isEmpty()) {
                 return;
             }
-            List<ConversationMessageDO> rollingMessages = filterRollingMessages(toSummarize, latestSummary);
+            List<ConversationMessageDO> rollingMessages = filterRollingMessages(
+                    capByUserTurns(toSummarize, summarizeCount),
+                    latestSummary
+            );
             if (rollingMessages.isEmpty()) {
                 return;
             }
@@ -272,7 +277,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         String prompt = CONVERSATION_SUMMARY_PROMPT.formatted(content);
         ChatRequest request = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .temperature(0.1D)
                 .topP(0.3D)
                 .thinking(false)
@@ -297,12 +302,11 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (item == null || StrUtil.isBlank(item.getContent())) {
                 continue;
             }
-            if (!"user".equalsIgnoreCase(item.getRole())) {
-                continue;
+            if (isHistoryRole(item.getRole())) {
+                sb.append(toRoleLabel(item.getRole()))
+                        .append(item.getContent().trim())
+                        .append("\n");
             }
-            sb.append(toRoleLabel(item.getRole()))
-                    .append(item.getContent().trim())
-                    .append("\n");
         }
         return sb.toString().trim();
     }
@@ -322,7 +326,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     private void refreshCache(String conversationId, String userId) {
         String key = buildKey(conversationId, userId);
         stringRedisTemplate.delete(key);
-        int maxMessages = memoryProperties.getMaxTurns();
+        int maxMessages = resolveMaxHistoryMessages();
         if (maxMessages <= 0) {
             return;
         }
@@ -336,7 +340,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         List<String> payloads = dbMessages.stream()
                 .map(this::toChatMessage)
-                .filter(this::isUserMessage)
+                .filter(this::isHistoryMessage)
                 .map(gson::toJson)
                 .toList();
         if (!payloads.isEmpty()) {
@@ -372,18 +376,18 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         return new ChatMessage(role, record.getContent());
     }
 
-    private List<ChatMessage> filterUserMessages(List<ChatMessage> messages) {
+    private List<ChatMessage> filterHistoryMessages(List<ChatMessage> messages) {
         if (messages == null || messages.isEmpty()) {
             return List.of();
         }
         return messages.stream()
-                .filter(this::isUserMessage)
+                .filter(this::isHistoryMessage)
                 .collect(Collectors.toList());
     }
 
-    private boolean isUserMessage(ChatMessage message) {
+    private boolean isHistoryMessage(ChatMessage message) {
         return message != null
-                && message.getRole() == ChatMessage.Role.USER
+                && (message.getRole() == ChatMessage.Role.USER || message.getRole() == ChatMessage.Role.ASSISTANT)
                 && StrUtil.isNotBlank(message.getContent());
     }
 
@@ -436,10 +440,59 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         String prompt = CONVERSATION_TITLE_PROMPT.formatted(maxLen, question.trim());
         try {
-            return llmService.chat(prompt);
+            ChatRequest request = ChatRequest.builder()
+                    .messages(List.of(ChatMessage.user(prompt)))
+                    .temperature(0.1D)
+                    .topP(0.3D)
+                    .thinking(false)
+                    .build();
+            return llmService.chat(request);
         } catch (Exception ex) {
             log.warn("生成会话标题失败", ex);
             return "新的问题会话";
         }
+    }
+
+    private int resolveMaxHistoryMessages() {
+        int maxTurns = memoryProperties.getMaxTurns();
+        if (maxTurns <= 0) {
+            return maxTurns;
+        }
+        return maxTurns * 2;
+    }
+
+    private boolean isHistoryRole(String role) {
+        if (StrUtil.isBlank(role)) {
+            return false;
+        }
+        String normalized = role.trim().toLowerCase();
+        return "user".equals(normalized) || "assistant".equals(normalized);
+    }
+
+    private List<ConversationMessageDO> capByUserTurns(List<ConversationMessageDO> messages, int turns) {
+        if (messages == null || messages.isEmpty() || turns <= 0) {
+            return List.of();
+        }
+        List<ConversationMessageDO> result = new ArrayList<>();
+        int userCount = 0;
+        boolean waitingForAssistant = false;
+        for (ConversationMessageDO message : messages) {
+            if (message == null || StrUtil.isBlank(message.getContent())) {
+                continue;
+            }
+            if (isHistoryRole(message.getRole())) {
+                result.add(message);
+                if ("user".equalsIgnoreCase(message.getRole())) {
+                    userCount++;
+                    waitingForAssistant = true;
+                } else if ("assistant".equalsIgnoreCase(message.getRole()) && waitingForAssistant) {
+                    waitingForAssistant = false;
+                }
+                if (userCount >= turns && !waitingForAssistant) {
+                    break;
+                }
+            }
+        }
+        return result;
     }
 }

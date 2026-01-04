@@ -1,5 +1,7 @@
 package com.nageoffer.ai.ragent.rag.chat;
 
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -26,6 +28,7 @@ import com.nageoffer.ai.ragent.rag.http.HttpMediaTypes;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
@@ -178,23 +181,23 @@ public class OllamaChatClient implements ChatClient {
     private JsonArray buildMessages(ChatRequest request) {
         JsonArray arr = new JsonArray();
 
-        if (request.getSystemPrompt() != null &&
-                !request.getSystemPrompt().isEmpty()) {
+        if (StrUtil.isNotEmpty(request.getSystemPrompt())) {
             JsonObject sys = new JsonObject();
             sys.addProperty("role", "system");
             sys.addProperty("content", request.getSystemPrompt());
             arr.add(sys);
         }
 
-        if (request.getContext() != null && !request.getContext().isEmpty()) {
+        if (StrUtil.isNotEmpty(request.getContext())) {
             JsonObject ctx = new JsonObject();
             ctx.addProperty("role", "system");
             ctx.addProperty("content", "以下是与用户问题相关的背景知识：\n" + request.getContext());
             arr.add(ctx);
         }
 
-        if (request.getHistory() != null) {
-            for (ChatMessage m : request.getHistory()) {
+        List<ChatMessage> messages = request.getMessages();
+        if (CollUtil.isNotEmpty(messages)) {
+            for (ChatMessage m : messages) {
                 JsonObject msg = new JsonObject();
                 msg.addProperty("role", toOllamaRole(m.getRole()));
                 msg.addProperty("content", m.getContent());
@@ -202,10 +205,12 @@ public class OllamaChatClient implements ChatClient {
             }
         }
 
-        JsonObject userMsg = new JsonObject();
-        userMsg.addProperty("role", "user");
-        userMsg.addProperty("content", request.getPrompt());
-        arr.add(userMsg);
+        if (StrUtil.isNotEmpty(request.getPrompt())) {
+            JsonObject userMsg = new JsonObject();
+            userMsg.addProperty("role", "user");
+            userMsg.addProperty("content", request.getPrompt());
+            arr.add(userMsg);
+        }
 
         return arr;
     }

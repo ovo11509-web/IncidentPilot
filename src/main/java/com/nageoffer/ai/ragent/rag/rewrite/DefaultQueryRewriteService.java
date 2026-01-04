@@ -2,11 +2,14 @@ package com.nageoffer.ai.ragent.rag.rewrite;
 
 import com.nageoffer.ai.ragent.config.RAGConfigProperties;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -29,7 +32,7 @@ public class DefaultQueryRewriteService implements QueryRewriteService {
         String prompt = RAGConstant.QUERY_REWRITE_PROMPT.formatted(normalizedQuestion);
 
         ChatRequest request = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .temperature(0.1D) // 把创造性压低
                 .topP(0.3D)
                 .thinking(false)

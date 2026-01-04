@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.service.impl;
 
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
@@ -71,7 +72,7 @@ public class RAGQuickService implements RAGService {
         // ==================== 4. 调用流式 LLM ====================
         long tLlmStart = System.nanoTime();
         ChatRequest chatRequest = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .thinking(false)
                 .temperature(0D)
                 .topP(0.7D)

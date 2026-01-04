@@ -1,6 +1,9 @@
 package com.nageoffer.ai.ragent.rag.chat;
 
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
+
+import java.util.List;
 
 /**
  * 通用大语言模型（LLM）访问接口
@@ -44,7 +47,7 @@ public interface LLMService {
      */
     default String chat(String prompt) {
         ChatRequest req = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .build();
         return chat(req);
     }
@@ -53,7 +56,7 @@ public interface LLMService {
      * 同步调用（高级模式）
      * <p>
      * 说明：
-     * - 支持系统提示词（system），对话历史（messages），
+     * - 支持系统提示词（system），消息列表（messages），
      * RAG 上下文（contextChunks），生成参数（temperature 等）
      * - 适用于需要精细控制的大模型调用
      * <p>
@@ -79,7 +82,7 @@ public interface LLMService {
      */
     default StreamHandle streamChat(String prompt, StreamCallback callback) {
         ChatRequest req = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .build();
         return streamChat(req, callback);
     }

@@ -8,7 +8,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nageoffer.ai.ragent.config.RAGConfigProperties;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
-import com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
@@ -18,8 +17,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -46,13 +45,27 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
 
     @Override
     public RewriteResult rewriteWithSplit(String userQuestion, List<ChatMessage> history) {
-        return rewriteAndSplit(userQuestion, history);
+        if (!ragConfigProperties.getQueryRewriteEnabled()) {
+            String normalized = queryTermMappingService.normalize(userQuestion);
+            List<String> subs = ruleBasedSplit(normalized);
+            return new RewriteResult(normalized, subs);
+        }
+
+        String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
+
+        RewriteResult llmResult = callLLMRewriteAndSplit(normalizedQuestion, userQuestion, history);
+        if (llmResult != null) {
+            return llmResult;
+        }
+
+        List<String> subQuestions = ruleBasedSplit(normalizedQuestion);
+        return new RewriteResult(normalizedQuestion, subQuestions);
     }
 
     /**
      * 先用默认改写做归一化，再进行多问句拆分。
      */
-    public RewriteResult rewriteAndSplit(String userQuestion) {
+    private RewriteResult rewriteAndSplit(String userQuestion) {
         // 开关关闭：直接做规则归一化 + 规则拆分
         if (!ragConfigProperties.getQueryRewriteEnabled()) {
             String normalized = queryTermMappingService.normalize(userQuestion);
@@ -62,7 +75,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
 
         String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
 
-        RewriteResult llmResult = callLLMRewriteAndSplit(normalizedQuestion, userQuestion);
+        RewriteResult llmResult = callLLMRewriteAndSplit(normalizedQuestion, userQuestion, List.of());
         if (llmResult != null) {
             return llmResult;
         }
@@ -72,161 +85,53 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
         return new RewriteResult(normalizedQuestion, subQuestions);
     }
 
-    private RewriteResult rewriteAndSplit(String userQuestion, List<ChatMessage> history) {
-        if (!ragConfigProperties.getQueryRewriteEnabled()) {
-            String normalized = queryTermMappingService.normalize(userQuestion);
-            List<String> subs = ruleBasedSplit(normalized);
-            return new RewriteResult(normalized, subs);
-        }
-
-        String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
-
-        boolean useHistory = shouldUseHistoryForRewrite(normalizedQuestion, history);
-        RewriteResult llmResult = useHistory
-                ? callLLMRewriteAndSplitWithHistory(normalizedQuestion, userQuestion, history)
-                : callLLMRewriteAndSplit(normalizedQuestion, userQuestion);
-        if (llmResult != null) {
-            return llmResult;
-        }
-
-        List<String> subQuestions = ruleBasedSplit(normalizedQuestion);
-        return new RewriteResult(normalizedQuestion, subQuestions);
-    }
-
-    private RewriteResult callLLMRewriteAndSplit(String normalizedQuestion, String originalQuestion) {
-        String prompt = RAGConstant.QUERY_REWRITE_AND_SPLIT_PROMPT.formatted(normalizedQuestion);
-
-        ChatRequest req = ChatRequest.builder()
-                .prompt(prompt)
-                .temperature(0.1D)
-                .topP(0.3D)
-                .thinking(false)
-                .build();
+    private RewriteResult callLLMRewriteAndSplit(String normalizedQuestion,
+                                                 String originalQuestion,
+                                                 List<ChatMessage> history) {
+        String prompt = RAGConstant.QUERY_REWRITE_AND_SPLIT_PROMPT;
+        boolean useHistory = CollUtil.isNotEmpty(history);
+        ChatRequest req = buildRewriteRequest(prompt, normalizedQuestion, history, useHistory);
 
         try {
             String raw = llmService.chat(req);
             RewriteResult parsed = parseRewriteAndSplit(raw);
-            if (parsed != null) {
-                log.info("""
-                        查询改写+拆分：
-                        原始问题：{}
-                        归一化后：{}
-                        改写结果：{}
-                        子问题：{}
-                        """, originalQuestion, normalizedQuestion, parsed.rewrittenQuestion(), parsed.subQuestions());
-                return parsed;
-            }
+            return Optional.ofNullable(parsed)
+                    .map(result -> {
+                        log.info("""
+                                查询改写+拆分：
+                                原始问题：{}
+                                归一化后：{}
+                                改写结果：{}
+                                子问题：{}
+                                """, originalQuestion, normalizedQuestion, result.rewrittenQuestion(), result.subQuestions());
+                        return result;
+                    })
+                    .orElseGet(() -> new RewriteResult(normalizedQuestion, List.of(normalizedQuestion)));
         } catch (Exception e) {
-            log.warn("查询改写+拆分 LLM 调用失败，question={}", originalQuestion, e);
+            log.warn("查询改写+拆分 LLM 调用失败，question={}，normalizedQuestion={}", originalQuestion, normalizedQuestion, e);
         }
-        return null;
+        return new RewriteResult(normalizedQuestion, List.of(normalizedQuestion));
     }
 
-    private RewriteResult callLLMRewriteAndSplitWithHistory(String normalizedQuestion,
-                                                            String originalQuestion,
-                                                            List<ChatMessage> history) {
-        String historyText = buildHistoryContext(history);
-        String prompt = RAGEnterpriseConstant.QUERY_REWRITE_AND_SPLIT_WITH_HISTORY_PROMPT.formatted(historyText, normalizedQuestion);
+    private ChatRequest buildRewriteRequest(String systemPrompt,
+                                            String question,
+                                            List<ChatMessage> history,
+                                            boolean useHistory) {
+        List<ChatMessage> messages = new ArrayList<>();
+        if (StrUtil.isNotBlank(systemPrompt)) {
+            messages.add(ChatMessage.system(systemPrompt));
+        }
+        if (useHistory && CollUtil.isNotEmpty(history)) {
+            messages.addAll(history);
+        }
+        messages.add(ChatMessage.user(question));
 
-        ChatRequest req = ChatRequest.builder()
-                .prompt(prompt)
+        return ChatRequest.builder()
+                .messages(messages)
                 .temperature(0.1D)
                 .topP(0.3D)
                 .thinking(false)
                 .build();
-
-        try {
-            String raw = llmService.chat(req);
-            RewriteResult parsed = parseRewriteAndSplit(raw);
-            if (parsed != null) {
-                log.info("""
-                        查询改写+拆分（带历史）
-                        原始问题：{}
-                        归一化后：{}
-                        改写结果：{}
-                        子问题：{}
-                        """, originalQuestion, normalizedQuestion, parsed.rewrittenQuestion(), parsed.subQuestions());
-                return parsed;
-            }
-        } catch (Exception e) {
-            log.warn("查询改写+拆分（带历史）LLM 调用失败，question={}", originalQuestion, e);
-        }
-        return null;
-    }
-
-    private boolean shouldUseHistoryForRewrite(String question, List<ChatMessage> history) {
-        if (StrUtil.isBlank(question) || CollUtil.isEmpty(history)) {
-            return false;
-        }
-        String trimmed = question.trim();
-        Integer threshold = ragConfigProperties.getQueryRewriteShortQueryThreshold();
-        int limit = threshold == null ? 0 : threshold;
-        return limit > 0 && trimmed.length() <= limit;
-    }
-
-    private String buildHistoryContext(List<ChatMessage> history) {
-        if (CollUtil.isEmpty(history)) {
-            return "";
-        }
-        Integer maxMessages = ragConfigProperties.getQueryRewriteMaxHistoryMessages();
-        int limit = maxMessages == null ? 0 : maxMessages;
-        List<ChatMessage> slice = history;
-        if (limit > 0) {
-            slice = pickLatestUserMessages(history, limit);
-        }
-        StringBuilder sb = new StringBuilder();
-        int maxChars = resolveMaxHistoryChars();
-        for (ChatMessage message : slice) {
-            if (message == null || StrUtil.isBlank(message.getContent())) {
-                continue;
-            }
-            if (message.getRole() != ChatMessage.Role.USER) {
-                continue;
-            }
-            String line = toRoleLabel(message.getRole()) + message.getContent().trim() + "\n";
-            if (maxChars > 0 && sb.length() + line.length() > maxChars) {
-                break;
-            }
-            sb.append(line);
-        }
-        return sb.toString().trim();
-    }
-
-    private String toRoleLabel(ChatMessage.Role role) {
-        if (role == null) {
-            return "";
-        }
-        return switch (role) {
-            case USER -> "用户：";
-            case ASSISTANT -> "助手：";
-            case SYSTEM -> "系统：";
-        };
-    }
-
-    private List<ChatMessage> pickLatestUserMessages(List<ChatMessage> history, int limit) {
-        if (CollUtil.isEmpty(history) || limit <= 0) {
-            return List.of();
-        }
-        List<ChatMessage> users = new ArrayList<>();
-        for (int i = history.size() - 1; i >= 0; i--) {
-            ChatMessage msg = history.get(i);
-            if (msg != null && msg.getRole() == ChatMessage.Role.USER && StrUtil.isNotBlank(msg.getContent())) {
-                users.add(msg);
-                if (users.size() >= limit) {
-                    break;
-                }
-            }
-        }
-        if (users.isEmpty()) {
-            return List.of();
-        }
-        Collections.reverse(users);
-        return users;
-    }
-
-    private int resolveMaxHistoryChars() {
-        Integer maxChars = ragConfigProperties.getQueryRewriteMaxHistoryChars();
-        return maxChars == null ? 0 : maxChars;
     }
 
     private RewriteResult parseRewriteAndSplit(String raw) {

@@ -39,12 +39,6 @@ public class RAGConfigProperties {
     private Integer queryRewriteMaxHistoryMessages;
 
     /**
-     * 触发承接式改写的短问长度阈值
-     */
-    @Value("${rag.query-rewrite.short-query-threshold:12}")
-    private Integer queryRewriteShortQueryThreshold;
-
-    /**
      * 改写时用于承接上下文的最大字符数
      */
     @Value("${rag.query-rewrite.max-history-chars:500}")

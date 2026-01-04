@@ -1,6 +1,7 @@
 package com.nageoffer.ai.ragent.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.IntentKind;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
@@ -56,7 +57,7 @@ public class RAGStandardService implements RAGService {
         if (nodeScores.size() == 1 && Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM)) {
             String prompt = CHAT_SYSTEM_PROMPT.formatted(rewriteQuestion);
             ChatRequest req = ChatRequest.builder()
-                    .prompt(prompt)
+                    .messages(List.of(ChatMessage.user(prompt)))
                     .temperature(0.7D)
                     .topP(0.8D)
                     .thinking(false)
@@ -131,7 +132,7 @@ public class RAGStandardService implements RAGService {
 
         // 调 LLM 流式输出
         ChatRequest chatRequest = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .thinking(false)
                 .temperature(0D)
                 .topP(0.7D)

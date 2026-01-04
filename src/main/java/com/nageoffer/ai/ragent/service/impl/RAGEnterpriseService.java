@@ -6,14 +6,12 @@ import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.IntentKind;
-import com.nageoffer.ai.ragent.config.MemoryProperties;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.rag.intent.IntentClassifier;
 import com.nageoffer.ai.ragent.rag.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.intent.NodeScore;
-import com.nageoffer.ai.ragent.rag.memory.ConversationMemoryService;
 import com.nageoffer.ai.ragent.rag.mcp.MCPParameterExtractor;
 import com.nageoffer.ai.ragent.rag.mcp.MCPRequest;
 import com.nageoffer.ai.ragent.rag.mcp.MCPResponse;
@@ -21,6 +19,7 @@ import com.nageoffer.ai.ragent.rag.mcp.MCPService;
 import com.nageoffer.ai.ragent.rag.mcp.MCPTool;
 import com.nageoffer.ai.ragent.rag.mcp.MCPToolExecutor;
 import com.nageoffer.ai.ragent.rag.mcp.MCPToolRegistry;
+import com.nageoffer.ai.ragent.rag.memory.ConversationMemoryService;
 import com.nageoffer.ai.ragent.rag.prompt.ContextFormatter;
 import com.nageoffer.ai.ragent.rag.prompt.PromptContext;
 import com.nageoffer.ai.ragent.rag.prompt.RAGEnterprisePromptService;
@@ -64,8 +63,6 @@ import static com.nageoffer.ai.ragent.enums.IntentKind.SYSTEM;
 @Service("ragEnterpriseService")
 public class RAGEnterpriseService implements RAGService {
 
-    private static final int ROLE_HISTORY_MULTIPLIER = 1;
-
     private final RetrieverService retrieverService;
     private final LLMService llmService;
     private final RerankService rerankService;
@@ -80,7 +77,6 @@ public class RAGEnterpriseService implements RAGService {
     private final Executor intentClassifyExecutor;
     private final Executor ragContextExecutor;
     private final Executor ragRetrievalExecutor;
-    private final int memoryMaxTurns;
 
     public RAGEnterpriseService(
             RetrieverService retrieverService,
@@ -91,10 +87,9 @@ public class RAGEnterpriseService implements RAGService {
             MCPToolRegistry mcpToolRegistry,
             RAGEnterprisePromptService promptBuilder,
             ContextFormatter contextFormatter,
+            ConversationMemoryService memoryService,
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("multiQuestionRewriteService") QueryRewriteService queryRewriteService,
-            ConversationMemoryService memoryService,
-            MemoryProperties memoryProperties,
             @Qualifier("intentClassifyThreadPoolExecutor") Executor intentClassifyExecutor,
             @Qualifier("ragContextThreadPoolExecutor") Executor ragContextExecutor,
             @Qualifier("ragRetrievalThreadPoolExecutor") Executor ragRetrievalExecutor) {
@@ -106,13 +101,12 @@ public class RAGEnterpriseService implements RAGService {
         this.mcpService = mcpService;
         this.mcpParameterExtractor = mcpParameterExtractor;
         this.mcpToolRegistry = mcpToolRegistry;
+        this.memoryService = memoryService;
         this.intentClassifier = intentClassifier;
         this.queryRewriteService = queryRewriteService;
-        this.memoryService = memoryService;
         this.intentClassifyExecutor = intentClassifyExecutor;
         this.ragContextExecutor = ragContextExecutor;
         this.ragRetrievalExecutor = ragRetrievalExecutor;
-        this.memoryMaxTurns = memoryProperties.getMaxTurns();
     }
 
     // ==================== 主入口 ====================
@@ -126,14 +120,13 @@ public class RAGEnterpriseService implements RAGService {
     public void streamAnswer(String question, int topK, String conversationId, StreamCallback callback) {
         List<ChatMessage> history = memoryService.load(conversationId, UserContext.getUserId());
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
-        String rewriteQuestion = rewriteResult.rewrittenQuestion();
 
-        List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult, rewriteQuestion);
+        List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult);
 
         boolean allSystemOnly = subIntents.stream()
                 .allMatch(si -> isSystemOnly(si.nodeScores));
         if (allSystemOnly) {
-            streamSystemResponse(rewriteQuestion, callback);
+            streamSystemResponse(rewriteResult.rewrittenQuestion(), callback);
             return;
         }
 
@@ -171,11 +164,10 @@ public class RAGEnterpriseService implements RAGService {
         return nodeScores.size() == 1 && Objects.equals(nodeScores.get(0).getNode().getKind(), SYSTEM);
     }
 
-    private List<SubQuestionIntent> buildSubQuestionIntents(RewriteResult rewriteResult,
-                                                            String rewriteQuestion) {
+    private List<SubQuestionIntent> buildSubQuestionIntents(RewriteResult rewriteResult) {
         List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
                 ? rewriteResult.subQuestions()
-                : List.of(rewriteQuestion);
+                : List.of(rewriteResult.rewrittenQuestion());
         List<CompletableFuture<SubQuestionIntent>> tasks = subQuestions.stream()
                 .map(q -> CompletableFuture.supplyAsync(
                         () -> new SubQuestionIntent(q, classifyIntents(q)),
@@ -375,8 +367,9 @@ public class RAGEnterpriseService implements RAGService {
     // ==================== LLM 响应 ====================
 
     private void streamSystemResponse(String question, StreamCallback callback) {
+        String prompt = CHAT_SYSTEM_PROMPT.formatted(question);
         ChatRequest req = ChatRequest.builder()
-                .prompt(CHAT_SYSTEM_PROMPT.formatted(question))
+                .messages(List.of(ChatMessage.user(prompt)))
                 .temperature(0.7D)
                 .topP(0.8D)
                 .thinking(false)
@@ -386,20 +379,22 @@ public class RAGEnterpriseService implements RAGService {
 
     private void streamLLMResponse(RewriteResult rewriteResult, RetrievalContext ctx,
                                    IntentGroup intentGroup, List<ChatMessage> history, StreamCallback callback) {
-        String prompt = promptBuilder.buildPrompt(
-                PromptContext.builder()
-                        .question(rewriteResult.joinSubQuestions())
-                        .mcpContext(ctx.mcpContext)
-                        .kbContext(ctx.kbContext)
-                        .mcpIntents(intentGroup.mcpIntents)
-                        .kbIntents(intentGroup.kbIntents)
-                        .intentChunks(ctx.intentChunks)
-                        .build()
-        );
+        PromptContext promptContext = PromptContext.builder()
+                .question(rewriteResult.joinSubQuestions())
+                .mcpContext(ctx.mcpContext)
+                .kbContext(ctx.kbContext)
+                .mcpIntents(intentGroup.mcpIntents)
+                .kbIntents(intentGroup.kbIntents)
+                .intentChunks(ctx.intentChunks)
+                .build();
 
+        List<ChatMessage> messages = promptBuilder.buildStructuredMessages(
+                promptContext,
+                history,
+                rewriteResult.joinSubQuestions()
+        );
         ChatRequest chatRequest = ChatRequest.builder()
-                .prompt(prompt)
-                .history(history)
+                .messages(messages)
                 .thinking(false)
                 .temperature(ctx.hasMcp() ? 0.3D : 0D)  // MCP 场景稍微放宽温度
                 .topP(0.7D)

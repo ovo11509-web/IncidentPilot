@@ -2,13 +2,14 @@ package com.nageoffer.ai.ragent.rag.prompt;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.rag.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,12 +20,41 @@ import static com.nageoffer.ai.ragent.constant.RAGEnterpriseConstant.RAG_ENTERPR
 @Service
 public class RAGEnterprisePromptService {
 
+    private static final String MCP_CONTEXT_HEADER = "## 动态数据片段";
+    private static final String KB_CONTEXT_HEADER = "## 文档内容";
+
     /**
      * 允许 2+ 个连续换行被压成 2 个，成品更干净
      */
-    public String buildPrompt(PromptContext context) {
+    public String buildSystemPrompt(PromptContext context) {
         PromptBuildPlan plan = plan(context);
-        return render(plan);
+        String template = StrUtil.isNotBlank(plan.getBaseTemplate())
+                ? plan.getBaseTemplate()
+                : defaultTemplate(plan.getScene());
+        return StrUtil.isBlank(template) ? "" : PromptTemplateUtils.cleanupPrompt(template);
+    }
+
+    public List<ChatMessage> buildStructuredMessages(PromptContext context,
+                                                     List<ChatMessage> history,
+                                                     String question) {
+        List<ChatMessage> messages = new ArrayList<>();
+        String systemPrompt = buildSystemPrompt(context);
+        if (StrUtil.isNotBlank(systemPrompt)) {
+            messages.add(ChatMessage.system(systemPrompt));
+        }
+        if (StrUtil.isNotBlank(context.getMcpContext())) {
+            messages.add(ChatMessage.system(formatEvidence(MCP_CONTEXT_HEADER, context.getMcpContext())));
+        }
+        if (StrUtil.isNotBlank(context.getKbContext())) {
+            messages.add(ChatMessage.system(formatEvidence(KB_CONTEXT_HEADER, context.getKbContext())));
+        }
+        if (CollUtil.isNotEmpty(history)) {
+            messages.addAll(history);
+        }
+        if (StrUtil.isNotBlank(question)) {
+            messages.add(ChatMessage.user(question));
+        }
+        return messages;
     }
 
     private PromptPlan planPrompt(List<NodeScore> intents, Map<String, List<RetrievedChunk>> intentChunks) {
@@ -116,19 +146,6 @@ public class RAGEnterprisePromptService {
                 .build();
     }
 
-    private String render(PromptBuildPlan plan) {
-        String template = StrUtil.isNotBlank(plan.getBaseTemplate())
-                ? plan.getBaseTemplate()
-                : defaultTemplate(plan.getScene());
-
-        if (StrUtil.isBlank(template)) {
-            return "";
-        }
-
-        String prompt = formatByScene(template, plan.getScene(), plan);
-        return PromptTemplateUtils.cleanupPrompt(prompt);
-    }
-
     private String defaultTemplate(PromptScene scene) {
         return switch (scene) {
             case KB_ONLY -> RAG_ENTERPRISE_PROMPT;
@@ -138,25 +155,8 @@ public class RAGEnterprisePromptService {
         };
     }
 
-    private String formatByScene(String template, PromptScene scene, PromptBuildPlan plan) {
-        String mcp = StrUtil.emptyIfNull(plan.getMcpContext()).trim();
-        String kb = StrUtil.emptyIfNull(plan.getKbContext()).trim();
-        String question = StrUtil.emptyIfNull(plan.getQuestion()).trim();
-        Map<String, String> slotValues = new HashMap<>();
-        slotValues.put("MCP_CONTEXT", mcp);
-        slotValues.put("KB_CONTEXT", kb);
-        slotValues.put("QUESTION", question);
-
-        if (template.contains("{{")) {
-            return PromptTemplateUtils.fillSlots(template, slotValues);
-        }
-
-        return switch (scene) {
-            case KB_ONLY -> template.formatted(kb, question);
-            case MCP_ONLY -> template.formatted(mcp, question);
-            case MIXED -> template.formatted(mcp, kb, question);
-            case EMPTY -> template;
-        };
+    private String formatEvidence(String header, String body) {
+        return header + "\n" + body.trim();
     }
 
     // === 工具方法 ===
