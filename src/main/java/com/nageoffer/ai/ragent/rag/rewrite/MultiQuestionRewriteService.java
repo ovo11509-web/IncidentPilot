@@ -98,7 +98,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
             return Optional.ofNullable(parsed)
                     .map(result -> {
                         log.info("""
-                                查询改写+拆分：
+                                RAG用户问题查询改写+拆分：
                                 原始问题：{}
                                 归一化后：{}
                                 改写结果：{}
