@@ -66,6 +66,9 @@ public class RedisConversationMemoryService implements ConversationMemoryService
 
     @Override
     public List<ChatMessage> load(String conversationId, String userId) {
+        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
+            return List.of();
+        }
         String key = buildKey(conversationId, userId);
         int maxMessages = resolveMaxHistoryMessages();
         ChatMessage summary = loadLatestSummary(conversationId, userId);
@@ -91,18 +94,15 @@ public class RedisConversationMemoryService implements ConversationMemoryService
                 .filter(this::isHistoryMessage)
                 .collect(Collectors.toList());
         result = normalizeHistory(result);
-        if (CollUtil.isNotEmpty(result)) {
-            List<String> payloads = result.stream()
-                    .map(gson::toJson)
-                    .toList();
-            stringRedisTemplate.opsForList().rightPushAll(key, payloads);
-            applyExpire(key);
-        }
+        writeHistoryCache(key, result);
         return attachSummary(summary, result);
     }
 
     @Override
     public void append(String conversationId, String userId, ChatMessage message) {
+        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
+            return;
+        }
         String key = buildKey(conversationId, userId);
         persistToDB(conversationId, userId, message);
         if (isHistoryMessage(message)) {
@@ -119,14 +119,11 @@ public class RedisConversationMemoryService implements ConversationMemoryService
      */
     private void trimToMaxSize(String key) {
         int maxMessages = resolveMaxHistoryMessages();
-        if (maxMessages <= 0) {
-            return;
-        }
         stringRedisTemplate.opsForList().trim(key, -maxMessages, -1);
     }
 
     private String buildKey(String conversationId, String userId) {
-        return KEY_PREFIX + userId + ":" + conversationId.trim();
+        return KEY_PREFIX + userId + ":" + conversationId;
     }
 
     private List<ChatMessage> parseMessages(List<String> raw) {
@@ -173,15 +170,15 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     }
 
     private void doCompressIfNeeded(String conversationId, String userId) {
-        if (StrUtil.isBlank(conversationId)) {
+        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return;
         }
         int triggerTurns = memoryProperties.getSummaryTriggerTurns();
-        int maxTurns = memoryProperties.getMaxTurns();
-        if (triggerTurns <= 0 || maxTurns < 0) {
+        int maxTurns = requirePositiveMaxTurns();
+        if (triggerTurns <= 0) {
             return;
         }
-        String lockKey = SUMMARY_LOCK_PREFIX + userId + ":" + conversationId.trim();
+        String lockKey = SUMMARY_LOCK_PREFIX + userId + ":" + conversationId;
         RLock lock = redissonClient.getLock(lockKey);
         if (!tryLock(lock)) {
             return;
@@ -189,9 +186,6 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         try {
             long total = conversationGroupService.countUserMessages(conversationId, userId);
             if (total < triggerTurns) {
-                return;
-            }
-            if (maxTurns == 0) {
                 return;
             }
             ConversationSummaryDO latestSummary = loadLatestSummaryRecord(conversationId, userId);
@@ -203,21 +197,11 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (latestUserTurns.size() < maxTurns) {
                 return;
             }
-            Date cutoff = latestUserTurns.stream()
-                    .map(ConversationMessageDO::getCreateTime)
-                    .filter(Objects::nonNull)
-                    .min(Date::compareTo)
-                    .orElse(null);
+            Date cutoff = resolveCutoff(latestUserTurns);
             if (cutoff == null) {
                 return;
             }
-            Date after = null;
-            if (latestSummary != null) {
-                after = latestSummary.getUpdateTime();
-                if (after == null) {
-                    after = latestSummary.getCreateTime();
-                }
-            }
+            Date after = resolveSummaryStart(latestSummary);
             if (after != null && !after.before(cutoff)) {
                 return;
             }
@@ -235,22 +219,7 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (StrUtil.isBlank(summary)) {
                 return;
             }
-            if (latestSummary == null) {
-                ConversationSummaryDO summaryRecord = ConversationSummaryDO.builder()
-                        .conversationId(conversationId)
-                        .userId(userId)
-                        .content(summary)
-                        .createTime(cutoff)
-                        .updateTime(cutoff)
-                        .build();
-                conversationGroupService.upsertSummary(summaryRecord);
-                refreshCache(conversationId, userId);
-            } else {
-                latestSummary.setContent(summary);
-                latestSummary.setUpdateTime(cutoff);
-                conversationGroupService.upsertSummary(latestSummary);
-                refreshCache(conversationId, userId);
-            }
+            upsertSummary(latestSummary, conversationId, userId, summary, cutoff);
         } finally {
             unlockIfOwner(lock);
         }
@@ -329,9 +298,6 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         String key = buildKey(conversationId, userId);
         stringRedisTemplate.delete(key);
         int maxMessages = resolveMaxHistoryMessages();
-        if (maxMessages <= 0) {
-            return;
-        }
         List<ConversationMessageDO> dbMessages = conversationGroupService.listUserMessagesAsc(
                 conversationId,
                 userId,
@@ -340,15 +306,11 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         if (dbMessages == null || dbMessages.isEmpty()) {
             return;
         }
-        List<String> payloads = dbMessages.stream()
+        List<ChatMessage> messages = dbMessages.stream()
                 .map(this::toChatMessage)
                 .filter(this::isHistoryMessage)
-                .map(gson::toJson)
                 .toList();
-        if (!payloads.isEmpty()) {
-            stringRedisTemplate.opsForList().rightPushAll(key, payloads);
-            applyExpire(key);
-        }
+        writeHistoryCache(key, messages);
     }
 
     private List<ChatMessage> attachSummary(ChatMessage summary, List<ChatMessage> messages) {
@@ -463,11 +425,68 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     }
 
     private int resolveMaxHistoryMessages() {
+        return requirePositiveMaxTurns() * 2;
+    }
+
+    private int requirePositiveMaxTurns() {
         int maxTurns = memoryProperties.getMaxTurns();
         if (maxTurns <= 0) {
-            return maxTurns;
+            throw new IllegalArgumentException("rag.memory.max-turns must be > 0");
         }
-        return maxTurns * 2;
+        return maxTurns;
+    }
+
+    private Date resolveSummaryStart(ConversationSummaryDO summary) {
+        if (summary == null) {
+            return null;
+        }
+        Date after = summary.getUpdateTime();
+        return after == null ? summary.getCreateTime() : after;
+    }
+
+    private Date resolveCutoff(List<ConversationMessageDO> latestUserTurns) {
+        return latestUserTurns.stream()
+                .map(ConversationMessageDO::getCreateTime)
+                .filter(Objects::nonNull)
+                .min(Date::compareTo)
+                .orElse(null);
+    }
+
+    private void upsertSummary(ConversationSummaryDO latestSummary,
+                               String conversationId,
+                               String userId,
+                               String content,
+                               Date cutoff) {
+        ConversationSummaryDO summaryRecord = latestSummary;
+        if (summaryRecord == null) {
+            summaryRecord = ConversationSummaryDO.builder()
+                    .conversationId(conversationId)
+                    .userId(userId)
+                    .content(content)
+                    .createTime(cutoff)
+                    .updateTime(cutoff)
+                    .build();
+        } else {
+            summaryRecord.setContent(content);
+            summaryRecord.setUpdateTime(cutoff);
+        }
+        conversationGroupService.upsertSummary(summaryRecord);
+        refreshCache(conversationId, userId);
+    }
+
+    private void writeHistoryCache(String key, List<ChatMessage> messages) {
+        if (CollUtil.isEmpty(messages)) {
+            return;
+        }
+        List<String> payloads = messages.stream()
+                .filter(this::isHistoryMessage)
+                .map(gson::toJson)
+                .toList();
+        if (payloads.isEmpty()) {
+            return;
+        }
+        stringRedisTemplate.opsForList().rightPushAll(key, payloads);
+        applyExpire(key);
     }
 
     private boolean isHistoryRole(String role) {
