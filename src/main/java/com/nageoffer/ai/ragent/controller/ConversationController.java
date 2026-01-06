@@ -52,8 +52,7 @@ public class ConversationController {
     }
 
     @GetMapping("/conversations/{conversationId}/messages")
-    public Result<List<ConversationMessageVO>> listMessages(@PathVariable String conversationId,
-                                                            @RequestParam(defaultValue = "false") boolean includeSummary) {
-        return Results.success(conversationHistoryService.listMessages(conversationId, UserContext.getUserId(), includeSummary));
+    public Result<List<ConversationMessageVO>> listMessages(@PathVariable String conversationId) {
+        return Results.success(conversationHistoryService.listMessages(conversationId, UserContext.getUserId()));
     }
 }

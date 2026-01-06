@@ -9,5 +9,5 @@ public interface ConversationHistoryService {
 
     List<ConversationVO> listConversations(String userId);
 
-    List<ConversationMessageVO> listMessages(String conversationId, String userId, boolean includeSummary);
+    List<ConversationMessageVO> listMessages(String conversationId, String userId);
 }

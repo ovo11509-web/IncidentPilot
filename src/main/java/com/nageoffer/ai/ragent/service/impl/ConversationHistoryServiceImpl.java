@@ -50,7 +50,7 @@ public class ConversationHistoryServiceImpl implements ConversationHistoryServic
     }
 
     @Override
-    public List<ConversationMessageVO> listMessages(String conversationId, String userId, boolean includeSummary) {
+    public List<ConversationMessageVO> listMessages(String conversationId, String userId) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return List.of();
         }
@@ -67,7 +67,6 @@ public class ConversationHistoryServiceImpl implements ConversationHistoryServic
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, userId)
-                        .eq(!includeSummary, ConversationMessageDO::getIsSummary, 0)
                         .eq(ConversationMessageDO::getDeleted, 0)
                         .orderByAsc(ConversationMessageDO::getCreateTime)
         );
@@ -81,7 +80,6 @@ public class ConversationHistoryServiceImpl implements ConversationHistoryServic
                     .conversationId(record.getConversationId())
                     .role(record.getRole())
                     .content(record.getContent())
-                    .isSummary(record.getIsSummary())
                     .createTime(record.getCreateTime())
                     .build();
             result.add(vo);

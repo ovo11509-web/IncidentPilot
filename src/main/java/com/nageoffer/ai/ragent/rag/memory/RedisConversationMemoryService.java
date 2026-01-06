@@ -8,6 +8,7 @@ import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.dao.entity.ConversationDO;
 import com.nageoffer.ai.ragent.dao.entity.ConversationMessageDO;
+import com.nageoffer.ai.ragent.dao.entity.ConversationSummaryDO;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.service.ConversationGroupService;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,9 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -150,7 +153,6 @@ public class RedisConversationMemoryService implements ConversationMemoryService
                 .userId(userId)
                 .role(message.getRole() == null ? null : message.getRole().name().toLowerCase())
                 .content(message.getContent())
-                .isSummary(0)
                 .build();
         conversationGroupService.saveMessage(record);
         upsertConversation(conversationId, userId, message);
@@ -189,50 +191,65 @@ public class RedisConversationMemoryService implements ConversationMemoryService
             if (total < triggerTurns) {
                 return;
             }
-            ConversationMessageDO latestSummary = loadLatestSummaryRecord(conversationId, userId);
-            int summarizeCount = (int) Math.max(0, total - maxTurns);
-            if (summarizeCount <= 0) {
-                summarizeCount = (int) Math.min(total, triggerTurns);
+            if (maxTurns == 0) {
+                return;
             }
-            int fetchLimit = Math.max(1, summarizeCount * 2 + 2);
-            List<ConversationMessageDO> toSummarize = conversationGroupService.listEarliestUserMessages(
+            ConversationSummaryDO latestSummary = loadLatestSummaryRecord(conversationId, userId);
+            List<ConversationMessageDO> latestUserTurns = conversationGroupService.listLatestUserOnlyMessages(
                     conversationId,
                     userId,
-                    fetchLimit
+                    maxTurns
+            );
+            if (latestUserTurns.size() < maxTurns) {
+                return;
+            }
+            Date cutoff = latestUserTurns.stream()
+                    .map(ConversationMessageDO::getCreateTime)
+                    .filter(Objects::nonNull)
+                    .min(Date::compareTo)
+                    .orElse(null);
+            if (cutoff == null) {
+                return;
+            }
+            Date after = null;
+            if (latestSummary != null) {
+                after = latestSummary.getUpdateTime();
+                if (after == null) {
+                    after = latestSummary.getCreateTime();
+                }
+            }
+            if (after != null && !after.before(cutoff)) {
+                return;
+            }
+            List<ConversationMessageDO> toSummarize = conversationGroupService.listMessagesBetween(
+                    conversationId,
+                    userId,
+                    after,
+                    cutoff
             );
             if (toSummarize == null || toSummarize.isEmpty()) {
                 return;
             }
-            List<ConversationMessageDO> rollingMessages = filterRollingMessages(
-                    capByUserTurns(toSummarize, summarizeCount),
-                    latestSummary
-            );
-            if (rollingMessages.isEmpty()) {
-                return;
-            }
-            if (latestSummary != null && rollingMessages.size() < triggerTurns) {
-                return;
-            }
             String existingSummary = latestSummary == null ? "" : latestSummary.getContent();
-            String summary = summarizeMessages(rollingMessages, existingSummary);
+            String summary = summarizeMessages(toSummarize, existingSummary);
             if (StrUtil.isBlank(summary)) {
                 return;
             }
             if (latestSummary == null) {
-                ConversationMessageDO first = toSummarize.get(0);
-                ConversationMessageDO summaryRecord = ConversationMessageDO.builder()
+                ConversationSummaryDO summaryRecord = ConversationSummaryDO.builder()
                         .conversationId(conversationId)
                         .userId(userId)
-                        .role(ChatMessage.Role.SYSTEM.name().toLowerCase())
                         .content(summary)
-                        .isSummary(1)
-                        .createTime(first.getCreateTime())
+                        .createTime(cutoff)
+                        .updateTime(cutoff)
                         .build();
                 conversationGroupService.upsertSummary(summaryRecord);
                 refreshCache(conversationId, userId);
             } else {
                 latestSummary.setContent(summary);
+                latestSummary.setUpdateTime(cutoff);
                 conversationGroupService.upsertSummary(latestSummary);
+                refreshCache(conversationId, userId);
             }
         } finally {
             unlockIfOwner(lock);
@@ -252,24 +269,6 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         if (lock.isHeldByCurrentThread()) {
             lock.unlock();
         }
-    }
-
-    private List<ConversationMessageDO> filterRollingMessages(List<ConversationMessageDO> messages,
-                                                              ConversationMessageDO latestSummary) {
-        if (latestSummary == null) {
-            return messages;
-        }
-        java.util.Date cutoff = latestSummary.getUpdateTime();
-        if (cutoff == null) {
-            cutoff = latestSummary.getCreateTime();
-        }
-        if (cutoff == null) {
-            return messages;
-        }
-        java.util.Date finalCutoff = cutoff;
-        return messages.stream()
-                .filter(item -> item.getCreateTime() != null && item.getCreateTime().after(finalCutoff))
-                .toList();
     }
 
     private String summarizeMessages(List<ConversationMessageDO> messages, String existingSummary) {
@@ -363,12 +362,19 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     }
 
     private ChatMessage loadLatestSummary(String conversationId, String userId) {
-        ConversationMessageDO summary = loadLatestSummaryRecord(conversationId, userId);
+        ConversationSummaryDO summary = loadLatestSummaryRecord(conversationId, userId);
         return toChatMessage(summary);
     }
 
-    private ConversationMessageDO loadLatestSummaryRecord(String conversationId, String userId) {
+    private ConversationSummaryDO loadLatestSummaryRecord(String conversationId, String userId) {
         return conversationGroupService.findLatestSummary(conversationId, userId);
+    }
+
+    private ChatMessage toChatMessage(ConversationSummaryDO record) {
+        if (record == null || StrUtil.isBlank(record.getContent())) {
+            return null;
+        }
+        return new ChatMessage(ChatMessage.Role.SYSTEM, record.getContent());
     }
 
     private ChatMessage toChatMessage(ConversationMessageDO record) {
@@ -470,33 +476,6 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         String normalized = role.trim().toLowerCase();
         return "user".equals(normalized) || "assistant".equals(normalized);
-    }
-
-    private List<ConversationMessageDO> capByUserTurns(List<ConversationMessageDO> messages, int turns) {
-        if (messages == null || messages.isEmpty() || turns <= 0) {
-            return List.of();
-        }
-        List<ConversationMessageDO> result = new ArrayList<>();
-        int userCount = 0;
-        boolean waitingForAssistant = false;
-        for (ConversationMessageDO message : messages) {
-            if (message == null || StrUtil.isBlank(message.getContent())) {
-                continue;
-            }
-            if (isHistoryRole(message.getRole())) {
-                result.add(message);
-                if ("user".equalsIgnoreCase(message.getRole())) {
-                    userCount++;
-                    waitingForAssistant = true;
-                } else if ("assistant".equalsIgnoreCase(message.getRole()) && waitingForAssistant) {
-                    waitingForAssistant = false;
-                }
-                if (userCount >= turns && !waitingForAssistant) {
-                    break;
-                }
-            }
-        }
-        return result;
     }
 
     private ChatMessage decorateSummary(ChatMessage summary) {

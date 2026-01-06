@@ -4,8 +4,10 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.dao.entity.ConversationDO;
 import com.nageoffer.ai.ragent.dao.entity.ConversationMessageDO;
+import com.nageoffer.ai.ragent.dao.entity.ConversationSummaryDO;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationMapper;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationMessageMapper;
+import com.nageoffer.ai.ragent.dao.mapper.ConversationSummaryMapper;
 import com.nageoffer.ai.ragent.service.ConversationGroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import java.util.List;
 public class ConversationGroupServiceImpl implements ConversationGroupService {
 
     private final ConversationMessageMapper messageMapper;
+    private final ConversationSummaryMapper summaryMapper;
     private final ConversationMapper conversationMapper;
 
     @Override
@@ -29,7 +32,22 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, userId)
                         .in(ConversationMessageDO::getRole, "user", "assistant")
-                        .eq(ConversationMessageDO::getIsSummary, 0)
+                        .eq(ConversationMessageDO::getDeleted, 0)
+                        .orderByDesc(ConversationMessageDO::getCreateTime)
+                        .last("limit " + limit)
+        );
+    }
+
+    @Override
+    public List<ConversationMessageDO> listLatestUserOnlyMessages(String conversationId, String userId, int limit) {
+        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId) || limit <= 0) {
+            return List.of();
+        }
+        return messageMapper.selectList(
+                Wrappers.lambdaQuery(ConversationMessageDO.class)
+                        .eq(ConversationMessageDO::getConversationId, conversationId)
+                        .eq(ConversationMessageDO::getUserId, userId)
+                        .eq(ConversationMessageDO::getRole, "user")
                         .eq(ConversationMessageDO::getDeleted, 0)
                         .orderByDesc(ConversationMessageDO::getCreateTime)
                         .last("limit " + limit)
@@ -47,10 +65,33 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, safeUserId)
                         .in(ConversationMessageDO::getRole, "user", "assistant")
-                        .eq(ConversationMessageDO::getIsSummary, 0)
                         .eq(ConversationMessageDO::getDeleted, 0)
                         .orderByAsc(ConversationMessageDO::getCreateTime)
                         .last("limit " + limit)
+        );
+    }
+
+    @Override
+    public List<ConversationMessageDO> listMessagesBetween(String conversationId,
+                                                           String userId,
+                                                           java.util.Date after,
+                                                           java.util.Date before) {
+        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
+            return List.of();
+        }
+        var query = Wrappers.lambdaQuery(ConversationMessageDO.class)
+                .eq(ConversationMessageDO::getConversationId, conversationId)
+                .eq(ConversationMessageDO::getUserId, userId)
+                .in(ConversationMessageDO::getRole, "user", "assistant")
+                .eq(ConversationMessageDO::getDeleted, 0);
+        if (after != null) {
+            query.gt(ConversationMessageDO::getCreateTime, after);
+        }
+        if (before != null) {
+            query.lt(ConversationMessageDO::getCreateTime, before);
+        }
+        return messageMapper.selectList(
+                query.orderByAsc(ConversationMessageDO::getCreateTime)
         );
     }
 
@@ -64,7 +105,6 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, userId)
                         .eq(ConversationMessageDO::getRole, "user")
-                        .eq(ConversationMessageDO::getIsSummary, 0)
                         .eq(ConversationMessageDO::getDeleted, 0)
         );
     }
@@ -75,17 +115,16 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
     }
 
     @Override
-    public ConversationMessageDO findLatestSummary(String conversationId, String userId) {
+    public ConversationSummaryDO findLatestSummary(String conversationId, String userId) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return null;
         }
-        List<ConversationMessageDO> summaries = messageMapper.selectList(
-                Wrappers.lambdaQuery(ConversationMessageDO.class)
-                        .eq(ConversationMessageDO::getConversationId, conversationId)
-                        .eq(ConversationMessageDO::getUserId, userId)
-                        .eq(ConversationMessageDO::getIsSummary, 1)
-                        .eq(ConversationMessageDO::getDeleted, 0)
-                        .orderByDesc(ConversationMessageDO::getCreateTime)
+        List<ConversationSummaryDO> summaries = summaryMapper.selectList(
+                Wrappers.lambdaQuery(ConversationSummaryDO.class)
+                        .eq(ConversationSummaryDO::getConversationId, conversationId)
+                        .eq(ConversationSummaryDO::getUserId, userId)
+                        .eq(ConversationSummaryDO::getDeleted, 0)
+                        .orderByDesc(ConversationSummaryDO::getCreateTime)
                         .last("limit 1")
         );
         if (summaries == null || summaries.isEmpty()) {
@@ -103,14 +142,14 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
     }
 
     @Override
-    public void upsertSummary(ConversationMessageDO record) {
+    public void upsertSummary(ConversationSummaryDO record) {
         if (record == null) {
             return;
         }
         if (record.getId() == null) {
-            messageMapper.insert(record);
+            summaryMapper.insert(record);
         } else {
-            messageMapper.updateById(record);
+            summaryMapper.updateById(record);
         }
     }
 

@@ -21,7 +21,5 @@ public class ConversationMessageVO {
 
     private String content;
 
-    private Integer isSummary;
-
     private Date createTime;
 }
