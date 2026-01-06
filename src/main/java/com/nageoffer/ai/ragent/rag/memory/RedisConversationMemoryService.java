@@ -186,13 +186,13 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
         try {
             long total = conversationGroupService.countUserMessages(conversationId, userId);
-            if (total <= triggerTurns || total <= maxTurns) {
+            if (total < triggerTurns) {
                 return;
             }
             ConversationMessageDO latestSummary = loadLatestSummaryRecord(conversationId, userId);
             int summarizeCount = (int) Math.max(0, total - maxTurns);
             if (summarizeCount <= 0) {
-                return;
+                summarizeCount = (int) Math.min(total, triggerTurns);
             }
             int fetchLimit = Math.max(1, summarizeCount * 2 + 2);
             List<ConversationMessageDO> toSummarize = conversationGroupService.listEarliestUserMessages(
@@ -273,13 +273,19 @@ public class RedisConversationMemoryService implements ConversationMemoryService
     }
 
     private String summarizeMessages(List<ConversationMessageDO> messages, String existingSummary) {
-        String content = buildSummaryContent(messages, existingSummary);
+        String content = buildSummaryContent(messages);
         if (StrUtil.isBlank(content)) {
             return "";
         }
-        String prompt = CONVERSATION_SUMMARY_PROMPT.formatted(content);
+        List<ChatMessage> summaryMessages = new ArrayList<>();
+        summaryMessages.add(ChatMessage.system(CONVERSATION_SUMMARY_PROMPT));
+        if (StrUtil.isNotBlank(existingSummary)) {
+            summaryMessages.add(ChatMessage.user("已有摘要（仅供参考，需在此基础上更新，禁止作为事实来源）：\n"
+                    + existingSummary.trim()));
+        }
+        summaryMessages.add(ChatMessage.user("新对话内容：\n" + content));
         ChatRequest request = ChatRequest.builder()
-                .messages(List.of(ChatMessage.user(prompt)))
+                .messages(summaryMessages)
                 .temperature(0.1D)
                 .topP(0.3D)
                 .thinking(false)
@@ -293,13 +299,8 @@ public class RedisConversationMemoryService implements ConversationMemoryService
         }
     }
 
-    private String buildSummaryContent(List<ConversationMessageDO> messages, String existingSummary) {
+    private String buildSummaryContent(List<ConversationMessageDO> messages) {
         StringBuilder sb = new StringBuilder();
-        if (StrUtil.isNotBlank(existingSummary)) {
-            sb.append("已有摘要：")
-                    .append(existingSummary.trim())
-                    .append("\n");
-        }
         for (ConversationMessageDO item : messages) {
             if (item == null || StrUtil.isBlank(item.getContent())) {
                 continue;
