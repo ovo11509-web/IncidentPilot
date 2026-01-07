@@ -119,33 +119,23 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return null;
         }
-        List<ConversationSummaryDO> summaries = summaryMapper.selectList(
+        return summaryMapper.selectOne(
                 Wrappers.lambdaQuery(ConversationSummaryDO.class)
                         .eq(ConversationSummaryDO::getConversationId, conversationId)
                         .eq(ConversationSummaryDO::getUserId, userId)
                         .eq(ConversationSummaryDO::getDeleted, 0)
-                        .orderByDesc(ConversationSummaryDO::getCreateTime)
+                        .orderByDesc(ConversationSummaryDO::getId)
                         .last("limit 1")
         );
-        if (summaries == null || summaries.isEmpty()) {
-            return null;
-        }
-        return summaries.get(0);
     }
 
     @Override
     public void saveMessage(ConversationMessageDO record) {
-        if (record == null) {
-            return;
-        }
         messageMapper.insert(record);
     }
 
     @Override
     public void upsertSummary(ConversationSummaryDO record) {
-        if (record == null) {
-            return;
-        }
         if (record.getId() == null) {
             summaryMapper.insert(record);
         } else {
@@ -168,9 +158,6 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
 
     @Override
     public void upsertConversation(ConversationDO record) {
-        if (record == null) {
-            return;
-        }
         if (record.getId() == null) {
             conversationMapper.insert(record);
         } else {

@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.memory;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.config.MemoryProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
@@ -71,7 +72,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
 
     @Override
     public ChatMessage loadLatestSummary(String conversationId, String userId) {
-        ConversationSummaryDO summary = loadLatestSummaryRecord(conversationId, userId);
+        ConversationSummaryDO summary = conversationGroupService.findLatestSummary(conversationId, userId);
         return toChatMessage(summary);
     }
 
@@ -110,7 +111,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             if (total <= maxTurns) {
                 return;
             }
-            ConversationSummaryDO latestSummary = loadLatestSummaryRecord(conversationId, userId);
+            ConversationSummaryDO latestSummary = conversationGroupService.findLatestSummary(conversationId, userId);
             List<ConversationMessageDO> latestUserTurns = conversationGroupService.listLatestUserOnlyMessages(
                     conversationId,
                     userId,
@@ -133,7 +134,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
                     after,
                     cutoff
             );
-            if (toSummarize == null || toSummarize.isEmpty()) {
+            if (CollUtil.isEmpty(toSummarize)) {
                 return;
             }
             Date summaryTime = resolveSummaryTime(toSummarize);
@@ -145,13 +146,15 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             if (StrUtil.isBlank(summary)) {
                 return;
             }
-            upsertSummary(latestSummary, conversationId, userId, summary, summaryTime);
+            upsertSummary(conversationId, userId, summary, summaryTime);
             log.info("摘要成功 - conversationId: {}, 消息数: {}, 耗时: {}ms",
                     conversationId, toSummarize.size(), System.currentTimeMillis() - startTime);
         } catch (Exception e) {
             log.error("摘要失败 - conversationId: {}, userId: {}", conversationId, userId, e);
         } finally {
-            unlockIfOwner(lock);
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
     }
 
@@ -164,24 +167,30 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
         }
     }
 
-    private void unlockIfOwner(RLock lock) {
-        if (lock.isHeldByCurrentThread()) {
-            lock.unlock();
-        }
-    }
-
     private String summarizeMessages(List<ConversationMessageDO> messages, String existingSummary) {
-        String content = buildSummaryContent(messages);
-        if (StrUtil.isBlank(content)) {
-            return "";
+        List<ChatMessage> historys = toHistoryMessages(messages);
+        if (CollUtil.isEmpty(historys)) {
+            return existingSummary;
         }
+
         List<ChatMessage> summaryMessages = new ArrayList<>();
-        summaryMessages.add(ChatMessage.system(CONVERSATION_SUMMARY_PROMPT));
+        String summaryPrompt = CONVERSATION_SUMMARY_PROMPT.replace(
+                "{summary_max_chars}",
+                String.valueOf(memoryProperties.getSummaryMaxChars())
+        );
+        summaryMessages.add(ChatMessage.system(summaryPrompt));
+
         if (StrUtil.isNotBlank(existingSummary)) {
-            summaryMessages.add(ChatMessage.user("已有摘要（仅供参考，需在此基础上更新，禁止作为事实来源）：\n"
-                    + existingSummary.trim()));
+            summaryMessages.add(ChatMessage.assistant(
+                    "历史摘要（仅用于合并去重，不得作为事实新增来源；若与本轮对话冲突，以本轮对话为准）：\n"
+                            + existingSummary.trim()
+            ));
         }
-        summaryMessages.add(ChatMessage.user("新对话内容：\n" + content));
+        summaryMessages.addAll(historys);
+        summaryMessages.add(ChatMessage.user(
+                "合并以上对话与历史摘要，去重后输出更新摘要。要求：严格≤{summary_max_chars}字符；仅一行。"
+        ));
+
         ChatRequest request = ChatRequest.builder()
                 .messages(summaryMessages)
                 .temperature(0.1D)
@@ -190,42 +199,37 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
                 .build();
         try {
             String result = llmService.chat(request);
-            return result == null ? "" : result.trim();
+            String normalized = result.trim();
+            log.info("对话摘要生成 - resultChars: {}", normalized.length());
+            return normalized;
         } catch (Exception e) {
             log.error("对话记忆摘要生成失败, conversationId相关消息数: {}", messages.size(), e);
             return "";
         }
     }
 
-    private String buildSummaryContent(List<ConversationMessageDO> messages) {
-        StringBuilder sb = new StringBuilder();
+    private List<ChatMessage> toHistoryMessages(List<ConversationMessageDO> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<ChatMessage> history = new ArrayList<>();
         for (ConversationMessageDO item : messages) {
             if (item == null || StrUtil.isBlank(item.getContent())) {
                 continue;
             }
-            if (isHistoryRole(item.getRole())) {
-                sb.append(toRoleLabel(item.getRole()))
-                        .append(item.getContent().trim())
-                        .append("\n");
+            String role = item.getRole();
+            if (role == null) {
+                continue;
+            }
+            if ("user".equalsIgnoreCase(role)) {
+                history.add(ChatMessage.user(item.getContent().trim()));
+                continue;
+            }
+            if ("assistant".equalsIgnoreCase(role)) {
+                history.add(ChatMessage.assistant(item.getContent().trim()));
             }
         }
-        return sb.toString().trim();
-    }
-
-    private String toRoleLabel(String role) {
-        if (StrUtil.isBlank(role)) {
-            return "";
-        }
-        return switch (role.trim().toLowerCase()) {
-            case "user" -> "用户：";
-            case "assistant" -> "助手：";
-            case "system" -> "系统：";
-            default -> "";
-        };
-    }
-
-    private ConversationSummaryDO loadLatestSummaryRecord(String conversationId, String userId) {
-        return conversationGroupService.findLatestSummary(conversationId, userId);
+        return history;
     }
 
     private ChatMessage toChatMessage(ConversationSummaryDO record) {
@@ -261,24 +265,14 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
                 .orElse(null);
     }
 
-    private void upsertSummary(ConversationSummaryDO latestSummary,
-                               String conversationId,
-                               String userId,
-                               String content,
-                               Date summaryTime) {
-        ConversationSummaryDO summaryRecord = latestSummary;
-        if (summaryRecord == null) {
-            summaryRecord = ConversationSummaryDO.builder()
-                    .conversationId(conversationId)
-                    .userId(userId)
-                    .content(content)
-                    .createTime(summaryTime)
-                    .updateTime(summaryTime)
-                    .build();
-        } else {
-            summaryRecord.setContent(content);
-            summaryRecord.setUpdateTime(summaryTime);
-        }
+    private void upsertSummary(String conversationId, String userId, String content, Date summaryTime) {
+        ConversationSummaryDO summaryRecord = ConversationSummaryDO.builder()
+                .conversationId(conversationId)
+                .userId(userId)
+                .content(content)
+                .createTime(summaryTime)
+                .updateTime(summaryTime)
+                .build();
         conversationGroupService.upsertSummary(summaryRecord);
         memoryStore.refreshCache(conversationId, userId);
     }
@@ -289,14 +283,6 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             throw new IllegalArgumentException("rag.memory.max-turns must be > 0");
         }
         return maxTurns;
-    }
-
-    private boolean isHistoryRole(String role) {
-        if (StrUtil.isBlank(role)) {
-            return false;
-        }
-        String normalized = role.trim().toLowerCase();
-        return "user".equals(normalized) || "assistant".equals(normalized);
     }
 
     private String buildLockKey(String conversationId, String userId) {

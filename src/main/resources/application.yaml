@@ -41,10 +41,11 @@ rag:
     max-history-chars: 500
 
   memory:
-    max-turns: 8
+    max-turns: 3
     ttl-minutes: 60
     summary-enabled: true
-    summary-trigger-turns: 3
+    summary-trigger-turns: 2
+    summary-max-chars: 200
     title-max-length: 30
 
 ai:

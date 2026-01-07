@@ -1,12 +1,16 @@
 package com.nageoffer.ai.ragent.config;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "rag.memory")
+@Validated
 public class MemoryProperties {
 
     /**
@@ -28,6 +32,13 @@ public class MemoryProperties {
      * 触发摘要的轮数阈值
      */
     private int summaryTriggerTurns = 12;
+
+    /**
+     * 摘要最大字数
+     */
+    @Min(200)
+    @Max(1000)
+    private int summaryMaxChars = 200;
 
     /**
      * 会话标题最大长度（用于提示词约束）

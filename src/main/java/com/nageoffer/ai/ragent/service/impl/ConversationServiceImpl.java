@@ -7,7 +7,11 @@ import com.nageoffer.ai.ragent.controller.request.ConversationCreateRequest;
 import com.nageoffer.ai.ragent.controller.request.ConversationUpdateRequest;
 import com.nageoffer.ai.ragent.controller.vo.ConversationVO;
 import com.nageoffer.ai.ragent.dao.entity.ConversationDO;
+import com.nageoffer.ai.ragent.dao.entity.ConversationMessageDO;
+import com.nageoffer.ai.ragent.dao.entity.ConversationSummaryDO;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationMapper;
+import com.nageoffer.ai.ragent.dao.mapper.ConversationMessageMapper;
+import com.nageoffer.ai.ragent.dao.mapper.ConversationSummaryMapper;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.service.ConversationService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +24,8 @@ import java.util.Date;
 public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationMapper conversationMapper;
+    private final ConversationMessageMapper messageMapper;
+    private final ConversationSummaryMapper summaryMapper;
 
     @Override
     public ConversationVO create(String userId, ConversationCreateRequest request) {
@@ -85,5 +91,17 @@ public class ConversationServiceImpl implements ConversationService {
             throw new ClientException("会话不存在");
         }
         conversationMapper.deleteById(record.getId());
+        messageMapper.delete(
+                Wrappers.lambdaQuery(ConversationMessageDO.class)
+                        .eq(ConversationMessageDO::getConversationId, conversationId)
+                        .eq(ConversationMessageDO::getUserId, userId)
+                        .eq(ConversationMessageDO::getDeleted, 0)
+        );
+        summaryMapper.delete(
+                Wrappers.lambdaQuery(ConversationSummaryDO.class)
+                        .eq(ConversationSummaryDO::getConversationId, conversationId)
+                        .eq(ConversationSummaryDO::getUserId, userId)
+                        .eq(ConversationSummaryDO::getDeleted, 0)
+        );
     }
 }
