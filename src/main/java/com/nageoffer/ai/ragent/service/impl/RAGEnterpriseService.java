@@ -1,6 +1,7 @@
 package com.nageoffer.ai.ragent.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
@@ -30,12 +31,15 @@ import com.nageoffer.ai.ragent.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.rag.rewrite.QueryRewriteService;
 import com.nageoffer.ai.ragent.rag.rewrite.RewriteResult;
 import com.nageoffer.ai.ragent.service.RAGService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -109,15 +113,39 @@ public class RAGEnterpriseService implements RAGService {
         this.ragRetrievalExecutor = ragRetrievalExecutor;
     }
 
-    // ==================== 主入口 ====================
-
     @Override
-    public void streamAnswer(String question, int topK, StreamCallback callback) {
-        streamAnswer(question, topK, null, callback);
-    }
+    public void streamAnswer(String question, String conversationId, HttpServletResponse response, SseEmitter emitter) {
+        String actualConversationId = resolveConversationId(conversationId);
+        response.setHeader("X-Conversation-Id", actualConversationId);
 
-    @Override
-    public void streamAnswer(String question, int topK, String conversationId, StreamCallback callback) {
+        StreamCallback callback = new StreamCallback() {
+            @Override
+            public void onContent(String chunk) {
+                try {
+                    sendChunked(emitter, chunk);
+                } catch (Exception e) {
+                    log.error("SSE 发送失败", e);
+                    emitter.completeWithError(e);
+                }
+            }
+
+            @Override
+            public void onComplete() {
+                try {
+                    emitter.send(SseEmitter.event().name("done").data("[DONE]"));
+                } catch (IOException e) {
+                    log.error("SSE 发送失败", e);
+                    emitter.completeWithError(e);
+                }
+                emitter.complete();
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                emitter.completeWithError(t);
+            }
+        };
+
         List<ChatMessage> history = memoryService.load(conversationId, UserContext.getUserId());
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
 
@@ -136,7 +164,7 @@ public class RAGEnterpriseService implements RAGService {
             return;
         }
 
-        RetrievalContext ctx = buildPerQuestionContext(subIntents, topK);
+        RetrievalContext ctx = buildPerQuestionContext(subIntents, DEFAULT_TOP_K);
         if (ctx.isEmpty()) {
             String emptyReply = "未检索到与问题相关的文档内容。";
             if (StrUtil.isNotBlank(conversationId)) {
@@ -151,6 +179,29 @@ public class RAGEnterpriseService implements RAGService {
 
         StreamCallback wrapped = wrapWithMemory(conversationId, callback);
         streamLLMResponse(rewriteResult, ctx, mergedGroup, history, wrapped);
+    }
+
+    private String resolveConversationId(String conversationId) {
+        if (StrUtil.isBlank(conversationId)) {
+            return IdUtil.getSnowflakeNextIdStr();
+        }
+        return conversationId.trim();
+    }
+
+    private void sendChunked(SseEmitter emitter, String chunk) throws IOException {
+        if (StrUtil.isBlank(chunk)) {
+            return;
+        }
+        try {
+            int[] codePoints = chunk.codePoints().toArray();
+            for (int codePoint : codePoints) {
+                String character = new String(new int[]{codePoint}, 0, 1);
+                emitter.send(SseEmitter.event().name("message").data(Map.of("delta", character)));
+            }
+        } catch (Exception e) {
+            log.error("UTF-8 字符分割发送失败，回退到原始文本发送", e);
+            emitter.send(SseEmitter.event().name("message").data(Map.of("delta", chunk)));
+        }
     }
 
     // ==================== 意图分离 ====================
