@@ -1,7 +1,6 @@
 package com.nageoffer.ai.ragent.controller;
 
 import com.nageoffer.ai.ragent.service.RAGEnterpriseService;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,10 +18,9 @@ public class RAGEnterpriseController {
 
     @GetMapping(value = "/rag/v3/chat", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter chat(@RequestParam String question,
-                           @RequestParam(required = false) String conversationId,
-                           HttpServletResponse response) {
+                           @RequestParam(required = false) String conversationId) {
         SseEmitter emitter = new SseEmitter(0L);
-        ragEnterpriseService.streamChat(question, conversationId, response, emitter);
+        ragEnterpriseService.streamChat(question, conversationId, emitter);
         return emitter;
     }
 }
