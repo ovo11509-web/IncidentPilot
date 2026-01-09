@@ -7,6 +7,7 @@ import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.IntentKind;
+import com.nageoffer.ai.ragent.enums.SSEEventType;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
@@ -116,10 +117,12 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     public void streamChat(String question, String conversationId, SseEmitter emitter) {
         String actualConversationId = StrUtil.isEmpty(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         try {
-            emitter.send(SseEmitter.event().name("meta").data(Map.of(
-                    "conversationId", actualConversationId,
-                    "taskId", IdUtil.getSnowflakeNextIdStr()
-            )));
+            emitter.send(SseEmitter.event().name(SSEEventType.META.value()).data(
+                    Map.of(
+                            "conversationId", actualConversationId,
+                            "taskId", IdUtil.getSnowflakeNextIdStr()
+                    )
+            ));
         } catch (IOException e) {
             log.error("SSE meta 发送失败", e);
             emitter.completeWithError(e);
@@ -137,11 +140,11 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                         int[] codePoints = chunk.codePoints().toArray();
                         for (int codePoint : codePoints) {
                             String character = new String(new int[]{codePoint}, 0, 1);
-                            emitter.send(SseEmitter.event().name("message").data(Map.of("delta", character)));
+                            emitter.send(SseEmitter.event().name(SSEEventType.MESSAGE.value()).data(Map.of("delta", character)));
                         }
                     } catch (Exception e) {
                         log.error("UTF-8 字符分割发送失败，回退到原始文本发送", e);
-                        emitter.send(SseEmitter.event().name("message").data(Map.of("delta", chunk)));
+                        emitter.send(SseEmitter.event().name(SSEEventType.MESSAGE.value()).data(Map.of("delta", chunk)));
                     }
                 } catch (Exception e) {
                     log.error("SSE 发送失败", e);
@@ -152,7 +155,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
             @Override
             public void onComplete() {
                 try {
-                    emitter.send(SseEmitter.event().name("done").data("[DONE]"));
+                    emitter.send(SseEmitter.event().name(SSEEventType.DONE.value()).data("[DONE]"));
                 } catch (IOException e) {
                     log.error("SSE 发送失败", e);
                     emitter.completeWithError(e);
