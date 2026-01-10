@@ -129,8 +129,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         boolean allSystemOnly = subIntents.stream()
                 .allMatch(si -> isSystemOnly(si.nodeScores));
         if (allSystemOnly) {
-            StreamCallback wrapped = wrapWithMemory(actualConversationId, callback);
-            streamSystemResponse(rewriteResult.rewrittenQuestion(), wrapped);
+            streamSystemResponse(rewriteResult.rewrittenQuestion(), callback);
             return;
         }
 
@@ -145,8 +144,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         // 聚合所有意图用于 prompt 规划
         IntentGroup mergedGroup = mergeIntentGroup(subIntents);
 
-        StreamCallback wrapped = wrapWithMemory(actualConversationId, callback);
-        streamLLMResponse(rewriteResult, ctx, mergedGroup, history, wrapped);
+        streamLLMResponse(rewriteResult, ctx, mergedGroup, history, callback);
     }
 
     private StreamCallback getStreamCallback(SseEmitter emitter, String conversationId) {
@@ -154,12 +152,14 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         sender.sendEvent(SSEEventType.META.value(),
                 new MetaPayload(conversationId, IdUtil.getSnowflakeNextIdStr()));
 
+        StringBuilder answer = new StringBuilder();
         return new StreamCallback() {
             @Override
             public void onContent(String chunk) {
                 if (StrUtil.isBlank(chunk)) {
                     return;
                 }
+                answer.append(chunk);
                 int[] codePoints = chunk.codePoints().toArray();
                 for (int codePoint : codePoints) {
                     String character = new String(new int[]{codePoint}, 0, 1);
@@ -169,6 +169,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
 
             @Override
             public void onComplete() {
+                memoryService.append(conversationId, UserContext.getUserId(), ChatMessage.assistant(answer.toString()));
                 sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
                 sender.complete();
             }
@@ -468,32 +469,6 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                 .userQuestion(question)
                 .parameters(params)
                 .build();
-    }
-
-    private StreamCallback wrapWithMemory(String conversationId, StreamCallback delegate) {
-        StringBuilder answer = new StringBuilder();
-        return new StreamCallback() {
-            @Override
-            public void onContent(String chunk) {
-                if (StrUtil.isNotBlank(chunk)) {
-                    answer.append(chunk);
-                }
-                delegate.onContent(chunk);
-            }
-
-            @Override
-            public void onComplete() {
-                if (!answer.isEmpty()) {
-                    memoryService.append(conversationId, UserContext.getUserId(), ChatMessage.assistant(answer.toString()));
-                }
-                delegate.onComplete();
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                delegate.onError(t);
-            }
-        };
     }
 
     // ==================== 内部数据结构 ====================
