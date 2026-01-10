@@ -6,6 +6,11 @@ import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
+import com.nageoffer.ai.ragent.dto.IntentCandidate;
+import com.nageoffer.ai.ragent.dto.IntentGroup;
+import com.nageoffer.ai.ragent.dto.KbResult;
+import com.nageoffer.ai.ragent.dto.RetrievalContext;
+import com.nageoffer.ai.ragent.dto.SubQuestionIntent;
 import com.nageoffer.ai.ragent.enums.IntentKind;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
@@ -34,8 +39,6 @@ import com.nageoffer.ai.ragent.rag.rewrite.RewriteResult;
 import com.nageoffer.ai.ragent.service.RAGEnterpriseService;
 import com.nageoffer.ai.ragent.service.handler.StreamChatEventHandler;
 import com.nageoffer.ai.ragent.service.handler.StreamTaskManager;
-import lombok.Builder;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -447,51 +450,5 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                 .userQuestion(question)
                 .parameters(params)
                 .build();
-    }
-
-    // ==================== 内部数据结构 ====================
-
-    /**
-     * 意图分组
-     */
-    private record IntentGroup(List<NodeScore> mcpIntents, List<NodeScore> kbIntents) {
-    }
-
-    private record SubQuestionIntent(String subQuestion, List<NodeScore> nodeScores) {
-    }
-
-    private record IntentCandidate(int subQuestionIndex, NodeScore nodeScore) {
-    }
-
-    /**
-     * KB 检索结果
-     */
-    private record KbResult(String groupedContext, Map<String, List<RetrievedChunk>> intentChunks) {
-        static KbResult empty() {
-            return new KbResult("", Map.of());
-        }
-    }
-
-    /**
-     * 检索上下文（MCP + KB 结果的统一承载）
-     */
-    @Data
-    @Builder
-    private static class RetrievalContext {
-        private String mcpContext;
-        private String kbContext;
-        private Map<String, List<RetrievedChunk>> intentChunks;
-
-        boolean hasMcp() {
-            return StrUtil.isNotBlank(mcpContext);
-        }
-
-        boolean hasKb() {
-            return StrUtil.isNotBlank(kbContext);
-        }
-
-        boolean isEmpty() {
-            return !hasMcp() && !hasKb();
-        }
     }
 }
