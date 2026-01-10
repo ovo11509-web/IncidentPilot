@@ -6,12 +6,8 @@ import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
-import com.nageoffer.ai.ragent.dto.MessageDelta;
-import com.nageoffer.ai.ragent.dto.MetaPayload;
 import com.nageoffer.ai.ragent.enums.IntentKind;
-import com.nageoffer.ai.ragent.enums.SSEEventType;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
-import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.rag.intent.IntentClassifier;
@@ -35,6 +31,7 @@ import com.nageoffer.ai.ragent.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.rag.rewrite.QueryRewriteService;
 import com.nageoffer.ai.ragent.rag.rewrite.RewriteResult;
 import com.nageoffer.ai.ragent.service.RAGEnterpriseService;
+import com.nageoffer.ai.ragent.service.handler.StreamChatCallbackHandler;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -118,7 +115,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     @Override
     public void streamChat(String question, String conversationId, SseEmitter emitter) {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
-        StreamCallback callback = getStreamCallback(emitter, actualConversationId);
+        StreamCallback callback = new StreamChatCallbackHandler(emitter, conversationId, memoryService);
 
         List<ChatMessage> history = memoryService.load(actualConversationId, UserContext.getUserId());
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
@@ -127,7 +124,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
 
         List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult);
         boolean allSystemOnly = subIntents.stream()
-                .allMatch(si -> isSystemOnly(si.nodeScores));
+                .allMatch(si -> isSystemOnly(si.nodeScores()));
         if (allSystemOnly) {
             streamSystemResponse(rewriteResult.rewrittenQuestion(), callback);
             return;
@@ -145,40 +142,6 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         IntentGroup mergedGroup = mergeIntentGroup(subIntents);
 
         streamLLMResponse(rewriteResult, ctx, mergedGroup, history, callback);
-    }
-
-    private StreamCallback getStreamCallback(SseEmitter emitter, String conversationId) {
-        SseEmitterSender sender = new SseEmitterSender(emitter);
-        sender.sendEvent(SSEEventType.META.value(),
-                new MetaPayload(conversationId, IdUtil.getSnowflakeNextIdStr()));
-
-        StringBuilder answer = new StringBuilder();
-        return new StreamCallback() {
-            @Override
-            public void onContent(String chunk) {
-                if (StrUtil.isBlank(chunk)) {
-                    return;
-                }
-                answer.append(chunk);
-                int[] codePoints = chunk.codePoints().toArray();
-                for (int codePoint : codePoints) {
-                    String character = new String(new int[]{codePoint}, 0, 1);
-                    sender.sendEvent(SSEEventType.MESSAGE.value(), new MessageDelta(character));
-                }
-            }
-
-            @Override
-            public void onComplete() {
-                memoryService.append(conversationId, UserContext.getUserId(), ChatMessage.assistant(answer.toString()));
-                sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
-                sender.complete();
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                sender.fail(t);
-            }
-        };
     }
 
     // ==================== 意图分离 ====================
@@ -216,7 +179,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
 
     private List<SubQuestionIntent> capTotalIntents(List<SubQuestionIntent> subIntents) {
         int total = subIntents.stream()
-                .mapToInt(si -> si.nodeScores.size())
+                .mapToInt(si -> si.nodeScores().size())
                 .sum();
         if (total <= RAGConstant.MAX_INTENT_COUNT) {
             return subIntents;
@@ -226,10 +189,10 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         Map<Integer, List<NodeScore>> retainedByIndex = new ConcurrentHashMap<>();
         for (int i = 0; i < subIntents.size(); i++) {
             SubQuestionIntent si = subIntents.get(i);
-            if (CollUtil.isEmpty(si.nodeScores)) {
+            if (CollUtil.isEmpty(si.nodeScores())) {
                 continue;
             }
-            List<NodeScore> sorted = si.nodeScores.stream()
+            List<NodeScore> sorted = si.nodeScores().stream()
                     .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
                     .toList();
             retainedByIndex.computeIfAbsent(i, k -> new ArrayList<>())
@@ -242,11 +205,11 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         int remaining = Math.max(0, RAGConstant.MAX_INTENT_COUNT
                 - retainedByIndex.values().stream().mapToInt(List::size).sum());
         if (remaining > 0 && CollUtil.isNotEmpty(candidates)) {
-            candidates.sort((a, b) -> Double.compare(b.nodeScore.getScore(), a.nodeScore.getScore()));
+            candidates.sort((a, b) -> Double.compare(b.nodeScore().getScore(), a.nodeScore().getScore()));
             for (int i = 0; i < Math.min(remaining, candidates.size()); i++) {
                 IntentCandidate kept = candidates.get(i);
-                retainedByIndex.computeIfAbsent(kept.subQuestionIndex, k -> new ArrayList<>())
-                        .add(kept.nodeScore);
+                retainedByIndex.computeIfAbsent(kept.subQuestionIndex(), k -> new ArrayList<>())
+                        .add(kept.nodeScore());
             }
         }
 
@@ -254,7 +217,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         for (int i = 0; i < subIntents.size(); i++) {
             SubQuestionIntent si = subIntents.get(i);
             List<NodeScore> retained = retainedByIndex.getOrDefault(i, List.of());
-            capped.add(new SubQuestionIntent(si.subQuestion, retained));
+            capped.add(new SubQuestionIntent(si.subQuestion(), retained));
         }
         return capped;
     }
@@ -263,8 +226,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         List<NodeScore> mcpIntents = new ArrayList<>();
         List<NodeScore> kbIntents = new ArrayList<>();
         for (SubQuestionIntent si : subIntents) {
-            mcpIntents.addAll(filterMcpIntents(si.nodeScores));
-            kbIntents.addAll(filterKbIntents(si.nodeScores));
+            mcpIntents.addAll(filterMcpIntents(si.nodeScores()));
+            kbIntents.addAll(filterKbIntents(si.nodeScores()));
         }
         return new IntentGroup(mcpIntents, kbIntents);
     }
@@ -300,25 +263,25 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
 
         List<CompletableFuture<Void>> tasks = subIntents.stream()
                 .map(si -> CompletableFuture.runAsync(() -> {
-                    List<NodeScore> kbIntents = filterKbIntents(si.nodeScores);
-                    List<NodeScore> mcpIntents = filterMcpIntents(si.nodeScores);
+                    List<NodeScore> kbIntents = filterKbIntents(si.nodeScores());
+                    List<NodeScore> mcpIntents = filterMcpIntents(si.nodeScores());
 
                     if (CollUtil.isNotEmpty(kbIntents)) {
-                        KbResult kbResult = retrieveAndRerank(si.subQuestion, kbIntents, finalTopK);
-                        if (StrUtil.isNotBlank(kbResult.groupedContext)) {
+                        KbResult kbResult = retrieveAndRerank(si.subQuestion(), kbIntents, finalTopK);
+                        if (StrUtil.isNotBlank(kbResult.groupedContext())) {
                             synchronized (kbBuilder) {
-                                kbBuilder.append("### 子问题：").append(si.subQuestion).append("\n")
-                                        .append(kbResult.groupedContext).append("\n\n");
+                                kbBuilder.append("### 子问题：").append(si.subQuestion()).append("\n")
+                                        .append(kbResult.groupedContext()).append("\n\n");
                             }
-                            mergedIntentChunks.putAll(kbResult.intentChunks);
+                            mergedIntentChunks.putAll(kbResult.intentChunks());
                         }
                     }
 
                     if (CollUtil.isNotEmpty(mcpIntents)) {
-                        String mcpContext = executeMcpAndMerge(si.subQuestion, mcpIntents);
+                        String mcpContext = executeMcpAndMerge(si.subQuestion(), mcpIntents);
                         if (StrUtil.isNotBlank(mcpContext)) {
                             synchronized (mcpBuilder) {
-                                mcpBuilder.append("### 子问题：").append(si.subQuestion).append("\n")
+                                mcpBuilder.append("### 子问题：").append(si.subQuestion()).append("\n")
                                         .append(mcpContext).append("\n\n");
                             }
                         }
@@ -415,11 +378,11 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                                    IntentGroup intentGroup, List<ChatMessage> history, StreamCallback callback) {
         PromptContext promptContext = PromptContext.builder()
                 .question(rewriteResult.joinSubQuestions())
-                .mcpContext(ctx.mcpContext)
-                .kbContext(ctx.kbContext)
-                .mcpIntents(intentGroup.mcpIntents)
-                .kbIntents(intentGroup.kbIntents)
-                .intentChunks(ctx.intentChunks)
+                .mcpContext(ctx.getMcpContext())
+                .kbContext(ctx.getKbContext())
+                .mcpIntents(intentGroup.mcpIntents())
+                .kbIntents(intentGroup.kbIntents())
+                .intentChunks(ctx.getIntentChunks())
                 .build();
 
         List<ChatMessage> messages = promptBuilder.buildStructuredMessages(
