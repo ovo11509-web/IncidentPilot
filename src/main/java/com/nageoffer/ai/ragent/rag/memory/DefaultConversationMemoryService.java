@@ -21,7 +21,7 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
 
     @Override
     public List<ChatMessage> load(String conversationId, String userId) {
-        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
+        if (StrUtil.isBlank(conversationId)) {
             return List.of();
         }
         ChatMessage summary = summaryService.loadLatestSummary(conversationId, userId);

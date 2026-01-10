@@ -117,19 +117,15 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
 
     @Override
     public void streamChat(String question, String conversationId, SseEmitter emitter) {
-        String actualConversationId = StrUtil.isEmpty(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
+        String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         StreamCallback callback = getStreamCallback(emitter, actualConversationId);
 
         List<ChatMessage> history = memoryService.load(actualConversationId, UserContext.getUserId());
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
 
-        ChatMessage userMessage = ChatMessage.user(question);
-        if (StrUtil.isNotBlank(conversationId)) {
-            memoryService.append(actualConversationId, UserContext.getUserId(), userMessage);
-        }
+        memoryService.append(actualConversationId, UserContext.getUserId(), ChatMessage.user(question));
 
         List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult);
-
         boolean allSystemOnly = subIntents.stream()
                 .allMatch(si -> isSystemOnly(si.nodeScores));
         if (allSystemOnly) {
@@ -141,9 +137,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         RetrievalContext ctx = buildPerQuestionContext(subIntents, DEFAULT_TOP_K);
         if (ctx.isEmpty()) {
             String emptyReply = "未检索到与问题相关的文档内容。";
-            if (StrUtil.isNotBlank(conversationId)) {
-                memoryService.append(actualConversationId, UserContext.getUserId(), ChatMessage.assistant(emptyReply));
-            }
+            memoryService.append(actualConversationId, UserContext.getUserId(), ChatMessage.assistant(emptyReply));
             callback.onContent(emptyReply);
             return;
         }
@@ -155,10 +149,10 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         streamLLMResponse(rewriteResult, ctx, mergedGroup, history, wrapped);
     }
 
-    private StreamCallback getStreamCallback(SseEmitter emitter, String actualConversationId) {
+    private StreamCallback getStreamCallback(SseEmitter emitter, String conversationId) {
         SseEmitterSender sender = new SseEmitterSender(emitter);
         sender.sendEvent(SSEEventType.META.value(),
-                new MetaPayload(actualConversationId, IdUtil.getSnowflakeNextIdStr()));
+                new MetaPayload(conversationId, IdUtil.getSnowflakeNextIdStr()));
 
         return new StreamCallback() {
             @Override
@@ -477,9 +471,6 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     }
 
     private StreamCallback wrapWithMemory(String conversationId, StreamCallback delegate) {
-        if (StrUtil.isBlank(conversationId)) {
-            return delegate;
-        }
         StringBuilder answer = new StringBuilder();
         return new StreamCallback() {
             @Override
