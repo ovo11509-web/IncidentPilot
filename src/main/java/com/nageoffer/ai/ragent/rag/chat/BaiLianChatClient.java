@@ -244,17 +244,17 @@ public class BaiLianChatClient implements ChatClient {
 
     private AIModelProperties.ProviderConfig requireProvider(ModelTarget target) {
         if (target == null || target.provider() == null) {
-            throw new IllegalStateException("BaiLian provider config is missing");
+            throw new IllegalStateException("百炼提供商配置缺失");
         }
         if (target.provider().getApiKey() == null || target.provider().getApiKey().isBlank()) {
-            throw new IllegalStateException("BaiLian apiKey is missing");
+            throw new IllegalStateException("百炼API密钥缺失");
         }
         return target.provider();
     }
 
     private String requireModel(ModelTarget target) {
         if (target == null || target.candidate() == null || target.candidate().getModel() == null) {
-            throw new IllegalStateException("BaiLian model name is missing");
+            throw new IllegalStateException("百炼模型名称缺失");
         }
         return target.candidate().getModel();
     }

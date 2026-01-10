@@ -30,8 +30,7 @@ public class RoutingLLMService implements LLMService {
             ModelSelector selector,
             ModelHealthStore healthStore,
             ModelRoutingExecutor executor,
-            List<ChatClient> clients
-    ) {
+            List<ChatClient> clients) {
         this.selector = selector;
         this.healthStore = healthStore;
         this.executor = executor;
@@ -53,7 +52,7 @@ public class RoutingLLMService implements LLMService {
     public StreamSession streamChat(ChatRequest request, StreamCallback callback) {
         List<ModelTarget> targets = selector.selectChatCandidates();
         if (targets.isEmpty()) {
-            throw new RemoteException("No chat model candidates available");
+            throw new RemoteException("没有可用的Chat模型候选者");
         }
 
         String label = ModelCapability.CHAT.getDisplayName();
@@ -82,12 +81,12 @@ public class RoutingLLMService implements LLMService {
             } catch (Exception e) {
                 last = e;
                 healthStore.markFailure(target.id());
-                log.warn("{} streaming failed before content, fallback to next. modelId={}, provider={}",
+                log.warn("{} 流式传输在内容之前失败，回退到下一个。modelId：{}，provider：{}",
                         label, target.id(), target.candidate().getProvider(), e);
             }
         }
         throw new RemoteException(
-                "All chat model candidates failed: " + (last == null ? "unknown" : last.getMessage()),
+                "所有Chat模型候选者都失败了: " + (last == null ? "未知" : last.getMessage()),
                 last,
                 com.nageoffer.ai.ragent.framework.errorcode.BaseErrorCode.REMOTE_ERROR
         );
@@ -96,7 +95,7 @@ public class RoutingLLMService implements LLMService {
     private ChatClient resolveClient(ModelTarget target, String label) {
         ChatClient client = clientsByProvider.get(target.candidate().getProvider());
         if (client == null) {
-            log.warn("{} provider client missing: provider={}, modelId={}",
+            log.warn("{} 提供商客户端缺失: provider：{}，modelId：{}",
                     label, target.candidate().getProvider(), target.id());
         }
         return client;

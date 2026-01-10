@@ -226,14 +226,14 @@ public class OllamaChatClient implements ChatClient {
 
     private AIModelProperties.ProviderConfig requireProvider(ModelTarget target) {
         if (target == null || target.provider() == null) {
-            throw new IllegalStateException("Ollama provider config is missing");
+            throw new IllegalStateException("Ollama 提供商配置缺失");
         }
         return target.provider();
     }
 
     private String requireModel(ModelTarget target) {
         if (target == null || target.candidate() == null || target.candidate().getModel() == null) {
-            throw new IllegalStateException("Ollama model name is missing");
+            throw new IllegalStateException("Ollama 模型名称缺失");
         }
         return target.candidate().getModel();
     }
