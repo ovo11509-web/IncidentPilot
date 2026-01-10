@@ -118,11 +118,49 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     @Override
     public void streamChat(String question, String conversationId, SseEmitter emitter) {
         String actualConversationId = StrUtil.isEmpty(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
+        StreamCallback callback = getStreamCallback(emitter, actualConversationId);
+
+        List<ChatMessage> history = memoryService.load(actualConversationId, UserContext.getUserId());
+        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
+
+        ChatMessage userMessage = ChatMessage.user(question);
+        if (StrUtil.isNotBlank(conversationId)) {
+            memoryService.append(actualConversationId, UserContext.getUserId(), userMessage);
+        }
+
+        List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult);
+
+        boolean allSystemOnly = subIntents.stream()
+                .allMatch(si -> isSystemOnly(si.nodeScores));
+        if (allSystemOnly) {
+            StreamCallback wrapped = wrapWithMemory(actualConversationId, callback);
+            streamSystemResponse(rewriteResult.rewrittenQuestion(), wrapped);
+            return;
+        }
+
+        RetrievalContext ctx = buildPerQuestionContext(subIntents, DEFAULT_TOP_K);
+        if (ctx.isEmpty()) {
+            String emptyReply = "未检索到与问题相关的文档内容。";
+            if (StrUtil.isNotBlank(conversationId)) {
+                memoryService.append(actualConversationId, UserContext.getUserId(), ChatMessage.assistant(emptyReply));
+            }
+            callback.onContent(emptyReply);
+            return;
+        }
+
+        // 聚合所有意图用于 prompt 规划
+        IntentGroup mergedGroup = mergeIntentGroup(subIntents);
+
+        StreamCallback wrapped = wrapWithMemory(actualConversationId, callback);
+        streamLLMResponse(rewriteResult, ctx, mergedGroup, history, wrapped);
+    }
+
+    private StreamCallback getStreamCallback(SseEmitter emitter, String actualConversationId) {
         SseEmitterSender sender = new SseEmitterSender(emitter);
         sender.sendEvent(SSEEventType.META.value(),
                 new MetaPayload(actualConversationId, IdUtil.getSnowflakeNextIdStr()));
 
-        StreamCallback callback = new StreamCallback() {
+        return new StreamCallback() {
             @Override
             public void onContent(String chunk) {
                 if (StrUtil.isBlank(chunk)) {
@@ -146,40 +184,6 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                 sender.fail(t);
             }
         };
-
-        List<ChatMessage> history = memoryService.load(conversationId, UserContext.getUserId());
-        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
-
-        ChatMessage userMessage = ChatMessage.user(question);
-        if (StrUtil.isNotBlank(conversationId)) {
-            memoryService.append(conversationId, UserContext.getUserId(), userMessage);
-        }
-
-        List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult);
-
-        boolean allSystemOnly = subIntents.stream()
-                .allMatch(si -> isSystemOnly(si.nodeScores));
-        if (allSystemOnly) {
-            StreamCallback wrapped = wrapWithMemory(conversationId, callback);
-            streamSystemResponse(rewriteResult.rewrittenQuestion(), wrapped);
-            return;
-        }
-
-        RetrievalContext ctx = buildPerQuestionContext(subIntents, DEFAULT_TOP_K);
-        if (ctx.isEmpty()) {
-            String emptyReply = "未检索到与问题相关的文档内容。";
-            if (StrUtil.isNotBlank(conversationId)) {
-                memoryService.append(conversationId, UserContext.getUserId(), ChatMessage.assistant(emptyReply));
-            }
-            callback.onContent(emptyReply);
-            return;
-        }
-
-        // 聚合所有意图用于 prompt 规划
-        IntentGroup mergedGroup = mergeIntentGroup(subIntents);
-
-        StreamCallback wrapped = wrapWithMemory(conversationId, callback);
-        streamLLMResponse(rewriteResult, ctx, mergedGroup, history, wrapped);
     }
 
     // ==================== 意图分离 ====================
