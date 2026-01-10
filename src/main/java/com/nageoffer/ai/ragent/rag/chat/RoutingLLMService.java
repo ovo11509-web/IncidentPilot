@@ -14,10 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -69,62 +66,62 @@ public class RoutingLLMService implements LLMService {
                 continue;
             }
 
-            CountDownLatch latch = new CountDownLatch(1);
-            AtomicBoolean hasContent = new AtomicBoolean(false);
-            AtomicReference<Throwable> error = new AtomicReference<>();
-
+            FirstPacketAwaiter awaiter = new FirstPacketAwaiter();
             StreamCallback wrapper = new StreamCallback() {
                 @Override
                 public void onContent(String content) {
-                    hasContent.set(true);
-                    latch.countDown();
+                    awaiter.markContent();
                     callback.onContent(content);
                 }
 
                 @Override
                 public void onComplete() {
-                    latch.countDown();
+                    awaiter.markComplete();
                     callback.onComplete();
                 }
 
                 @Override
                 public void onError(Throwable t) {
-                    error.set(t);
-                    latch.countDown();
+                    awaiter.markError(t);
+                    callback.onError(t);
                 }
             };
 
             StreamCancellationHandle handle = client.streamChat(request, wrapper, target);
-
-            boolean completed;
+            FirstPacketAwaiter.Result result;
             try {
-                completed = latch.await(10, TimeUnit.SECONDS);
+                result = awaiter.await(10, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 handle.cancel();
                 throw new RemoteException("流式请求被中断", e, BaseErrorCode.REMOTE_ERROR);
             }
 
-            if (hasContent.get()) {
+            // 判断结果
+            if (result.isSuccess()) {
                 healthStore.markSuccess(target.id());
                 return handle;
             }
 
-            if (error.get() != null) {
-                lastError = error.get();
-                healthStore.markFailure(target.id());
-                handle.cancel();
-                log.warn("{} 流式请求失败，切换下一个模型。modelId：{}，provider：{}",
-                        label, target.id(), target.candidate().getProvider(), lastError);
-                continue;
-            }
+            // 失败处理
+            healthStore.markFailure(target.id());
+            handle.cancel();
 
-            // 超时未收到内容也视为成功启动（模型响应较慢但已建立连接）
-            if (!completed) {
-                log.debug("{} 流式请求超时未收到首内容，继续等待。modelId：{}", label, target.id());
+            switch (result.getType()) {
+                case ERROR:
+                    lastError = result.getError();
+                    log.warn("{} 流式请求失败，切换下一个模型。modelId：{}，provider：{}",
+                            label, target.id(), target.candidate().getProvider(), lastError);
+                    break;
+                case TIMEOUT:
+                    lastError = new RemoteException("流式首包超时", BaseErrorCode.REMOTE_ERROR);
+                    log.warn("{} 流式请求超时，切换下一个模型。modelId：{}", label, target.id());
+                    break;
+                case NO_CONTENT:
+                    lastError = new RemoteException("流式请求未返回内容", BaseErrorCode.REMOTE_ERROR);
+                    log.warn("{} 流式请求无内容完成，切换下一个模型。modelId：{}", label, target.id());
+                    break;
             }
-            healthStore.markSuccess(target.id());
-            return handle;
         }
 
         throw new RemoteException(
