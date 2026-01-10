@@ -3,7 +3,7 @@ package com.nageoffer.ai.ragent.service.handler;
 import cn.hutool.core.util.StrUtil;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.nageoffer.ai.ragent.rag.chat.StreamHandle;
+import com.nageoffer.ai.ragent.rag.chat.StreamCancellationHandle;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
@@ -66,7 +66,7 @@ public class StreamTaskManager {
         }
     }
 
-    public void bindHandle(String taskId, StreamHandle handle) {
+    public void bindHandle(String taskId, StreamCancellationHandle handle) {
         StreamTaskInfo taskInfo = getOrCreate(taskId);
         taskInfo.handle = handle;
         if (taskInfo.cancelled.get() && handle != null) {
@@ -140,7 +140,7 @@ public class StreamTaskManager {
 
     private static final class StreamTaskInfo {
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
-        private volatile StreamHandle handle;
+        private volatile StreamCancellationHandle handle;
         private volatile SseEmitter emitter;
     }
 }

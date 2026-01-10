@@ -95,7 +95,7 @@ public class OllamaChatClient implements ChatClient {
     }
 
     @Override
-    public StreamHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target) {
+    public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target) {
         AtomicBoolean cancelled = new AtomicBoolean(false);
         Call call = httpClient.newCall(buildStreamRequest(request, target));
         CompletableFuture.runAsync(() -> doStream(call, callback, cancelled));

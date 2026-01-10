@@ -9,5 +9,5 @@ public interface ChatClient {
 
     String chat(ChatRequest request, ModelTarget target);
 
-    StreamHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target);
+    StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target);
 }

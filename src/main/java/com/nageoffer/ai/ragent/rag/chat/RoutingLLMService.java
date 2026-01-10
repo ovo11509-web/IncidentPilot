@@ -65,7 +65,7 @@ public class RoutingLLMService implements LLMService {
             }
             StreamSession session = StreamSession.create(callback);
             try {
-                StreamHandle handle = client.streamChat(request, session.callback(), target);
+                StreamCancellationHandle handle = client.streamChat(request, session.callback(), target);
                 session.setHandle(handle);
                 if (session.hasError() && !session.hasContent()) {
                     healthStore.markFailure(target.id());

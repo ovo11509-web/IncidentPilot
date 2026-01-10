@@ -13,7 +13,7 @@ public class StreamSession {
     private final AtomicReference<Throwable> error = new AtomicReference<>();
     @Getter
     @Setter
-    private volatile StreamHandle handle;
+    private volatile StreamCancellationHandle handle;
 
     private StreamSession(StreamCallback delegate) {
         this.delegate = delegate;
