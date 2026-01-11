@@ -113,7 +113,7 @@ public class ThreadPoolExecutorConfig {
                 ThreadFactoryBuilder.create()
                         .setNamePrefix("model_stream_executor_")
                         .build(),
-                new ThreadPoolExecutor.CallerRunsPolicy()
+                new ThreadPoolExecutor.AbortPolicy()
         );
         return TtlExecutors.getTtlExecutor(executor);
     }

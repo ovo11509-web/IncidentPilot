@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -107,7 +108,14 @@ public class OllamaChatClient implements ChatClient {
     public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target) {
         AtomicBoolean cancelled = new AtomicBoolean(false);
         Call call = httpClient.newCall(buildStreamRequest(request, target));
-        CompletableFuture.runAsync(() -> doStream(call, callback, cancelled), modelStreamExecutor);
+        try {
+            CompletableFuture.runAsync(() -> doStream(call, callback, cancelled), modelStreamExecutor);
+        } catch (RejectedExecutionException ex) {
+            call.cancel();
+            callback.onError(new ModelClientException("流式线程池繁忙", ModelClientErrorType.SERVER_ERROR, null, ex));
+            return () -> {
+            };
+        }
         return () -> {
             cancelled.set(true);
             call.cancel();
