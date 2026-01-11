@@ -3,17 +3,17 @@ package com.nageoffer.ai.ragent.service.handler;
 import cn.hutool.core.util.StrUtil;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.nageoffer.ai.ragent.enums.SSEEventType;
+import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.rag.chat.StreamCancellationHandle;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RTopic;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -57,12 +57,13 @@ public class StreamTaskManager {
         redissonClient.getTopic(CANCEL_TOPIC).removeListener(listenerId);
     }
 
-    public void register(String taskId, SseEmitter emitter) {
+    public void register(String taskId, SseEmitterSender sender) {
         StreamTaskInfo taskInfo = getOrCreate(taskId);
-        taskInfo.emitter = emitter;
+        taskInfo.sender = sender;
 
         if (syncCancelFlag(taskId, taskInfo)) {
-            emitter.complete();
+            sendCancelAndDone(sender);
+            sender.complete();
         }
     }
 
@@ -102,8 +103,9 @@ public class StreamTaskManager {
         if (taskInfo.handle != null) {
             taskInfo.handle.cancel();
         }
-        if (taskInfo.emitter != null) {
-            taskInfo.emitter.complete();
+        if (taskInfo.sender != null) {
+            sendCancelAndDone(taskInfo.sender);
+            taskInfo.sender.complete();
         }
     }
 
@@ -133,6 +135,11 @@ public class StreamTaskManager {
         return CANCEL_KEY_PREFIX + taskId;
     }
 
+    private void sendCancelAndDone(SseEmitterSender sender) {
+        sender.sendEvent(SSEEventType.CANCEL.value(), "[CANCEL]");
+        sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
+    }
+
     @SneakyThrows
     private StreamTaskInfo getOrCreate(String taskId) {
         return tasks.get(taskId, StreamTaskInfo::new);
@@ -141,6 +148,6 @@ public class StreamTaskManager {
     private static final class StreamTaskInfo {
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
         private volatile StreamCancellationHandle handle;
-        private volatile SseEmitter emitter;
+        private volatile SseEmitterSender sender;
     }
 }

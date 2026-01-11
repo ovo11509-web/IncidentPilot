@@ -18,7 +18,12 @@ public enum SSEEventType {
     /**
      * 完成事件
      */
-    DONE("done");
+    DONE("done"),
+
+    /**
+     * 取消事件
+     */
+    CANCEL("cancel");
 
     private final String value;
 

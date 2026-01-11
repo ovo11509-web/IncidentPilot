@@ -31,7 +31,7 @@ public class StreamChatEventHandler implements StreamCallback {
         this.memoryService = memoryService;
         this.taskManager = taskManager;
         sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));
-        taskManager.register(taskId, emitter);
+        taskManager.register(taskId, sender);
     }
 
     @Override
