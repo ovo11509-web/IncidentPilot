@@ -60,8 +60,7 @@ public class StreamTaskManager {
     public void register(String taskId, SseEmitterSender sender) {
         StreamTaskInfo taskInfo = getOrCreate(taskId);
         taskInfo.sender = sender;
-
-        if (syncCancelFlag(taskId, taskInfo)) {
+        if (isTaskCancelledInRedis(taskId, taskInfo)) {
             sendCancelAndDone(sender);
             sender.complete();
         }
@@ -87,6 +86,24 @@ public class StreamTaskManager {
         bucket.set(Boolean.TRUE, CANCEL_TTL);
 
         redissonClient.getTopic(CANCEL_TOPIC).publish(taskId);
+    }
+
+    /**
+     * 检查任务是否在 Redis 中被标记为已取消
+     * 如果是，会同步状态到本地缓存
+     */
+    private boolean isTaskCancelledInRedis(String taskId, StreamTaskInfo taskInfo) {
+        if (taskInfo.cancelled.get()) {
+            return true;
+        }
+
+        RBucket<Boolean> bucket = redissonClient.getBucket(cancelKey(taskId));
+        Boolean cancelled = bucket.get();
+        if (Boolean.TRUE.equals(cancelled)) {
+            taskInfo.cancelled.set(true);
+            return true;
+        }
+        return false;
     }
 
     private void cancelLocal(String taskId) {
@@ -115,20 +132,6 @@ public class StreamTaskManager {
 
         // 清理Redis
         redissonClient.getBucket(cancelKey(taskId)).deleteAsync();
-    }
-
-
-    private boolean syncCancelFlag(String taskId, StreamTaskInfo taskInfo) {
-        if (taskInfo.cancelled.get()) {
-            return true;
-        }
-        RBucket<Boolean> bucket = redissonClient.getBucket(cancelKey(taskId));
-        Boolean cancelled = bucket.get();
-        if (Boolean.TRUE.equals(cancelled)) {
-            taskInfo.cancelled.set(true);
-            return true;
-        }
-        return false;
     }
 
     private String cancelKey(String taskId) {
