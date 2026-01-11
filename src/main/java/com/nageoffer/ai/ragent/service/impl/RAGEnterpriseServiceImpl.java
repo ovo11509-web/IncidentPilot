@@ -420,7 +420,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                 .messages(messages)
                 .thinking(false)
                 .temperature(ctx.hasMcp() ? 0.3D : 0D)  // MCP 场景稍微放宽温度
-                .topP(0.7D)
+                .topP(ctx.hasMcp() ? 0.8D : 1D)
                 .build();
 
         return llmService.streamChat(chatRequest, callback);
