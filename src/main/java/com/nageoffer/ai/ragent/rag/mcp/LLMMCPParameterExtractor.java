@@ -1,18 +1,21 @@
 package com.nageoffer.ai.ragent.rag.mcp;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
-import com.nageoffer.ai.ragent.rag.prompt.PromptTemplateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,43 +44,31 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
 
     @Override
     public Map<String, Object> extractParameters(String userQuestion, MCPTool tool, String customPromptTemplate) {
-        if (tool == null || tool.getParameters() == null || tool.getParameters().isEmpty()) {
-            return new HashMap<>();
+        if (tool == null || CollUtil.isEmpty(tool.getParameters())) {
+            return Collections.emptyMap();
         }
-
-        // 构建工具定义描述
-        String toolDefinition = buildToolDefinition(tool);
 
         // 构建 Prompt：优先使用自定义提示词
-        String promptTemplate = StrUtil.isNotBlank(customPromptTemplate)
+        List<ChatMessage> messages = new ArrayList<>(3);
+        String systemPrompt = StrUtil.isNotBlank(customPromptTemplate)
                 ? customPromptTemplate
                 : MCP_PARAMETER_EXTRACT_PROMPT;
-        if (StrUtil.isNotBlank(customPromptTemplate)) {
-            log.debug("MCP 参数提取使用自定义提示词, toolId: {}", tool.getToolId());
-        }
 
-        String prompt;
-        if (promptTemplate.contains("{{")) {
-            Map<String, String> slots = new HashMap<>();
-            slots.put("TOOL_DEFINITION", toolDefinition);
-            slots.put("USER_QUERY", userQuestion);
-            prompt = PromptTemplateUtils.fillSlots(promptTemplate, slots);
-        } else {
-            prompt = promptTemplate.formatted(toolDefinition, userQuestion);
-        }
+        messages.add(ChatMessage.system(systemPrompt));
+        messages.add(ChatMessage.user("工具定义如下：\n" + buildToolDefinition(tool)));
+        messages.add(ChatMessage.user("请根据以上工具定义，从下面的问题中提取参数：\n" + userQuestion));
 
-        log.debug("MCP 参数提取 Prompt: {}", prompt);
-
+        String raw = null;
         try {
             // 调用 LLM 提取参数
             ChatRequest request = ChatRequest.builder()
-                    .messages(List.of(ChatMessage.user(prompt)))
+                    .messages(messages)
                     .temperature(0.1D)
                     .topP(0.3D)
                     .thinking(false)
                     .build();
-            String raw = llmService.chat(request);
-            log.debug("MCP 参数提取 LLM 响应: {}", raw);
+            raw = llmService.chat(request);
+            log.info("MCP 参数提取 LLM 响应: {}", raw);
 
             // 解析 JSON 响应
             Map<String, Object> extracted = parseJsonResponse(raw, tool);
@@ -86,15 +77,21 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
             fillDefaults(extracted, tool);
 
             log.info("MCP 参数提取完成, toolId: {}, 参数: {}", tool.getToolId(), extracted);
-            return extracted;
 
+            return extracted;
+        } catch (JsonSyntaxException e) {
+            log.warn("MCP 参数提取-JSON解析失败, toolId: {}, 响应: {}", tool.getToolId(), raw, e);
+            return buildDefaultParameters(tool);
         } catch (Exception e) {
-            log.warn("MCP 参数提取失败, toolId: {}, 原因: {}", tool.getToolId(), e.getMessage());
-            // 返回空参数，让后续流程使用默认值
-            Map<String, Object> defaultParams = new HashMap<>();
-            fillDefaults(defaultParams, tool);
-            return defaultParams;
+            log.error("MCP 参数提取异常, toolId: {}", tool.getToolId(), e);
+            return buildDefaultParameters(tool);
         }
+    }
+
+    private Map<String, Object> buildDefaultParameters(MCPTool tool) {
+        Map<String, Object> defaultParams = new HashMap<>();
+        fillDefaults(defaultParams, tool);
+        return defaultParams;
     }
 
     /**
@@ -113,17 +110,13 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
 
             sb.append("  - ").append(paramName);
             sb.append(" (类型: ").append(def.getType());
-            if (def.isRequired()) {
-                sb.append(", 必填");
-            } else {
-                sb.append(", 可选");
-            }
+            sb.append(def.isRequired() ? ", 必填" : ", 可选");
             sb.append("): ").append(def.getDescription());
 
             if (def.getDefaultValue() != null) {
                 sb.append(" [默认值: ").append(def.getDefaultValue()).append("]");
             }
-            if (def.getEnumValues() != null && !def.getEnumValues().isEmpty()) {
+            if (CollUtil.isNotEmpty(def.getEnumValues())) {
                 sb.append(" [可选值: ").append(String.join(", ", def.getEnumValues())).append("]");
             }
             sb.append("\n");
@@ -136,13 +129,32 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
      * 解析 LLM 返回的 JSON 响应
      */
     private Map<String, Object> parseJsonResponse(String raw, MCPTool tool) {
-        Map<String, Object> result = new HashMap<>();
-
         if (StrUtil.isBlank(raw)) {
-            return result;
+            return new HashMap<>();
         }
-
         // 清理可能的 markdown 代码块
+        String cleaned = cleanMarkdownCode(raw);
+        JsonElement element = JsonParser.parseString(cleaned);
+        if (!element.isJsonObject()) {
+            log.warn("LLM 返回的不是 JSON 对象: {}", raw);
+            return new HashMap<>();
+        }
+        JsonObject obj = element.getAsJsonObject();
+        Map<String, Object> result = new HashMap<>();
+        // 只提取工具定义中声明的参数
+        for (String paramName : tool.getParameters().keySet()) {
+            if (obj.has(paramName) && !obj.get(paramName).isJsonNull()) {
+                JsonElement value = obj.get(paramName);
+                result.put(paramName, convertJsonElement(value));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 清理 Markdown 代码块
+     */
+    private String cleanMarkdownCode(String raw) {
         String cleaned = raw.trim();
         if (cleaned.startsWith("```json")) {
             cleaned = cleaned.substring(7);
@@ -152,30 +164,7 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
         if (cleaned.endsWith("```")) {
             cleaned = cleaned.substring(0, cleaned.length() - 3);
         }
-        cleaned = cleaned.trim();
-
-        try {
-            JsonElement element = JsonParser.parseString(cleaned);
-            if (!element.isJsonObject()) {
-                log.warn("LLM 返回的不是 JSON 对象: {}", raw);
-                return result;
-            }
-
-            JsonObject obj = element.getAsJsonObject();
-
-            // 只提取工具定义中声明的参数
-            for (String paramName : tool.getParameters().keySet()) {
-                if (obj.has(paramName) && !obj.get(paramName).isJsonNull()) {
-                    JsonElement value = obj.get(paramName);
-                    result.put(paramName, convertJsonElement(value));
-                }
-            }
-
-        } catch (Exception e) {
-            log.warn("解析 LLM 响应失败: {}", e.getMessage());
-        }
-
-        return result;
+        return cleaned.trim();
     }
 
     /**
@@ -185,10 +174,18 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
         if (element.isJsonPrimitive()) {
             var primitive = element.getAsJsonPrimitive();
             if (primitive.isNumber()) {
-                // 尝试转为整数
                 double d = primitive.getAsDouble();
+
+                if (Double.isNaN(d)) {
+                    return null;
+                }
+
                 if (d == Math.floor(d) && !Double.isInfinite(d)) {
-                    return (int) d;
+                    if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+                        return (int) d;
+                    } else if (d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
+                        return (long) d;
+                    }
                 }
                 return d;
             } else if (primitive.isBoolean()) {
@@ -197,12 +194,13 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
                 return primitive.getAsString();
             }
         } else if (element.isJsonArray()) {
-            return gson.fromJson(element, Object.class);
+            return gson.fromJson(element, List.class);
         } else if (element.isJsonObject()) {
             return gson.fromJson(element, LinkedHashMap.class);
         }
         return null;
     }
+
 
     /**
      * 填充默认值

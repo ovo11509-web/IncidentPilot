@@ -177,11 +177,8 @@ public class RAGEnterpriseConstant {
             - 不得有尾逗号；
             - 必要时对引号、反斜杠、换行等进行转义。
             
-            #### 工具定义
-            {{TOOL_DEFINITION}}
-            
-            #### 用户问题
-            {{USER_QUERY}}
+            #### 工具定义与用户问题
+            将在用户消息中提供。
             
             #### 输出格式（JSON Object Only）
             
