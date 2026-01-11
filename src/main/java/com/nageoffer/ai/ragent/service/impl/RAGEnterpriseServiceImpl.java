@@ -125,7 +125,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
         log.info("打印会话消息参数，会话ID：{}，单次消息ID：{}", conversationId, taskId);
-        StreamCallback callback = new StreamChatEventHandler(emitter, conversationId, taskId, memoryService, taskManager);
+        StreamCallback callback = new StreamChatEventHandler(emitter, actualConversationId, taskId, memoryService, taskManager);
 
         List<ChatMessage> history = memoryService.load(actualConversationId, UserContext.getUserId());
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
@@ -146,6 +146,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
             String emptyReply = "未检索到与问题相关的文档内容。";
             memoryService.append(actualConversationId, UserContext.getUserId(), ChatMessage.assistant(emptyReply));
             callback.onContent(emptyReply);
+            callback.onComplete();
             taskManager.unregister(taskId);
             return;
         }
