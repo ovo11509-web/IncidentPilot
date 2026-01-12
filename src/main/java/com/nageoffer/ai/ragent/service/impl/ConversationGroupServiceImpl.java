@@ -92,15 +92,6 @@ public class ConversationGroupServiceImpl implements ConversationGroupService {
     }
 
     @Override
-    public void upsertSummary(ConversationSummaryDO record) {
-        if (record.getId() == null) {
-            summaryMapper.insert(record);
-        } else {
-            summaryMapper.updateById(record);
-        }
-    }
-
-    @Override
     public ConversationDO findConversation(String conversationId, String userId) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return null;

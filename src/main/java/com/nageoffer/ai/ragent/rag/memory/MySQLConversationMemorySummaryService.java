@@ -10,6 +10,8 @@ import com.nageoffer.ai.ragent.dao.entity.ConversationSummaryDO;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.prompt.PromptTemplateLoader;
 import com.nageoffer.ai.ragent.service.ConversationGroupService;
+import com.nageoffer.ai.ragent.service.ConversationMessageService;
+import com.nageoffer.ai.ragent.service.bo.ConversationSummaryBO;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -37,27 +39,27 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
     private static final Duration SUMMARY_LOCK_TTL = Duration.ofMinutes(5);
 
     private final ConversationGroupService conversationGroupService;
+    private final ConversationMessageService conversationMessageService;
     private final MemoryProperties memoryProperties;
     private final LLMService llmService;
     private final Executor memorySummaryExecutor;
     private final PromptTemplateLoader promptTemplateLoader;
-    private final ConversationMemoryStore memoryStore;
     private final RedissonClient redissonClient;
 
     public MySQLConversationMemorySummaryService(ConversationGroupService conversationGroupService,
+                                                 ConversationMessageService conversationMessageService,
                                                  MemoryProperties memoryProperties,
                                                  LLMService llmService,
-                                                 @Qualifier("memorySummaryThreadPoolExecutor") Executor memorySummaryExecutor,
                                                  PromptTemplateLoader promptTemplateLoader,
-                                                 ConversationMemoryStore memoryStore,
-                                                 RedissonClient redissonClient) {
+                                                 RedissonClient redissonClient,
+                                                 @Qualifier("memorySummaryThreadPoolExecutor") Executor memorySummaryExecutor) {
         this.conversationGroupService = conversationGroupService;
+        this.conversationMessageService = conversationMessageService;
         this.memoryProperties = memoryProperties;
         this.llmService = llmService;
-        this.memorySummaryExecutor = memorySummaryExecutor;
         this.promptTemplateLoader = promptTemplateLoader;
-        this.memoryStore = memoryStore;
         this.redissonClient = redissonClient;
+        this.memorySummaryExecutor = memorySummaryExecutor;
     }
 
     @Override
@@ -95,14 +97,12 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
 
     private void doCompressIfNeeded(String conversationId, String userId) {
         long startTime = System.currentTimeMillis();
-        if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
-            return;
-        }
         int triggerTurns = memoryProperties.getSummaryTriggerTurns();
-        int maxTurns = requirePositiveMaxTurns();
+        int maxTurns = memoryProperties.getMaxTurns();
         if (triggerTurns <= 0) {
             return;
         }
+
         String lockKey = SUMMARY_LOCK_PREFIX + buildLockKey(conversationId, userId);
         RLock lock = redissonClient.getLock(lockKey);
         if (!tryLock(lock)) {
@@ -116,6 +116,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             if (total <= maxTurns) {
                 return;
             }
+
             ConversationSummaryDO latestSummary = conversationGroupService.findLatestSummary(conversationId, userId);
             List<ConversationMessageDO> latestUserTurns = conversationGroupService.listLatestUserOnlyMessages(
                     conversationId,
@@ -133,6 +134,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             if (after != null && !after.before(cutoff)) {
                 return;
             }
+
             List<ConversationMessageDO> toSummarize = conversationGroupService.listMessagesBetween(
                     conversationId,
                     userId,
@@ -142,16 +144,19 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             if (CollUtil.isEmpty(toSummarize)) {
                 return;
             }
+
             Date summaryTime = resolveSummaryTime(toSummarize);
             if (summaryTime == null) {
                 return;
             }
+
             String existingSummary = latestSummary == null ? "" : latestSummary.getContent();
             String summary = summarizeMessages(toSummarize, existingSummary);
             if (StrUtil.isBlank(summary)) {
                 return;
             }
-            upsertSummary(conversationId, userId, summary, summaryTime);
+
+            createSummary(conversationId, userId, summary, summaryTime);
             log.info("摘要成功 - conversationId: {}, 消息数: {}, 耗时: {}ms",
                     conversationId, toSummarize.size(), System.currentTimeMillis() - startTime);
         } catch (Exception e) {
@@ -178,10 +183,11 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
             return existingSummary;
         }
 
+        int summaryMaxChars = memoryProperties.getSummaryMaxChars();
         List<ChatMessage> summaryMessages = new ArrayList<>();
         String summaryPrompt = promptTemplateLoader.render(
                 CONVERSATION_SUMMARY_PROMPT_PATH,
-                Map.of("summary_max_chars", String.valueOf(memoryProperties.getSummaryMaxChars()))
+                Map.of("summary_max_chars", String.valueOf(summaryMaxChars))
         );
         summaryMessages.add(ChatMessage.system(summaryPrompt));
 
@@ -193,20 +199,20 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
         }
         summaryMessages.addAll(historys);
         summaryMessages.add(ChatMessage.user(
-                "合并以上对话与历史摘要，去重后输出更新摘要。要求：严格≤{summary_max_chars}字符；仅一行。"
+                "合并以上对话与历史摘要，去重后输出更新摘要。要求：严格≤" + summaryMaxChars + "字符；仅一行。"
         ));
 
         ChatRequest request = ChatRequest.builder()
                 .messages(summaryMessages)
-                .temperature(0.1D)
-                .topP(0.3D)
+                .temperature(0.3D)
+                .topP(0.9D)
                 .thinking(false)
                 .build();
         try {
             String result = llmService.chat(request);
-            String normalized = result.trim();
-            log.info("对话摘要生成 - resultChars: {}", normalized.length());
-            return normalized;
+            log.info("对话摘要生成 - resultChars: {}", result.length());
+
+            return result;
         } catch (Exception e) {
             log.error("对话记忆摘要生成失败, conversationId相关消息数: {}", messages.size(), e);
             return "";
@@ -227,11 +233,11 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
                 continue;
             }
             if ("user".equalsIgnoreCase(role)) {
-                history.add(ChatMessage.user(item.getContent().trim()));
+                history.add(ChatMessage.user(item.getContent()));
                 continue;
             }
             if ("assistant".equalsIgnoreCase(role)) {
-                history.add(ChatMessage.assistant(item.getContent().trim()));
+                history.add(ChatMessage.assistant(item.getContent()));
             }
         }
         return history;
@@ -248,6 +254,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
         if (summary == null) {
             return null;
         }
+
         Date after = summary.getUpdateTime();
         return after == null ? summary.getCreateTime() : after;
     }
@@ -270,24 +277,14 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
                 .orElse(null);
     }
 
-    private void upsertSummary(String conversationId, String userId, String content, Date summaryTime) {
-        ConversationSummaryDO summaryRecord = ConversationSummaryDO.builder()
+    private void createSummary(String conversationId, String userId, String content, Date summaryTime) {
+        ConversationSummaryBO summaryRecord = ConversationSummaryBO.builder()
                 .conversationId(conversationId)
                 .userId(userId)
                 .content(content)
-                .createTime(summaryTime)
-                .updateTime(summaryTime)
+                .summaryTime(summaryTime)
                 .build();
-        conversationGroupService.upsertSummary(summaryRecord);
-        memoryStore.refreshCache(conversationId, userId);
-    }
-
-    private int requirePositiveMaxTurns() {
-        int maxTurns = memoryProperties.getMaxTurns();
-        if (maxTurns <= 0) {
-            throw new IllegalArgumentException("rag.memory.max-turns must be > 0");
-        }
-        return maxTurns;
+        conversationMessageService.addMessageSummary(summaryRecord);
     }
 
     private String buildLockKey(String conversationId, String userId) {

@@ -4,9 +4,12 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.dao.entity.ConversationMessageDO;
+import com.nageoffer.ai.ragent.dao.entity.ConversationSummaryDO;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationMessageMapper;
+import com.nageoffer.ai.ragent.dao.mapper.ConversationSummaryMapper;
 import com.nageoffer.ai.ragent.service.ConversationMessageService;
 import com.nageoffer.ai.ragent.service.bo.ConversationMessageBO;
+import com.nageoffer.ai.ragent.service.bo.ConversationSummaryBO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +20,7 @@ import java.util.List;
 public class ConversationMessageServiceImpl implements ConversationMessageService {
 
     private final ConversationMessageMapper conversationMessageMapper;
+    private final ConversationSummaryMapper conversationSummaryMapper;
 
     @Override
     public void addMessage(ConversationMessageBO conversationMessage) {
@@ -38,5 +42,13 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
                         .orderByDesc(ConversationMessageDO::getCreateTime)
                         .last("limit " + limit)
         );
+    }
+
+    @Override
+    public void addMessageSummary(ConversationSummaryBO conversationSummary) {
+        ConversationSummaryDO conversationSummaryDO = BeanUtil.toBean(conversationSummary, ConversationSummaryDO.class)
+                .setCreateTime(conversationSummary.getSummaryTime())
+                .setUpdateTime(conversationSummary.getSummaryTime());
+        conversationSummaryMapper.insert(conversationSummaryDO);
     }
 }
