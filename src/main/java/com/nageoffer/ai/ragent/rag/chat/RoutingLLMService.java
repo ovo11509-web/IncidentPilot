@@ -76,6 +76,12 @@ public class RoutingLLMService implements LLMService {
                 }
 
                 @Override
+                public void onThinking(String content) {
+                    awaiter.markContent();
+                    callback.onThinking(content);
+                }
+
+                @Override
                 public void onComplete() {
                     awaiter.markComplete();
                     callback.onComplete();

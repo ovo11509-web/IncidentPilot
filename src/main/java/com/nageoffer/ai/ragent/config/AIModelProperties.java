@@ -24,6 +24,8 @@ public class AIModelProperties {
 
     private Selection selection = new Selection();
 
+    private Stream stream = new Stream();
+
     @Data
     public static class ModelGroup {
         private String defaultModel;
@@ -54,5 +56,10 @@ public class AIModelProperties {
     public static class Selection {
         private Integer failureThreshold = 2;
         private Long openDurationMs = 30000L;
+    }
+
+    @Data
+    public static class Stream {
+        private Integer messageChunkSize = 5;
     }
 }

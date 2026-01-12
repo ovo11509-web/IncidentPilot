@@ -1,37 +1,57 @@
 package com.nageoffer.ai.ragent.service.handler;
 
 import cn.hutool.core.util.StrUtil;
+import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
+import com.nageoffer.ai.ragent.dao.entity.ConversationDO;
 import com.nageoffer.ai.ragent.dto.MessageDelta;
 import com.nageoffer.ai.ragent.dto.MetaPayload;
+import com.nageoffer.ai.ragent.dto.TitlePayload;
 import com.nageoffer.ai.ragent.enums.SSEEventType;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.rag.chat.StreamCallback;
 import com.nageoffer.ai.ragent.rag.memory.ConversationMemoryService;
+import com.nageoffer.ai.ragent.service.ConversationGroupService;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.Optional;
 
 public class StreamChatEventHandler implements StreamCallback {
 
+    private static final String TYPE_THINK = "think";
+    private static final String TYPE_RESPONSE = "response";
+
+    private final int messageChunkSize;
     private final SseEmitterSender sender;
     private final String conversationId;
     private final ConversationMemoryService memoryService;
+    private final ConversationGroupService conversationGroupService;
     private final String taskId;
     private final String userId;
     private final StreamTaskManager taskManager;
+    private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
 
     public StreamChatEventHandler(SseEmitter emitter,
                                   String conversationId,
                                   String taskId,
+                                  AIModelProperties modelProperties,
                                   ConversationMemoryService memoryService,
+                                  ConversationGroupService conversationGroupService,
                                   StreamTaskManager taskManager) {
         this.sender = new SseEmitterSender(emitter);
         this.conversationId = conversationId;
         this.taskId = taskId;
         this.memoryService = memoryService;
+        this.conversationGroupService = conversationGroupService;
         this.taskManager = taskManager;
+        ConversationDO existingConversation = conversationGroupService.findConversation(conversationId, UserContext.getUserId());
+        this.sendTitleOnComplete = existingConversation == null || StrUtil.isBlank(existingConversation.getTitle());
         this.userId = UserContext.getUserId();
+        this.messageChunkSize = Math.max(1, Optional.ofNullable(modelProperties.getStream())
+                .map(AIModelProperties.Stream::getMessageChunkSize)
+                .orElse(5));
         sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));
         // 注册时传入取消回调，用于在取消时保存已累积的回复
         taskManager.register(taskId, sender, this::saveAnswerIfNotEmpty);
@@ -56,11 +76,18 @@ public class StreamChatEventHandler implements StreamCallback {
             return;
         }
         answer.append(chunk);
-        int[] codePoints = chunk.codePoints().toArray();
-        for (int codePoint : codePoints) {
-            String character = new String(new int[]{codePoint}, 0, 1);
-            sender.sendEvent(SSEEventType.MESSAGE.value(), new MessageDelta(character));
+        sendChunked(TYPE_RESPONSE, chunk);
+    }
+
+    @Override
+    public void onThinking(String chunk) {
+        if (taskManager.isCancelled(taskId)) {
+            return;
         }
+        if (StrUtil.isBlank(chunk)) {
+            return;
+        }
+        sendChunked(TYPE_THINK, chunk);
     }
 
     @Override
@@ -70,6 +97,12 @@ public class StreamChatEventHandler implements StreamCallback {
         }
         memoryService.append(conversationId, UserContext.getUserId(),
                 ChatMessage.assistant(answer.toString()));
+        if (sendTitleOnComplete) {
+            String title = resolveTitle();
+            if (StrUtil.isNotBlank(title)) {
+                sender.sendEvent(SSEEventType.TITLE.value(), new TitlePayload(title));
+            }
+        }
         sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
         taskManager.unregister(taskId);
         sender.complete();
@@ -82,5 +115,34 @@ public class StreamChatEventHandler implements StreamCallback {
         }
         taskManager.unregister(taskId);
         sender.fail(t);
+    }
+
+    private void sendChunked(String type, String content) {
+        int length = content.length();
+        int idx = 0;
+        int count = 0;
+        StringBuilder buffer = new StringBuilder();
+        while (idx < length) {
+            int codePoint = content.codePointAt(idx);
+            buffer.appendCodePoint(codePoint);
+            idx += Character.charCount(codePoint);
+            count++;
+            if (count >= messageChunkSize) {
+                sender.sendEvent(SSEEventType.MESSAGE.value(), new MessageDelta(type, buffer.toString()));
+                buffer.setLength(0);
+                count = 0;
+            }
+        }
+        if (!buffer.isEmpty()) {
+            sender.sendEvent(SSEEventType.MESSAGE.value(), new MessageDelta(type, buffer.toString()));
+        }
+    }
+
+    private String resolveTitle() {
+        ConversationDO conversation = conversationGroupService.findConversation(conversationId, userId);
+        if (conversation != null && StrUtil.isNotBlank(conversation.getTitle())) {
+            return conversation.getTitle();
+        }
+        return "新对话";
     }
 }

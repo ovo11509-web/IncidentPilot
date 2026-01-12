@@ -105,9 +105,6 @@ public class SiliconFlowChatClient implements ChatClient {
     }
 
     private void doStream(Call call, StreamCallback callback, AtomicBoolean cancelled) {
-        int logged = 0;
-        boolean reasoningOpened = false;
-        boolean reasoningClosed = false;
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) {
                 String body = readBody(response.body());
@@ -139,13 +136,6 @@ public class SiliconFlowChatClient implements ChatClient {
                 if ("[DONE]".equalsIgnoreCase(payload)) {
                     callback.onComplete();
                     break;
-                }
-
-                if (logged < 2) {
-                    log.info("SiliconFlow 流式首批响应: payload={}", payload);
-                    logged++;
-                } else if (payload.contains("reasoning") || payload.contains("thinking")) {
-                    log.info("SiliconFlow 流式响应包含思考字段: payload={}", payload);
                 }
 
                 try {
@@ -192,28 +182,16 @@ public class SiliconFlowChatClient implements ChatClient {
                     }
 
                     if (reasoningChunk != null && !reasoningChunk.isEmpty()) {
-                        if (!reasoningOpened) {
-                            callback.onContent("<think>");
-                            reasoningOpened = true;
-                        }
-                        callback.onContent(reasoningChunk);
+                        callback.onThinking(reasoningChunk);
                     }
 
                     if (chunk != null && !chunk.isEmpty()) {
-                        if (reasoningOpened && !reasoningClosed) {
-                            callback.onContent("</think>\n");
-                            reasoningClosed = true;
-                        }
                         callback.onContent(chunk);
                     }
 
                     if (choice0.has("finish_reason")) {
                         JsonElement fr = choice0.get("finish_reason");
                         if (fr != null && !fr.isJsonNull()) {
-                            if (reasoningOpened && !reasoningClosed) {
-                                callback.onContent("</think>\n");
-                                reasoningClosed = true;
-                            }
                             callback.onComplete();
                             break;
                         }

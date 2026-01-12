@@ -177,7 +177,7 @@ public class MySQLConversationMemoryStore implements ConversationMemoryStore {
             return llmService.chat(request);
         } catch (Exception ex) {
             log.warn("生成会话标题失败", ex);
-            return "新的问题会话";
+            return "新对话";
         }
     }
 

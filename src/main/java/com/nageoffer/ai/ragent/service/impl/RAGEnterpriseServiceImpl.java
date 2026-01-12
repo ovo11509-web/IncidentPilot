@@ -3,6 +3,7 @@ package com.nageoffer.ai.ragent.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.constant.RAGConstant;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
@@ -37,6 +38,7 @@ import com.nageoffer.ai.ragent.rag.retrieve.RetrievedChunk;
 import com.nageoffer.ai.ragent.rag.retrieve.RetrieverService;
 import com.nageoffer.ai.ragent.rag.rewrite.QueryRewriteService;
 import com.nageoffer.ai.ragent.rag.rewrite.RewriteResult;
+import com.nageoffer.ai.ragent.service.ConversationGroupService;
 import com.nageoffer.ai.ragent.service.RAGEnterpriseService;
 import com.nageoffer.ai.ragent.service.handler.StreamChatEventHandler;
 import com.nageoffer.ai.ragent.service.handler.StreamTaskManager;
@@ -85,6 +87,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     private final PromptTemplateLoader promptTemplateLoader;
     private final ConversationMemoryService memoryService;
     private final StreamTaskManager taskManager;
+    private final AIModelProperties modelProperties;
+    private final ConversationGroupService conversationGroupService;
     private final Executor intentClassifyExecutor;
     private final Executor ragContextExecutor;
     private final Executor ragRetrievalExecutor;
@@ -101,6 +105,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
             ContextFormatter contextFormatter,
             ConversationMemoryService memoryService,
             StreamTaskManager taskManager,
+            AIModelProperties modelProperties,
+            ConversationGroupService conversationGroupService,
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("multiQuestionRewriteService") QueryRewriteService queryRewriteService,
             @Qualifier("intentClassifyThreadPoolExecutor") Executor intentClassifyExecutor,
@@ -117,6 +123,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         this.promptTemplateLoader = promptTemplateLoader;
         this.memoryService = memoryService;
         this.taskManager = taskManager;
+        this.modelProperties = modelProperties;
+        this.conversationGroupService = conversationGroupService;
         this.intentClassifier = intentClassifier;
         this.queryRewriteService = queryRewriteService;
         this.intentClassifyExecutor = intentClassifyExecutor;
@@ -129,7 +137,15 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
         log.info("打印会话消息参数，会话ID：{}，单次消息ID：{}", conversationId, taskId);
-        StreamCallback callback = new StreamChatEventHandler(emitter, actualConversationId, taskId, memoryService, taskManager);
+        StreamCallback callback = new StreamChatEventHandler(
+                emitter,
+                actualConversationId,
+                taskId,
+                modelProperties,
+                memoryService,
+                conversationGroupService,
+                taskManager
+        );
 
         List<ChatMessage> history = memoryService.load(actualConversationId, UserContext.getUserId());
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);

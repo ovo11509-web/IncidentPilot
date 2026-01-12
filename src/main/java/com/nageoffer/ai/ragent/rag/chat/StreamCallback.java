@@ -36,6 +36,16 @@ public interface StreamCallback {
     void onContent(String content);
 
     /**
+     * 接收思考过程增量内容（如果模型支持）
+     * <p>
+     * 默认空实现，未支持思考的场景可以忽略
+     *
+     * @param content 当前推送的思考内容
+     */
+    default void onThinking(String content) {
+    }
+
+    /**
      * 整个推理流程结束（全部内容推送完毕）
      * <p>
      * 用途：
