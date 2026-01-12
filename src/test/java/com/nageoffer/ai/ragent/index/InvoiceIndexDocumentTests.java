@@ -4,6 +4,7 @@ import cn.hutool.core.util.IdUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.config.RAGDefaultProperties;
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.service.RAGService;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
@@ -111,7 +112,7 @@ public class InvoiceIndexDocumentTests {
                 """.formatted(context, question);
 
         ChatRequest req = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .thinking(false)
                 .temperature(0D)
                 .topP(0.7D)

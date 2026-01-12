@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.rewrite;
 
+import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.rag.chat.LLMService;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.List;
 
 @Slf4j
 @SpringBootTest
@@ -85,7 +88,7 @@ public class QueryRewriteTests {
         String prompt = QUERY_REWRITE_PROMPT.formatted(userQuestion);
 
         ChatRequest request = ChatRequest.builder()
-                .prompt(prompt)
+                .messages(List.of(ChatMessage.user(prompt)))
                 .thinking(false)
                 .build();
 

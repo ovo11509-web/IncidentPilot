@@ -36,24 +36,6 @@ import java.util.List;
 public class ChatRequest {
 
     /**
-     * 当前用户输入内容（通常就是自然语言问题或指令，比如 query）
-     * <p>
-     * 对应大多数厂商接口中的 {@code prompt} 或 {@code input} 字段
-     * </p>
-     */
-    private String prompt;
-
-    /**
-     * 可选：系统提示词（System Prompt）
-     * <p>
-     * 用于设定模型的整体角色与行为规范，例如：
-     * {@code "你是一个企业知识库助手，回答时重点引用文档内容"}
-     * 一般会在适配层转换为模型的 system 角色消息
-     * </p>
-     */
-    private String systemPrompt;
-
-    /**
      * 完整消息列表
      * <p>
      * 用于直接传入 system/user/assistant 消息序列。
@@ -63,19 +45,6 @@ public class ChatRequest {
      */
     @Default
     private List<ChatMessage> messages = new ArrayList<>();
-
-    /**
-     * 可选：RAG 召回的上下文内容
-     * <p>
-     * 通常为从向量库 / 检索系统中召回的文档片段，供大模型参考
-     * 可以在实现层决定如何注入，例如：
-     * <ul>
-     *   <li>拼接到 {@link #systemPrompt} 前部，作为「知识背景」</li>
-     *   <li>作为单独一条 system/user 消息插入到消息列表</li>
-     * </ul>
-     * </p>
-     */
-    private String context;
 
     // ================== 模型控制参数 ==================
 

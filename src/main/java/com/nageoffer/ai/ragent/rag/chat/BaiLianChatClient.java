@@ -1,7 +1,6 @@
 package com.nageoffer.ai.ragent.rag.chat;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -10,6 +9,7 @@ import com.nageoffer.ai.ragent.config.AIModelProperties;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.ModelCapability;
+import com.nageoffer.ai.ragent.rag.http.HttpMediaTypes;
 import com.nageoffer.ai.ragent.rag.http.ModelClientErrorType;
 import com.nageoffer.ai.ragent.rag.http.ModelClientException;
 import com.nageoffer.ai.ragent.rag.http.ModelUrlResolver;
@@ -22,8 +22,9 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.BufferedSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import com.nageoffer.ai.ragent.rag.http.HttpMediaTypes;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -32,8 +33,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 @Slf4j
@@ -217,20 +216,6 @@ public class BaiLianChatClient implements ChatClient {
     private JsonArray buildMessages(ChatRequest request) {
         JsonArray arr = new JsonArray();
 
-        if (StrUtil.isNotEmpty(request.getSystemPrompt())) {
-            JsonObject sys = new JsonObject();
-            sys.addProperty("role", "system");
-            sys.addProperty("content", request.getSystemPrompt());
-            arr.add(sys);
-        }
-
-        if (StrUtil.isNotEmpty(request.getContext())) {
-            JsonObject ctx = new JsonObject();
-            ctx.addProperty("role", "system");
-            ctx.addProperty("content", "以下是与用户问题相关的背景知识：\n" + request.getContext());
-            arr.add(ctx);
-        }
-
         List<ChatMessage> messages = request.getMessages();
         if (CollUtil.isNotEmpty(messages)) {
             for (ChatMessage m : messages) {
@@ -239,13 +224,6 @@ public class BaiLianChatClient implements ChatClient {
                 msg.addProperty("content", m.getContent());
                 arr.add(msg);
             }
-        }
-
-        if (StrUtil.isNotEmpty(request.getPrompt())) {
-            JsonObject userMsg = new JsonObject();
-            userMsg.addProperty("role", "user");
-            userMsg.addProperty("content", request.getPrompt());
-            arr.add(userMsg);
         }
 
         return arr;

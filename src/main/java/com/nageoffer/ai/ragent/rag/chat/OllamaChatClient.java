@@ -199,20 +199,6 @@ public class OllamaChatClient implements ChatClient {
     private JsonArray buildMessages(ChatRequest request) {
         JsonArray arr = new JsonArray();
 
-        if (StrUtil.isNotEmpty(request.getSystemPrompt())) {
-            JsonObject sys = new JsonObject();
-            sys.addProperty("role", "system");
-            sys.addProperty("content", request.getSystemPrompt());
-            arr.add(sys);
-        }
-
-        if (StrUtil.isNotEmpty(request.getContext())) {
-            JsonObject ctx = new JsonObject();
-            ctx.addProperty("role", "system");
-            ctx.addProperty("content", "以下是与用户问题相关的背景知识：\n" + request.getContext());
-            arr.add(ctx);
-        }
-
         List<ChatMessage> messages = request.getMessages();
         if (CollUtil.isNotEmpty(messages)) {
             for (ChatMessage m : messages) {
@@ -221,13 +207,6 @@ public class OllamaChatClient implements ChatClient {
                 msg.addProperty("content", m.getContent());
                 arr.add(msg);
             }
-        }
-
-        if (StrUtil.isNotEmpty(request.getPrompt())) {
-            JsonObject userMsg = new JsonObject();
-            userMsg.addProperty("role", "user");
-            userMsg.addProperty("content", request.getPrompt());
-            arr.add(userMsg);
         }
 
         return arr;
