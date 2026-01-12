@@ -125,7 +125,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     }
 
     @Override
-    public void streamChat(String question, String conversationId, SseEmitter emitter) {
+    public void streamChat(String question, String conversationId, Boolean deepThinking, SseEmitter emitter) {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
         log.info("打印会话消息参数，会话ID：{}，单次消息ID：{}", conversationId, taskId);
@@ -158,7 +158,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         // 聚合所有意图用于 prompt 规划
         IntentGroup mergedGroup = mergeIntentGroup(subIntents);
 
-        StreamCancellationHandle handle = streamLLMResponse(rewriteResult, ctx, mergedGroup, history, callback);
+        StreamCancellationHandle handle = streamLLMResponse(rewriteResult, ctx, mergedGroup, history, deepThinking, callback);
         taskManager.bindHandle(taskId, handle);
     }
 
@@ -401,7 +401,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     }
 
     private StreamCancellationHandle streamLLMResponse(RewriteResult rewriteResult, RetrievalContext ctx,
-                                                       IntentGroup intentGroup, List<ChatMessage> history, StreamCallback callback) {
+                                                       IntentGroup intentGroup, List<ChatMessage> history,
+                                                       boolean deepThinking, StreamCallback callback) {
         PromptContext promptContext = PromptContext.builder()
                 .question(rewriteResult.joinSubQuestions())
                 .mcpContext(ctx.getMcpContext())
@@ -418,7 +419,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         );
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(messages)
-                .thinking(false)
+                .thinking(deepThinking)
                 .temperature(ctx.hasMcp() ? 0.3D : 0D)  // MCP 场景稍微放宽温度
                 .topP(ctx.hasMcp() ? 0.8D : 1D)
                 .build();

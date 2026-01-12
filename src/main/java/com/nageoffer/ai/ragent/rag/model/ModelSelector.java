@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.model;
 
+import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.config.AIModelProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -19,8 +21,14 @@ public class ModelSelector {
     private final AIModelProperties properties;
     private final ModelHealthStore healthStore;
 
-    public List<ModelTarget> selectChatCandidates() {
-        return selectCandidates(properties.getChat());
+    public List<ModelTarget> selectChatCandidates(Boolean deepThinking) {
+        AIModelProperties.ModelGroup group = properties.getChat();
+        if (group == null) {
+            return List.of();
+        }
+
+        String firstChoiceModelId = resolveFirstChoiceModel(group, deepThinking);
+        return selectCandidates(group, firstChoiceModelId, deepThinking);
     }
 
     public List<ModelTarget> selectEmbeddingCandidates() {
@@ -36,59 +44,132 @@ public class ModelSelector {
         return targets.isEmpty() ? null : targets.get(0);
     }
 
+    /**
+     * 根据模式解析首选模型
+     * - 深度思考模式：优先使用 deep-thinking-model
+     * - 普通模式：使用 default-model
+     */
+    private String resolveFirstChoiceModel(AIModelProperties.ModelGroup group, Boolean deepThinking) {
+        if (Boolean.TRUE.equals(deepThinking)) {
+            String deepModel = group.getDeepThinkingModel();
+            if (StrUtil.isNotBlank(deepModel)) {
+                return deepModel;
+            }
+        }
+        return group.getDefaultModel();
+    }
+
     private List<ModelTarget> selectCandidates(AIModelProperties.ModelGroup group) {
+        if (group == null) {
+            return List.of();
+        }
+        return selectCandidates(group, group.getDefaultModel(), null);
+    }
+
+    private List<ModelTarget> selectCandidates(AIModelProperties.ModelGroup group, String firstChoiceModelId, Boolean deepThinking) {
         if (group == null || group.getCandidates() == null) {
             return List.of();
         }
+
+        List<AIModelProperties.ModelCandidate> orderedCandidates =
+                prepareOrderedCandidates(group.getCandidates(), firstChoiceModelId, deepThinking);
+
+        return buildAvailableTargets(orderedCandidates);
+    }
+
+    /**
+     * 准备排序后的候选模型列表
+     */
+    private List<AIModelProperties.ModelCandidate> prepareOrderedCandidates(
+            List<AIModelProperties.ModelCandidate> candidates,
+            String firstChoiceModelId,
+            Boolean deepThinking) {
+        List<AIModelProperties.ModelCandidate> enabled = candidates.stream()
+                .filter(c -> c != null && !Boolean.FALSE.equals(c.getEnabled()))
+                .filter(c -> !Boolean.TRUE.equals(deepThinking) || Boolean.TRUE.equals(c.getSupportsThinking()))
+                .sorted(Comparator
+                        .comparing(AIModelProperties.ModelCandidate::getPriority,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(AIModelProperties.ModelCandidate::getId,
+                                Comparator.nullsLast(String::compareTo)))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        if (Boolean.TRUE.equals(deepThinking) && enabled.isEmpty()) {
+            log.warn("深度思考模式没有可用候选模型");
+            return enabled;
+        }
+
+        promoteFirstChoiceModel(enabled, firstChoiceModelId);
+
+        return enabled;
+    }
+
+    private void promoteFirstChoiceModel(
+            List<AIModelProperties.ModelCandidate> candidates,
+            String firstChoiceModelId) {
+
+        if (StrUtil.isBlank(firstChoiceModelId)) {
+            return;
+        }
+
+        AIModelProperties.ModelCandidate firstChoice = findCandidate(candidates, firstChoiceModelId);
+        if (firstChoice != null) {
+            candidates.remove(firstChoice);
+            candidates.add(0, firstChoice);
+        } else {
+            log.warn("首选模型在候选列表中不存在: modelId={}", firstChoiceModelId);
+        }
+    }
+
+    private List<ModelTarget> buildAvailableTargets(
+            List<AIModelProperties.ModelCandidate> candidates) {
+
         Map<String, AIModelProperties.ProviderConfig> providers = properties.getProviders();
-        List<AIModelProperties.ModelCandidate> raw = new ArrayList<>(group.getCandidates());
 
-        raw.removeIf(c -> c == null || Boolean.FALSE.equals(c.getEnabled()));
-        raw.sort(Comparator
-                .comparing(AIModelProperties.ModelCandidate::getPriority, Comparator.nullsLast(Integer::compareTo))
-                .thenComparing(AIModelProperties.ModelCandidate::getId, Comparator.nullsLast(String::compareTo)));
+        return candidates.stream()
+                .map(candidate -> buildModelTarget(candidate, providers))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
 
-        if (group.getDefaultModel() != null) {
-            AIModelProperties.ModelCandidate defaultCandidate = null;
-            for (AIModelProperties.ModelCandidate candidate : raw) {
-                if (group.getDefaultModel().equals(candidate.getId())) {
-                    defaultCandidate = candidate;
-                    break;
-                }
-            }
-            if (defaultCandidate != null) {
-                raw.remove(defaultCandidate);
-                raw.add(0, defaultCandidate);
-            }
+    private ModelTarget buildModelTarget(AIModelProperties.ModelCandidate candidate, Map<String, AIModelProperties.ProviderConfig> providers) {
+        String modelId = resolveId(candidate);
+
+        // 检查熔断状态
+        if (healthStore.isOpen(modelId)) {
+            return null;
         }
 
-        List<ModelTarget> targets = new ArrayList<>();
-        for (AIModelProperties.ModelCandidate candidate : raw) {
-            String id = resolveId(candidate);
-            if (healthStore.isOpen(id)) {
-                continue;
-            }
-            AIModelProperties.ProviderConfig provider = providers.get(candidate.getProvider());
-            if (provider == null && !"noop".equalsIgnoreCase(candidate.getProvider())) {
-                log.warn("Model provider config missing: provider={}, modelId={}", candidate.getProvider(), id);
-                continue;
-            }
-            targets.add(new ModelTarget(id, candidate, provider));
+        // 验证 provider 配置
+        AIModelProperties.ProviderConfig provider = providers.get(candidate.getProvider());
+        if (provider == null && !"noop".equalsIgnoreCase(candidate.getProvider())) {
+            log.warn("Provider配置缺失: provider={}, modelId={}",
+                    candidate.getProvider(), modelId);
+            return null;
         }
 
-        return targets;
+        return new ModelTarget(modelId, candidate, provider);
+    }
+
+    private AIModelProperties.ModelCandidate findCandidate(
+            List<AIModelProperties.ModelCandidate> candidates,
+            String id) {
+
+        return candidates.stream()
+                .filter(c -> id.equals(c.getId()))
+                .findFirst()
+                .orElse(null);
     }
 
     private String resolveId(AIModelProperties.ModelCandidate candidate) {
         if (candidate == null) {
             return null;
         }
-        if (candidate.getId() != null && !candidate.getId().isBlank()) {
+        if (StrUtil.isNotBlank(candidate.getId())) {
             return candidate.getId();
         }
-        return Objects.toString(candidate.getProvider(), "unknown") +
-                "::" +
-                Objects.toString(candidate.getModel(), "unknown");
+        return String.format("%s::%s",
+                Objects.toString(candidate.getProvider(), "unknown"),
+                Objects.toString(candidate.getModel(), "unknown"));
     }
-
 }

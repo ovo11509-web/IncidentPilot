@@ -12,9 +12,10 @@ public interface RAGEnterpriseService {
      *
      * @param question       用户问题
      * @param conversationId 会话 ID（可选）
+     * @param deepThinking   开启深度思考（可选）
      * @param emitter        SSE 发射器
      */
-    void streamChat(String question, String conversationId, SseEmitter emitter);
+    void streamChat(String question, String conversationId, Boolean deepThinking, SseEmitter emitter);
 
     /**
      * 停止指定 taskId 的流式会话

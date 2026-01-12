@@ -27,6 +27,7 @@ public class AIModelProperties {
     @Data
     public static class ModelGroup {
         private String defaultModel;
+        private String deepThinkingModel;
         private List<ModelCandidate> candidates = new ArrayList<>();
     }
 
@@ -39,6 +40,7 @@ public class AIModelProperties {
         private Integer dimension;
         private Integer priority = 100;
         private Boolean enabled = true;
+        private Boolean supportsThinking = false;
     }
 
     @Data

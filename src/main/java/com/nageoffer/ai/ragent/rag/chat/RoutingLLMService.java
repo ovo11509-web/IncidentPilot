@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.rag.chat;
 
+import cn.hutool.core.collection.CollUtil;
 import com.nageoffer.ai.ragent.convention.ChatRequest;
 import com.nageoffer.ai.ragent.enums.ModelCapability;
 import com.nageoffer.ai.ragent.framework.errorcode.BaseErrorCode;
@@ -44,7 +45,7 @@ public class RoutingLLMService implements LLMService {
     public String chat(ChatRequest request) {
         return executor.executeWithFallback(
                 ModelCapability.CHAT,
-                selector.selectChatCandidates(),
+                selector.selectChatCandidates(request.getThinking()),
                 target -> clientsByProvider.get(target.candidate().getProvider()),
                 (client, target) -> client.chat(request, target)
         );
@@ -52,9 +53,9 @@ public class RoutingLLMService implements LLMService {
 
     @Override
     public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
-        List<ModelTarget> targets = selector.selectChatCandidates();
-        if (targets.isEmpty()) {
-            throw new RemoteException("没有可用的Chat模型候选者");
+        List<ModelTarget> targets = selector.selectChatCandidates(request.getThinking());
+        if (CollUtil.isEmpty(targets)) {
+            throw new RemoteException("无可用大模型提供者");
         }
 
         String label = ModelCapability.CHAT.getDisplayName();
@@ -90,7 +91,7 @@ public class RoutingLLMService implements LLMService {
             StreamCancellationHandle handle = client.streamChat(request, wrapper, target);
             FirstPacketAwaiter.Result result;
             try {
-                result = awaiter.await(10, TimeUnit.SECONDS);
+                result = awaiter.await(60, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 handle.cancel();
@@ -125,7 +126,7 @@ public class RoutingLLMService implements LLMService {
         }
 
         throw new RemoteException(
-                "所有Chat模型候选者都失败了: " + (lastError == null ? "未知" : lastError.getMessage()),
+                "大模型调用失败，请稍后再试...",
                 lastError,
                 BaseErrorCode.REMOTE_ERROR
         );
