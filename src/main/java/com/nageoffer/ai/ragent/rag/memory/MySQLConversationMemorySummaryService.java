@@ -87,8 +87,8 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
 
     private void doCompressIfNeeded(String conversationId, String userId) {
         long startTime = System.currentTimeMillis();
-        int triggerTurns = memoryProperties.getSummaryTriggerTurns();
-        int maxTurns = memoryProperties.getMaxTurns();
+        int triggerTurns = memoryProperties.getSummaryStartTurns();
+        int maxTurns = memoryProperties.getHistoryKeepTurns();
         if (triggerTurns <= 0) {
             return;
         }

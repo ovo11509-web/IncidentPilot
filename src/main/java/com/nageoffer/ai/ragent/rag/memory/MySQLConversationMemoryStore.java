@@ -114,7 +114,7 @@ public class MySQLConversationMemoryStore implements ConversationMemoryStore {
     }
 
     private int resolveMaxHistoryMessages() {
-        int maxTurns = memoryProperties.getMaxTurns();
+        int maxTurns = memoryProperties.getHistoryKeepTurns();
         return maxTurns * 2;
     }
 }

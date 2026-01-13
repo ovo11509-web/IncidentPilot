@@ -14,11 +14,11 @@ import org.springframework.validation.annotation.Validated;
 public class MemoryProperties {
 
     /**
-     * 短期记忆最大轮数（user+assistant 视为一轮）
+     * 保留原文的最近轮数（user+assistant 视为一轮）
      */
     @Min(1)
     @Max(100)
-    private int maxTurns = 5;
+    private int historyKeepTurns = 8;
 
     /**
      * 缓存过期时间（分钟）
@@ -31,9 +31,9 @@ public class MemoryProperties {
     private boolean summaryEnabled = false;
 
     /**
-     * 触发摘要的轮数阈值
+     * 开始摘要的轮数阈值
      */
-    private int summaryTriggerTurns = 12;
+    private int summaryStartTurns = 9;
 
     /**
      * 摘要最大字数

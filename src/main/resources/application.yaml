@@ -41,8 +41,8 @@ rag:
     max-history-chars: 500
 
   memory:
-    summary-trigger-turns: 2
-    max-turns: 3
+    history-keep-turns: 4
+    summary-start-turns: 5
     ttl-minutes: 60
     summary-enabled: true
     summary-max-chars: 200
