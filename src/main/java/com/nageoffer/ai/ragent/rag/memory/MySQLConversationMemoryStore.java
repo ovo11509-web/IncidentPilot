@@ -6,13 +6,13 @@ import com.nageoffer.ai.ragent.config.MemoryProperties;
 import com.nageoffer.ai.ragent.controller.request.ConversationCreateRequest;
 import com.nageoffer.ai.ragent.controller.vo.ConversationMessageVO;
 import com.nageoffer.ai.ragent.convention.ChatMessage;
+import com.nageoffer.ai.ragent.enums.ConversationMessageOrder;
 import com.nageoffer.ai.ragent.service.ConversationMessageService;
 import com.nageoffer.ai.ragent.service.ConversationService;
 import com.nageoffer.ai.ragent.service.bo.ConversationMessageBO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -36,15 +36,15 @@ public class MySQLConversationMemoryStore implements ConversationMemoryStore {
     @Override
     public List<ChatMessage> loadHistory(String conversationId, String userId) {
         int maxMessages = resolveMaxHistoryMessages();
-        List<ConversationMessageVO> dbMessages = conversationMessageService.listLatestMessages(
+        List<ConversationMessageVO> dbMessages = conversationMessageService.listMessages(
                 conversationId,
-                maxMessages
+                maxMessages,
+                ConversationMessageOrder.DESC
         );
         if (CollUtil.isEmpty(dbMessages)) {
             return List.of();
         }
 
-        dbMessages.sort(Comparator.comparing(ConversationMessageVO::getCreateTime));
         List<ChatMessage> result = dbMessages.stream()
                 .map(this::toChatMessage)
                 .filter(this::isHistoryMessage)

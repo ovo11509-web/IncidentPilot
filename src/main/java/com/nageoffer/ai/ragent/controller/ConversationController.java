@@ -6,6 +6,7 @@ import com.nageoffer.ai.ragent.controller.vo.ConversationVO;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.convention.Result;
 import com.nageoffer.ai.ragent.framework.web.Results;
+import com.nageoffer.ai.ragent.enums.ConversationMessageOrder;
 import com.nageoffer.ai.ragent.service.ConversationMessageService;
 import com.nageoffer.ai.ragent.service.ConversationService;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +62,6 @@ public class ConversationController {
      */
     @GetMapping("/conversations/{conversationId}/messages")
     public Result<List<ConversationMessageVO>> listMessages(@PathVariable String conversationId) {
-        return Results.success(conversationMessageService.listMessages(conversationId));
+        return Results.success(conversationMessageService.listMessages(conversationId, null, ConversationMessageOrder.ASC));
     }
 }

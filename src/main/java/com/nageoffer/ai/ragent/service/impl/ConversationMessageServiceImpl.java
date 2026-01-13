@@ -12,6 +12,7 @@ import com.nageoffer.ai.ragent.dao.mapper.ConversationMessageMapper;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationSummaryMapper;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
+import com.nageoffer.ai.ragent.enums.ConversationMessageOrder;
 import com.nageoffer.ai.ragent.service.ConversationMessageService;
 import com.nageoffer.ai.ragent.service.bo.ConversationMessageBO;
 import com.nageoffer.ai.ragent.service.bo.ConversationSummaryBO;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -29,7 +31,6 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
     private final ConversationSummaryMapper conversationSummaryMapper;
     private final ConversationMapper conversationMapper;
 
-
     @Override
     public void addMessage(ConversationMessageBO conversationMessage) {
         ConversationMessageDO messageDO = BeanUtil.toBean(conversationMessage, ConversationMessageDO.class);
@@ -37,12 +38,7 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
     }
 
     @Override
-    public List<ConversationMessageVO> listMessages(String conversationId) {
-        return listLatestMessages(conversationId, null);
-    }
-
-    @Override
-    public List<ConversationMessageVO> listLatestMessages(String conversationId, Integer limit) {
+    public List<ConversationMessageVO> listMessages(String conversationId, Integer limit, ConversationMessageOrder order) {
         String userId = UserContext.getUserId();
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
             return List.of();
@@ -58,16 +54,21 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
             throw new ClientException("会话不存在");
         }
 
+        boolean asc = order == null || order == ConversationMessageOrder.ASC;
         List<ConversationMessageDO> records = conversationMessageMapper.selectList(
                 Wrappers.lambdaQuery(ConversationMessageDO.class)
                         .eq(ConversationMessageDO::getConversationId, conversationId)
                         .eq(ConversationMessageDO::getUserId, userId)
                         .eq(ConversationMessageDO::getDeleted, 0)
-                        .orderByAsc(ConversationMessageDO::getCreateTime)
+                        .orderBy(true, asc, ConversationMessageDO::getCreateTime)
                         .last(limit != null, "limit " + limit)
         );
         if (records == null || records.isEmpty()) {
             return List.of();
+        }
+
+        if (!asc) {
+            Collections.reverse(records);
         }
 
         List<ConversationMessageVO> result = new ArrayList<>();
