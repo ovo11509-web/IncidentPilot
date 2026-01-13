@@ -123,7 +123,7 @@ public class SalesMCPExecutor implements MCPToolExecutor {
         String product = request.getStringParameter("product");
         String salesPerson = request.getStringParameter("salesPerson");
         String queryType = request.getStringParameter("queryType");
-        Integer limit = request.getParameter("limit", Integer.class);
+        Integer limit = request.getParameter("limit");
 
         // 默认值
         if (period == null || period.isBlank()) period = "本月";

@@ -48,19 +48,18 @@ public class MCPRequest {
     /**
      * 添加参数
      */
-    public MCPRequest addParameter(String key, Object value) {
+    public void addParameter(String key, Object value) {
         if (this.parameters == null) {
             this.parameters = new HashMap<>();
         }
         this.parameters.put(key, value);
-        return this;
     }
 
     /**
      * 获取参数
      */
     @SuppressWarnings("unchecked")
-    public <T> T getParameter(String key, Class<T> clazz) {
+    public <T> T getParameter(String key) {
         Object value = parameters.get(key);
         if (value == null) {
             return null;
