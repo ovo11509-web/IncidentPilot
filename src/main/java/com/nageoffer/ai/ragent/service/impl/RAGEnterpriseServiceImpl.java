@@ -164,7 +164,6 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         RetrievalContext ctx = buildPerQuestionContext(subIntents, DEFAULT_TOP_K);
         if (ctx.isEmpty()) {
             String emptyReply = "未检索到与问题相关的文档内容。";
-            memoryService.append(actualConversationId, UserContext.getUserId(), ChatMessage.assistant(emptyReply));
             callback.onContent(emptyReply);
             callback.onComplete();
             taskManager.unregister(taskId);
