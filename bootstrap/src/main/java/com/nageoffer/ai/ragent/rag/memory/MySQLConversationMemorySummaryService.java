@@ -70,7 +70,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
 
     @Override
     public void compressIfNeeded(String conversationId, String userId, ChatMessage message) {
-        if (!memoryProperties.isSummaryEnabled()) {
+        if (!memoryProperties.getSummaryEnabled()) {
             return;
         }
         if (message.getRole() != ChatMessage.Role.ASSISTANT) {
