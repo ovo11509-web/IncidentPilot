@@ -35,32 +35,32 @@ public class MemoryProperties {
      */
     @Min(1)
     @Max(100)
-    private int historyKeepTurns = 8;
+    private Integer historyKeepTurns = 8;
 
     /**
      * 缓存过期时间（分钟）
      */
-    private int ttlMinutes = 60;
+    private Integer ttlMinutes = 60;
 
     /**
      * 是否启用对话记忆压缩
      */
-    private boolean summaryEnabled = false;
+    private Boolean summaryEnabled = false;
 
     /**
      * 开始摘要的轮数阈值
      */
-    private int summaryStartTurns = 9;
+    private Integer summaryStartTurns = 9;
 
     /**
      * 摘要最大字数
      */
     @Min(200)
     @Max(1000)
-    private int summaryMaxChars = 200;
+    private Integer summaryMaxChars = 200;
 
     /**
      * 会话标题最大长度（用于提示词约束）
      */
-    private int titleMaxLength = 30;
+    private Integer titleMaxLength = 30;
 }
