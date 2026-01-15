@@ -1,5 +1,6 @@
 package com.nageoffer.ai.ragent.framework.idempotent;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.google.gson.Gson;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
@@ -35,7 +36,7 @@ public final class IdempotentSubmitAspect {
     public Object idempotentSubmit(ProceedingJoinPoint joinPoint) throws Throwable {
         IdempotentSubmit idempotentSubmit = getIdempotentSubmitAnnotation(joinPoint);
         // 获取分布式锁标识
-        String lockKey = String.format("no-duplicate-submit:path:%s:currentUserId:%s:md5:%s", getServletPath(), getCurrentUserId(), calcArgsMD5(joinPoint));
+        String lockKey = buildLockKey(joinPoint, idempotentSubmit);
         RLock lock = redissonClient.getLock(lockKey);
         // 尝试获取锁，获取锁失败就意味着已经重复提交，直接抛出异常
         if (!lock.tryLock()) {
@@ -80,5 +81,19 @@ public final class IdempotentSubmitAspect {
      */
     private String calcArgsMD5(ProceedingJoinPoint joinPoint) {
         return DigestUtil.md5Hex(gson.toJson(joinPoint.getArgs()).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String buildLockKey(ProceedingJoinPoint joinPoint, IdempotentSubmit idempotentSubmit) {
+        if (StrUtil.isNotBlank(idempotentSubmit.key())) {
+            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+            Object keyValue = SpELUtil.parseKey(idempotentSubmit.key(), signature.getMethod(), joinPoint.getArgs());
+            return String.format("idempotent-submit:key:%s", keyValue);
+        }
+        return String.format(
+                "idempotent-submit:path:%s:currentUserId:%s:md5:%s",
+                getServletPath(),
+                getCurrentUserId(),
+                calcArgsMD5(joinPoint)
+        );
     }
 }

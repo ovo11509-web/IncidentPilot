@@ -13,6 +13,11 @@ import java.lang.annotation.Target;
 public @interface IdempotentSubmit {
 
     /**
+     * 通过 SpEL 表达式生成的唯一 Key，优先级高于默认幂等逻辑
+     */
+    String key() default "";
+
+    /**
      * 触发幂等失败逻辑时，返回的错误提示信息
      */
     String message() default "您操作太快，请稍后再试";
