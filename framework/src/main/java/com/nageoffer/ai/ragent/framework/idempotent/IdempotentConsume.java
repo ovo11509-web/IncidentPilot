@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface NoMQDuplicateConsume {
+public @interface IdempotentConsume {
 
     /**
      * 设置防重令牌 Key 前缀

@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface NoDuplicateSubmit {
+public @interface IdempotentSubmit {
 
     /**
      * 触发幂等失败逻辑时，返回的错误提示信息

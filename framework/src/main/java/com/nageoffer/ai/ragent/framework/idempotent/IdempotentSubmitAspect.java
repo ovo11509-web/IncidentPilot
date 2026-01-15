@@ -23,23 +23,23 @@ import java.util.Objects;
  */
 @Aspect
 @RequiredArgsConstructor
-public final class NoDuplicateSubmitAspect {
+public final class IdempotentSubmitAspect {
 
     private final RedissonClient redissonClient;
     private final Gson gson = new Gson();
 
     /**
-     * 增强方法标记 {@link NoDuplicateSubmit} 注解逻辑
+     * 增强方法标记 {@link IdempotentSubmit} 注解逻辑
      */
-    @Around("@annotation(com.nageoffer.ai.ragent.framework.idempotent.NoDuplicateSubmit)")
-    public Object noDuplicateSubmit(ProceedingJoinPoint joinPoint) throws Throwable {
-        NoDuplicateSubmit noDuplicateSubmit = getNoDuplicateSubmitAnnotation(joinPoint);
+    @Around("@annotation(com.nageoffer.ai.ragent.framework.idempotent.IdempotentSubmit)")
+    public Object idempotentSubmit(ProceedingJoinPoint joinPoint) throws Throwable {
+        IdempotentSubmit idempotentSubmit = getIdempotentSubmitAnnotation(joinPoint);
         // 获取分布式锁标识
         String lockKey = String.format("no-duplicate-submit:path:%s:currentUserId:%s:md5:%s", getServletPath(), getCurrentUserId(), calcArgsMD5(joinPoint));
         RLock lock = redissonClient.getLock(lockKey);
         // 尝试获取锁，获取锁失败就意味着已经重复提交，直接抛出异常
         if (!lock.tryLock()) {
-            throw new ClientException(noDuplicateSubmit.message());
+            throw new ClientException(idempotentSubmit.message());
         }
         Object result;
         try {
@@ -54,10 +54,10 @@ public final class NoDuplicateSubmitAspect {
     /**
      * @return 返回自定义防重复提交注解
      */
-    public static NoDuplicateSubmit getNoDuplicateSubmitAnnotation(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
+    public static IdempotentSubmit getIdempotentSubmitAnnotation(ProceedingJoinPoint joinPoint) throws NoSuchMethodException {
         MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();
         Method targetMethod = joinPoint.getTarget().getClass().getDeclaredMethod(methodSignature.getName(), methodSignature.getMethod().getParameterTypes());
-        return targetMethod.getAnnotation(NoDuplicateSubmit.class);
+        return targetMethod.getAnnotation(IdempotentSubmit.class);
     }
 
     /**

@@ -9,7 +9,7 @@ import java.util.Objects;
  * 幂等 MQ 消费状态枚举
  */
 @RequiredArgsConstructor
-public enum IdempotentMQConsumeStatusEnum {
+public enum IdempotentConsumeStatusEnum {
 
     /**
      * 消费中

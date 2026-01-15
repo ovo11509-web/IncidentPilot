@@ -17,6 +17,9 @@ import java.util.Optional;
  */
 public final class SpELUtil {
 
+    private static final DefaultParameterNameDiscoverer PARAMETER_NAME_DISCOVERER = new DefaultParameterNameDiscoverer();
+    private static final ExpressionParser EXPRESSION_PARSER = new SpelExpressionParser();
+
     /**
      * 校验并返回实际使用的 spEL 表达式
      *
@@ -40,10 +43,8 @@ public final class SpELUtil {
      * @return 解析的字符串值
      */
     public static Object parse(String spEl, Method method, Object[] contextObj) {
-        DefaultParameterNameDiscoverer discoverer = new DefaultParameterNameDiscoverer();
-        ExpressionParser parser = new SpelExpressionParser();
-        Expression exp = parser.parseExpression(spEl);
-        String[] params = discoverer.getParameterNames(method);
+        Expression exp = EXPRESSION_PARSER.parseExpression(spEl);
+        String[] params = PARAMETER_NAME_DISCOVERER.getParameterNames(method);
         StandardEvaluationContext context = new StandardEvaluationContext();
         if (ArrayUtil.isNotEmpty(params)) {
             for (int len = 0; len < params.length; len++) {
