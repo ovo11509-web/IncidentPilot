@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.controller;
 
 import com.nageoffer.ai.ragent.framework.convention.Result;
+import com.nageoffer.ai.ragent.framework.idempotent.IdempotentSubmit;
 import com.nageoffer.ai.ragent.framework.web.Results;
 import com.nageoffer.ai.ragent.service.RAGEnterpriseService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,10 @@ public class RAGEnterpriseController {
     /**
      * 以 SSE 方式发起对话并持续推送响应
      */
+    @IdempotentSubmit(
+            key = "T(com.nageoffer.ai.ragent.framework.context.UserContext).getUserId()",
+            message = "当前会话处理中，请稍后再发起新的对话"
+    )
     @GetMapping(value = "/rag/v3/chat", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter chat(@RequestParam String question,
                            @RequestParam(required = false) String conversationId,
@@ -51,6 +56,7 @@ public class RAGEnterpriseController {
     /**
      * 停止指定任务的执行
      */
+    @IdempotentSubmit
     @PostMapping(value = "/rag/v3/stop")
     public Result<Void> stop(@RequestParam String taskId) {
         ragEnterpriseService.stopTask(taskId);
