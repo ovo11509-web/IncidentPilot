@@ -36,6 +36,10 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 知识库文档管理控制器
+ * 提供文档的上传、分块、删除、查询、启用/禁用等功能
+ */
 @RestController
 @RequiredArgsConstructor
 @Validated

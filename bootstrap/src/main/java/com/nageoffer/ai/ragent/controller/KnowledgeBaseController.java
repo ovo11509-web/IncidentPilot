@@ -34,6 +34,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 知识库控制器
+ * 提供知识库的增删改查等基础操作接口
+ */
 @RestController
 @RequiredArgsConstructor
 public class KnowledgeBaseController {

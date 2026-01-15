@@ -36,6 +36,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 路由式 LLM 服务实现类
+ * <p>
+ * 该服务负责智能路由和调度大模型请求，主要功能包括：
+ * 1. 根据请求特性选择最佳的大模型提供商
+ * 2. 支持多模型候选的自动降级和故障转移
+ * 3. 维护模型健康状态，优化路由策略
+ * 4. 支持同步和流式两种调用方式
+ */
 @Slf4j
 @Service
 @Primary

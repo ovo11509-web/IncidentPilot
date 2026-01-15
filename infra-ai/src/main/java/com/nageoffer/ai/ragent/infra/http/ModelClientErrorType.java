@@ -17,6 +17,12 @@
 
 package com.nageoffer.ai.ragent.infra.http;
 
+/**
+ * 模型客户端错误类型枚举
+ * <p>
+ * 定义了与AI模型服务交互过程中可能遇到的各种错误类型，
+ * 用于统一错误分类和处理策略
+ */
 public enum ModelClientErrorType {
 
     /**

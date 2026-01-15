@@ -28,29 +28,50 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * SaToken 配置类
+ * 配置登录拦截和用户上下文拦截器
+ */
 @Configuration
 @RequiredArgsConstructor
 public class SaTokenConfig implements WebMvcConfigurer {
 
+    /**
+     * 用户上下文拦截器
+     */
     private final UserContextInterceptor userContextInterceptor;
 
+    /**
+     * 添加拦截器配置
+     *
+     * @param registry 拦截器注册器
+     */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 注册 SaToken 登录拦截器
         registry.addInterceptor(new SaInterceptor(handler -> {
                     // 异步调度请求跳过登录检查（SSE 完成回调会触发 asyncDispatch，此时 SaToken 上下文已丢失）
                     ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
                     if (attrs != null) {
                         HttpServletRequest request = attrs.getRequest();
+                        // 判断是否为异步调度请求，如果是则跳过登录检查
                         if (request.getDispatcherType() == DispatcherType.ASYNC) {
                             return;
                         }
                     }
+                    // 执行登录检查
                     StpUtil.checkLogin();
                 }))
+                // 拦截所有路径
                 .addPathPatterns("/**")
+                // 排除认证相关路径和错误页面
                 .excludePathPatterns("/auth/**", "/error");
+
+        // 注册用户上下文拦截器
         registry.addInterceptor(userContextInterceptor)
+                // 拦截所有路径
                 .addPathPatterns("/**")
+                // 排除认证相关路径和错误页面
                 .excludePathPatterns("/auth/**", "/error");
     }
 }

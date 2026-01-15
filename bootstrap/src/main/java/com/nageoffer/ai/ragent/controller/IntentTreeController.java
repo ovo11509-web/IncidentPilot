@@ -34,27 +34,43 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 意图树控制器
+ * 提供意图节点树的查询、创建、更新和删除功能
+ */
 @RestController
 @RequiredArgsConstructor
 public class IntentTreeController {
 
     private final IntentTreeService intentTreeService;
 
+    /**
+     * 获取完整的意图节点树
+     */
     @GetMapping("/intent-tree/trees")
     public Result<List<IntentNodeTreeVO>> tree() {
         return Results.success(intentTreeService.getFullTree());
     }
 
+    /**
+     * 创建意图节点
+     */
     @PostMapping("/intent-tree")
     public Result<String> createNode(@RequestBody IntentNodeCreateRequest requestParam) {
         return Results.success(intentTreeService.createNode(requestParam));
     }
 
+    /**
+     * 更新意图节点
+     */
     @PutMapping("/intent-tree/{id}")
     public void updateNode(@PathVariable Long id, @RequestBody IntentNodeUpdateRequest requestParam) {
         intentTreeService.updateNode(id, requestParam);
     }
 
+    /**
+     * 删除意图节点
+     */
     @DeleteMapping("/intent-tree/{id}")
     public void deleteNode(@PathVariable String id) {
         intentTreeService.deleteNode(id);

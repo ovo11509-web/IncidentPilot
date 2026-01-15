@@ -30,6 +30,25 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+/**
+ * 用户上下文拦截器
+ *
+ * <p>该拦截器用于在请求处理前从 SaToken 中获取登录用户信息，并设置到 UserContext 中，
+ * 方便后续业务逻辑使用。在请求完成后清理 UserContext，避免内存泄漏。
+ *
+ * <p>主要功能：
+ * <ul>
+ *   <li>在请求前置处理时，从 SaToken 获取登录用户 ID</li>
+ *   <li>根据用户 ID 查询数据库获取完整用户信息</li>
+ *   <li>将用户信息封装成 LoginUser 对象并设置到 UserContext 线程上下文中</li>
+ *   <li>在请求完成后清理 UserContext，防止线程复用时的数据污染</li>
+ *   <li>跳过异步调度请求（如 SSE 完成回调），避免 SaToken 上下文丢失问题</li>
+ * </ul>
+ *
+ * @author nageoffer
+ * @see UserContext
+ * @see LoginUser
+ */
 @Component
 @RequiredArgsConstructor
 public class UserContextInterceptor implements HandlerInterceptor {

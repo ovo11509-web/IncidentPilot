@@ -29,6 +29,12 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 路由式重排服务实现类
+ * <p>
+ * 该服务通过模型路由机制动态选择合适的重排客户端，并支持失败降级策略
+ * 作为主要的重排服务实现，用于对检索到的文档块进行相关性重新排序
+ */
 @Service
 @Primary
 public class RoutingRerankService implements RerankService {
