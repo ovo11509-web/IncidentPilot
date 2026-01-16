@@ -45,7 +45,12 @@ public enum SSEEventType {
     /**
      * 取消事件
      */
-    CANCEL("cancel");
+    CANCEL("cancel"),
+
+    /**
+     * 拒绝事件
+     */
+    REJECT("reject");
 
     private final String value;
 
