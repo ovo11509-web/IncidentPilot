@@ -33,6 +33,7 @@ import com.nageoffer.ai.ragent.service.ConversationGroupService;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StreamChatEventHandler implements StreamCallback {
 
@@ -49,6 +50,7 @@ public class StreamChatEventHandler implements StreamCallback {
     private final StreamTaskManager taskManager;
     private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
+    private final AtomicBoolean messageIdSent = new AtomicBoolean(false);
 
     public StreamChatEventHandler(SseEmitter emitter,
                                   String conversationId,
@@ -80,7 +82,8 @@ public class StreamChatEventHandler implements StreamCallback {
     private void saveAnswerIfNotEmpty() {
         String content = answer.toString();
         if (StrUtil.isNotBlank(content)) {
-            memoryService.append(conversationId, userId, ChatMessage.assistant(content));
+            Long messageId = memoryService.append(conversationId, userId, ChatMessage.assistant(content));
+            sendMessageIdIfNeeded(messageId);
         }
     }
 
@@ -112,8 +115,9 @@ public class StreamChatEventHandler implements StreamCallback {
         if (taskManager.isCancelled(taskId)) {
             return;
         }
-        memoryService.append(conversationId, UserContext.getUserId(),
+        Long messageId = memoryService.append(conversationId, UserContext.getUserId(),
                 ChatMessage.assistant(answer.toString()));
+        sendMessageIdIfNeeded(messageId);
         if (sendTitleOnComplete) {
             String title = resolveTitle();
             if (StrUtil.isNotBlank(title)) {
@@ -153,6 +157,16 @@ public class StreamChatEventHandler implements StreamCallback {
         if (!buffer.isEmpty()) {
             sender.sendEvent(SSEEventType.MESSAGE.value(), new MessageDelta(type, buffer.toString()));
         }
+    }
+
+    private void sendMessageIdIfNeeded(Long messageId) {
+        if (messageId == null) {
+            return;
+        }
+        if (!messageIdSent.compareAndSet(false, true)) {
+            return;
+        }
+        sender.sendEvent(SSEEventType.MESSAGE_ID.value(), String.valueOf(messageId));
     }
 
     private String resolveTitle() {

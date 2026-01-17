@@ -33,6 +33,11 @@ public enum SSEEventType {
     MESSAGE("message"),
 
     /**
+     * 落库消息ID事件
+     */
+    MESSAGE_ID("messageid"),
+
+    /**
      * 完成事件
      */
     DONE("done"),

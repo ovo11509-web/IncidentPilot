@@ -29,6 +29,7 @@ import com.nageoffer.ai.ragent.dao.mapper.ConversationMessageMapper;
 import com.nageoffer.ai.ragent.dao.mapper.ConversationSummaryMapper;
 import com.nageoffer.ai.ragent.enums.ConversationMessageOrder;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
+import com.nageoffer.ai.ragent.service.MessageFeedbackService;
 import com.nageoffer.ai.ragent.service.ConversationMessageService;
 import com.nageoffer.ai.ragent.service.bo.ConversationMessageBO;
 import com.nageoffer.ai.ragent.service.bo.ConversationSummaryBO;
@@ -38,6 +39,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -46,11 +48,13 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
     private final ConversationMessageMapper conversationMessageMapper;
     private final ConversationSummaryMapper conversationSummaryMapper;
     private final ConversationMapper conversationMapper;
+    private final MessageFeedbackService feedbackService;
 
     @Override
-    public void addMessage(ConversationMessageBO conversationMessage) {
+    public Long addMessage(ConversationMessageBO conversationMessage) {
         ConversationMessageDO messageDO = BeanUtil.toBean(conversationMessage, ConversationMessageDO.class);
         conversationMessageMapper.insert(messageDO);
+        return messageDO.getId();
     }
 
     @Override
@@ -87,6 +91,12 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
             Collections.reverse(records);
         }
 
+        List<Long> assistantMessageIds = records.stream()
+                .filter(record -> "assistant".equalsIgnoreCase(record.getRole()))
+                .map(ConversationMessageDO::getId)
+                .toList();
+        Map<Long, Integer> votesByMessageId = feedbackService.getUserVotes(userId, assistantMessageIds);
+
         List<ConversationMessageVO> result = new ArrayList<>();
         for (ConversationMessageDO record : records) {
             ConversationMessageVO vo = ConversationMessageVO.builder()
@@ -94,6 +104,7 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
                     .conversationId(record.getConversationId())
                     .role(record.getRole())
                     .content(record.getContent())
+                    .vote(votesByMessageId.get(record.getId()))
                     .createTime(record.getCreateTime())
                     .build();
             result.add(vo);

@@ -31,7 +31,7 @@ public interface ConversationMessageService {
      *
      * @param conversationMessage 消息内容
      */
-    void addMessage(ConversationMessageBO conversationMessage);
+    Long addMessage(ConversationMessageBO conversationMessage);
 
     /**
      * 获取对话消息列表（支持排序与数量限制）

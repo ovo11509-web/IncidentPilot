@@ -47,12 +47,13 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
     }
 
     @Override
-    public void append(String conversationId, String userId, ChatMessage message) {
+    public Long append(String conversationId, String userId, ChatMessage message) {
         if (StrUtil.isBlank(conversationId) || StrUtil.isBlank(userId)) {
-            return;
+            return null;
         }
-        memoryStore.append(conversationId, userId, message);
+        Long messageId = memoryStore.append(conversationId, userId, message);
         summaryService.compressIfNeeded(conversationId, userId, message);
+        return messageId;
     }
 
     private List<ChatMessage> attachSummary(ChatMessage summary, List<ChatMessage> messages) {

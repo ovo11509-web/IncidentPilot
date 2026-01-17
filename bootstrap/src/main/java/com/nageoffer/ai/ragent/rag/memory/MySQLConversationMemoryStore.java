@@ -71,14 +71,14 @@ public class MySQLConversationMemoryStore implements ConversationMemoryStore {
     }
 
     @Override
-    public void append(String conversationId, String userId, ChatMessage message) {
+    public Long append(String conversationId, String userId, ChatMessage message) {
         ConversationMessageBO conversationMessage = ConversationMessageBO.builder()
                 .conversationId(conversationId)
                 .userId(userId)
                 .role(message.getRole().name().toLowerCase())
                 .content(message.getContent())
                 .build();
-        conversationMessageService.addMessage(conversationMessage);
+        Long messageId = conversationMessageService.addMessage(conversationMessage);
 
         if (message.getRole() == ChatMessage.Role.USER) {
             ConversationCreateRequest conversation = ConversationCreateRequest.builder()
@@ -89,6 +89,7 @@ public class MySQLConversationMemoryStore implements ConversationMemoryStore {
                     .build();
             conversationService.createOrUpdate(conversation);
         }
+        return messageId;
     }
 
     @Override

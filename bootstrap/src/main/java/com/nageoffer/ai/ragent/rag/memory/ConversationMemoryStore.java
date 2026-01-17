@@ -37,13 +37,14 @@ public interface ConversationMemoryStore {
     List<ChatMessage> loadHistory(String conversationId, String userId);
 
     /**
-     * 追加消息到对话历史
+     * 追加消息到对话历史并返回消息ID
      *
      * @param conversationId 对话ID
      * @param userId         用户ID
      * @param message        要追加的消息
+     * @return 消息ID（可能为空）
      */
-    void append(String conversationId, String userId, ChatMessage message);
+    Long append(String conversationId, String userId, ChatMessage message);
 
     /**
      * 刷新对话缓存

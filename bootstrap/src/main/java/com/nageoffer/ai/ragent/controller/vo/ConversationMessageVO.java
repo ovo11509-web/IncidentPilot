@@ -54,6 +54,11 @@ public class ConversationMessageVO {
     private String content;
 
     /**
+     * 反馈值：1=点赞，-1=点踩，null=未反馈
+     */
+    private Integer vote;
+
+    /**
      * 创建时间
      */
     private Date createTime;
