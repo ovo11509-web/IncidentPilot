@@ -41,7 +41,7 @@ export function MessageList({ messages, isStreaming, sessionKey }: MessageListPr
       ({ className, ...props }, ref) => (
         <div
           ref={ref}
-          className={cn("mx-auto max-w-4xl space-y-8 px-6 py-8 md:px-8", className)}
+          className={cn("mx-auto max-w-4xl space-y-8 px-6 pt-10 pb-8 md:px-8", className)}
           {...props}
         />
       )

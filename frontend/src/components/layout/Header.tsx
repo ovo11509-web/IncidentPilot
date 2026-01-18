@@ -44,7 +44,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   }, [starCount]);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-gray-100 bg-white">
+    <header className="sticky top-0 z-20 bg-white">
       <div className="flex h-16 items-center justify-between px-6">
         <div className="flex items-center gap-2">
           <Button
