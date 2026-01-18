@@ -394,7 +394,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>删除该会话？</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget?.title || "该会话"}将被永久删除，无法恢复。
+              [{deleteTarget?.title || "该会话"}] 将被永久删除，无法恢复。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
