@@ -131,6 +131,10 @@ public class ConversationServiceImpl implements ConversationService {
         if (StrUtil.isBlank(title)) {
             throw new ClientException("会话名称不能为空");
         }
+        int maxLen = memoryProperties.getTitleMaxLength();
+        if (title.length() > maxLen) {
+            throw new ClientException("会话名称长度不能超过" + maxLen + "个字符");
+        }
 
         ConversationDO record = conversationMapper.selectOne(
                 Wrappers.lambdaQuery(ConversationDO.class)
