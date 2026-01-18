@@ -65,12 +65,20 @@
   @apply border-border;
 }
 
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
 body {
   @apply bg-gray-50 text-gray-900 font-body antialiased min-h-screen;
   background-color: var(--bg-secondary);
+  overflow: hidden;
 }
 
 #root {
+  height: 100%;
   min-height: 100vh;
 }
 
