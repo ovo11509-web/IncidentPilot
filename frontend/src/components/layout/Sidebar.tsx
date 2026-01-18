@@ -2,7 +2,7 @@ import * as React from "react";
 import { differenceInCalendarDays, isValid } from "date-fns";
 import {
   BookOpen,
-  Cpu,
+  Bot,
   LogOut,
   MessageSquare,
   MoreHorizontal,
@@ -168,7 +168,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="border-b border-[#F0F0F0] pb-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 shadow-md shadow-indigo-500/20">
-              <Cpu className="h-5 w-5 text-white" />
+              <Bot className="h-5 w-5 text-white" />
             </div>
             <div style={{ fontFamily: sessionTitleFont }}>
               <p className="text-base font-semibold text-gray-900">RAG 智能问答</p>
