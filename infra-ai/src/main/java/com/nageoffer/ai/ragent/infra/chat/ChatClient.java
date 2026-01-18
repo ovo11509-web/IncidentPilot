@@ -21,7 +21,6 @@ import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.infra.enums.ModelProvider;
 import com.nageoffer.ai.ragent.infra.model.ModelTarget;
 
-
 /**
  * 聊天客户端接口
  * 定义了与AI模型进行对话的核心方法

@@ -31,6 +31,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * 模型选择器
+ * 负责根据配置和当前需求（如普通对话、深度思考、Embedding等）选择合适的模型候选列表
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

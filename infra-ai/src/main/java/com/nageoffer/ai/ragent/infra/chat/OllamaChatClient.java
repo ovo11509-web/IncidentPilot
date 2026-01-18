@@ -32,6 +32,7 @@ import com.nageoffer.ai.ragent.infra.http.ModelClientErrorType;
 import com.nageoffer.ai.ragent.infra.http.ModelClientException;
 import com.nageoffer.ai.ragent.infra.http.ModelUrlResolver;
 import com.nageoffer.ai.ragent.infra.model.ModelTarget;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
 import okhttp3.OkHttpClient;
@@ -52,22 +53,18 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@Service
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class OllamaChatClient implements ChatClient {
+
+    private final OkHttpClient httpClient;
+    @Qualifier("modelStreamExecutor")
+    private final Executor modelStreamExecutor;
 
     private final Gson gson = new GsonBuilder()
             .disableHtmlEscaping()
             .create();
-    private final OkHttpClient httpClient;
-    private final Executor modelStreamExecutor;
-
-    @Autowired
-    public OllamaChatClient(OkHttpClient httpClient,
-                            @Qualifier("modelStreamExecutor") Executor modelStreamExecutor) {
-        this.httpClient = httpClient;
-        this.modelStreamExecutor = modelStreamExecutor;
-    }
 
     @Override
     public String provider() {

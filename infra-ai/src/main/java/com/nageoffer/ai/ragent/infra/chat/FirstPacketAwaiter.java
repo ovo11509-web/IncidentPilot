@@ -90,6 +90,7 @@ public class FirstPacketAwaiter {
      */
     @Getter
     public static class Result {
+
         public enum Type {SUCCESS, ERROR, TIMEOUT, NO_CONTENT}
 
         private final Type type;

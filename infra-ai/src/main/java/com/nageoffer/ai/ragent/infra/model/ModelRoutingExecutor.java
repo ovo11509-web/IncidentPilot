@@ -27,6 +27,10 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * 模型路由执行器
+ * 负责在多个模型候选者之间进行调度执行，并提供故障转移（Fallback）和健康检查机制
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -38,8 +42,7 @@ public class ModelRoutingExecutor {
             ModelCapability capability,
             List<ModelTarget> targets,
             Function<ModelTarget, C> clientResolver,
-            ModelCaller<C, T> caller
-    ) {
+            ModelCaller<C, T> caller) {
         String label = capability.getDisplayName();
         if (targets == null || targets.isEmpty()) {
             throw new RemoteException("No " + label + " model candidates available");
