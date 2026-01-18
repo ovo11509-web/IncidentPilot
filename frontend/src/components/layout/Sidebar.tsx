@@ -228,10 +228,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {filteredSessions.length === 0 ? (
             <p className="px-3 py-2 text-sm text-gray-400">暂无会话</p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {groupedSessions.map((group) => (
-                <div key={group.label} className="space-y-1">
-                  <p className="px-3 py-2 text-xs font-medium text-gray-400">
+                <div key={group.label} className="space-y-0.5">
+                  <p className="px-4 pt-1 pb-0 text-xs font-medium text-gray-400">
                     {group.label}
                   </p>
                   {group.items.map((session) => (
