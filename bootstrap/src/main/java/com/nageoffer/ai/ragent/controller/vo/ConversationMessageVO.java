@@ -36,7 +36,7 @@ public class ConversationMessageVO {
     /**
      * 消息ID
      */
-    private Long id;
+    private String id;
 
     /**
      * 会话ID

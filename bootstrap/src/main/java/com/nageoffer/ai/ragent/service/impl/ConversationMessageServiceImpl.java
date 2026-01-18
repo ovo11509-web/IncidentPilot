@@ -100,7 +100,7 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
         List<ConversationMessageVO> result = new ArrayList<>();
         for (ConversationMessageDO record : records) {
             ConversationMessageVO vo = ConversationMessageVO.builder()
-                    .id(record.getId())
+                    .id(String.valueOf(record.getId()))
                     .conversationId(record.getConversationId())
                     .role(record.getRole())
                     .content(record.getContent())
