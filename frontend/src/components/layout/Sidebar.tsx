@@ -58,6 +58,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     title: string;
   } | null>(null);
   const [isScrolling, setIsScrolling] = React.useState(false);
+  const [avatarFailed, setAvatarFailed] = React.useState(false);
   const scrollTimeoutRef = React.useRef<number | null>(null);
   const renameInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -129,6 +130,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       renameInputRef.current?.select();
     }
   }, [renamingId]);
+
+  React.useEffect(() => {
+    setAvatarFailed(false);
+  }, [user?.avatar, user?.userId]);
+
+  const avatarUrl = user?.avatar?.trim();
+  const showAvatar = Boolean(avatarUrl) && !avatarFailed;
+  const avatarFallback = (user?.username || user?.userId || "用户").slice(0, 1).toUpperCase();
 
   const startRename = (id: string, title: string) => {
     setRenamingId(id);
@@ -335,10 +344,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors hover:bg-gray-50 data-[state=open]:bg-gray-100"
                 aria-label="用户菜单"
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-md">
-                  <span className="text-sm font-medium">
-                    {(user?.userId || "A").slice(0, 1).toUpperCase()}
-                  </span>
+                <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-md">
+                  {showAvatar ? (
+                    <img
+                      src={avatarUrl}
+                      alt={user?.username || user?.userId || "用户"}
+                      className="h-full w-full object-cover"
+                      onError={() => setAvatarFailed(true)}
+                    />
+                  ) : (
+                    <span className="text-sm font-medium">{avatarFallback}</span>
+                  )}
                 </div>
                 <span className="flex-1 truncate text-sm font-medium text-gray-900">
                   {(() => {

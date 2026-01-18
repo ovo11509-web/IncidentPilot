@@ -9,7 +9,10 @@ export interface User {
   username?: string;
   role: string;
   token: string;
+  avatar?: string;
 }
+
+export type CurrentUser = Omit<User, "token">;
 
 export interface Session {
   id: string;

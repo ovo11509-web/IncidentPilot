@@ -45,4 +45,9 @@ public class LoginUser {
      * 角色（如 admin/user）
      */
     private String role;
+
+    /**
+     * 用户头像
+     */
+    private String avatar;
 }

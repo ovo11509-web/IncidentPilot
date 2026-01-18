@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { toast } from "sonner";
 
 import type { User } from "@/types";
-import { login as loginRequest, logout as logoutRequest } from "@/services/authService";
+import { getCurrentUser, login as loginRequest, logout as logoutRequest } from "@/services/authService";
 import { setAuthToken } from "@/services/api";
 import { useChatStore } from "@/stores/chatStore";
 import { storage } from "@/utils/storage";
@@ -15,9 +15,10 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  fetchCurrentUser: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: storage.getUser(),
   token: storage.getToken(),
   isAuthenticated: Boolean(storage.getToken()),
@@ -30,12 +31,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         userId: data.userId,
         username: data.username || username,
         role: data.role,
-        token: data.token
+        token: data.token,
+        avatar: data.avatar
       };
       storage.setToken(user.token);
       storage.setUser(user);
       setAuthToken(user.token);
       set({ user, token: user.token, isAuthenticated: true });
+      get().fetchCurrentUser().catch(() => null);
       useChatStore.getState().cancelGeneration();
       useChatStore.setState({
         sessions: [],
@@ -88,5 +91,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     const user = storage.getUser();
     setAuthToken(token);
     set({ token, user, isAuthenticated: Boolean(token) });
+    if (token) {
+      await get().fetchCurrentUser();
+    }
+  },
+  fetchCurrentUser: async () => {
+    const token = get().token || storage.getToken();
+    if (!token) return;
+    try {
+      const data = await getCurrentUser();
+      const nextUser = { ...data, token };
+      storage.setUser(nextUser);
+      set({ user: nextUser, token, isAuthenticated: true });
+    } catch {
+      return;
+    }
   }
 }));

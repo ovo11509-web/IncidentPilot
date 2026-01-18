@@ -77,6 +77,14 @@ public final class UserContext {
     }
 
     /**
+     * 获取当前头像（未登录返回 null）
+     */
+    public static String getAvatar() {
+        LoginUser user = CONTEXT.get();
+        return user == null ? null : user.getAvatar();
+    }
+
+    /**
      * 清理当前线程的用户上下文
      */
     public static void clear() {

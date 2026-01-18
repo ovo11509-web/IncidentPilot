@@ -45,6 +45,11 @@ public class UserDO {
     private String password;
 
     /**
+     * 用户头像 URL
+     */
+    private String avatar;
+
+    /**
      * 角色：admin / user
      */
     private String role;
