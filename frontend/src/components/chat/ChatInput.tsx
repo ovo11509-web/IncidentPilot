@@ -62,31 +62,34 @@ export function ChatInput() {
       </div>
       <div
         className={cn(
-          "relative flex flex-col rounded-2xl border-2 bg-white p-4 transition-all duration-300",
+          "relative flex flex-col rounded-2xl border-2 bg-white px-4 pt-4 pb-2 transition-all duration-300",
           isFocused
             ? "border-indigo-500 shadow-lg shadow-indigo-500/10"
             : "border-gray-200 hover:border-gray-300"
         )}
       >
-        <Textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder={deepThinkingEnabled ? "输入需要深度分析的问题..." : "输入你的问题..."}
-          className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2 pt-2 pb-2 pr-2 text-[15px] text-gray-700 shadow-none placeholder:text-gray-400 focus-visible:ring-0"
-          rows={1}
-          disabled={isStreaming}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              handleSubmit();
-            }
-          }}
-          aria-label="聊天输入框"
-        />
-        <div className="flex items-center justify-end border-t border-gray-100 pt-2">
+        <div className="relative">
+          <Textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={deepThinkingEnabled ? "输入需要深度分析的问题..." : "输入你的问题..."}
+            className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2 pt-2 pb-2 pr-2 text-[15px] text-gray-700 shadow-none placeholder:text-gray-400 focus-visible:ring-0"
+            rows={1}
+            disabled={isStreaming}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                handleSubmit();
+              }
+            }}
+            aria-label="聊天输入框"
+          />
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[10px] bg-gradient-to-b from-white/0 via-white/40 to-white/90" />
+        </div>
+        <div className="mt-2 flex items-center justify-end">
           <button
             type="button"
             onClick={handleSubmit}

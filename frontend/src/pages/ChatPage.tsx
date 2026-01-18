@@ -69,7 +69,7 @@ export function ChatPage() {
             sessionKey={currentSessionId}
           />
         </div>
-        <div className="border-t border-gray-100 bg-white">
+        <div className="relative z-20 border-t border-gray-100 bg-white">
           <div className="mx-auto max-w-4xl px-6 py-6">
             <ChatInput />
           </div>
