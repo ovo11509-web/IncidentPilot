@@ -33,19 +33,14 @@ public enum SSEEventType {
     MESSAGE("message"),
 
     /**
-     * 落库消息ID事件
+     * 模型回复完成事件
      */
-    MESSAGE_ID("messageid"),
+    FINISH("finish"),
 
     /**
      * 完成事件
      */
     DONE("done"),
-
-    /**
-     * 标题事件
-     */
-    TITLE("title"),
 
     /**
      * 取消事件

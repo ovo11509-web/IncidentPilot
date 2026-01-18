@@ -19,9 +19,9 @@ package com.nageoffer.ai.ragent.service.handler;
 
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.dao.entity.ConversationDO;
+import com.nageoffer.ai.ragent.dto.CompletionPayload;
 import com.nageoffer.ai.ragent.dto.MessageDelta;
 import com.nageoffer.ai.ragent.dto.MetaPayload;
-import com.nageoffer.ai.ragent.dto.TitlePayload;
 import com.nageoffer.ai.ragent.enums.SSEEventType;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
@@ -33,7 +33,6 @@ import com.nageoffer.ai.ragent.service.ConversationGroupService;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StreamChatEventHandler implements StreamCallback {
 
@@ -50,7 +49,6 @@ public class StreamChatEventHandler implements StreamCallback {
     private final StreamTaskManager taskManager;
     private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
-    private final AtomicBoolean messageIdSent = new AtomicBoolean(false);
 
     public StreamChatEventHandler(SseEmitter emitter,
                                   String conversationId,
@@ -73,18 +71,20 @@ public class StreamChatEventHandler implements StreamCallback {
                 .orElse(5));
         sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));
         // 注册时传入取消回调，用于在取消时保存已累积的回复
-        taskManager.register(taskId, sender, this::saveAnswerIfNotEmpty);
+        taskManager.register(taskId, sender, this::buildCompletionPayloadOnCancel);
     }
 
     /**
-     * 保存已累积的回复内容（如果不为空）
+     * 构造取消时的完成载荷（如果有内容则先落库）
      */
-    private void saveAnswerIfNotEmpty() {
+    private CompletionPayload buildCompletionPayloadOnCancel() {
         String content = answer.toString();
+        Long messageId = null;
         if (StrUtil.isNotBlank(content)) {
-            Long messageId = memoryService.append(conversationId, userId, ChatMessage.assistant(content));
-            sendMessageIdIfNeeded(messageId);
+            messageId = memoryService.append(conversationId, userId, ChatMessage.assistant(content));
         }
+        String title = resolveTitleForEvent();
+        return new CompletionPayload(String.valueOf(messageId), title);
     }
 
     @Override
@@ -117,13 +117,9 @@ public class StreamChatEventHandler implements StreamCallback {
         }
         Long messageId = memoryService.append(conversationId, UserContext.getUserId(),
                 ChatMessage.assistant(answer.toString()));
-        sendMessageIdIfNeeded(messageId);
-        if (sendTitleOnComplete) {
-            String title = resolveTitle();
-            if (StrUtil.isNotBlank(title)) {
-                sender.sendEvent(SSEEventType.TITLE.value(), new TitlePayload(title));
-            }
-        }
+        String title = resolveTitleForEvent();
+        String messageIdText = messageId == null ? null : String.valueOf(messageId);
+        sender.sendEvent(SSEEventType.FINISH.value(), new CompletionPayload(messageIdText, title));
         sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
         taskManager.unregister(taskId);
         sender.complete();
@@ -159,21 +155,11 @@ public class StreamChatEventHandler implements StreamCallback {
         }
     }
 
-    private void sendMessageIdIfNeeded(Long messageId) {
-        if (messageId == null) {
-            return;
-        }
-        if (!messageIdSent.compareAndSet(false, true)) {
-            return;
-        }
-        sender.sendEvent(SSEEventType.MESSAGE_ID.value(), String.valueOf(messageId));
-    }
-
-    private String resolveTitle() {
+    private String resolveTitleForEvent() {
         ConversationDO conversation = conversationGroupService.findConversation(conversationId, userId);
         if (conversation != null && StrUtil.isNotBlank(conversation.getTitle())) {
             return conversation.getTitle();
         }
-        return "新对话";
+        return sendTitleOnComplete ? "新对话" : null;
     }
 }

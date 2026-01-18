@@ -21,6 +21,7 @@ import cn.hutool.core.util.StrUtil;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.nageoffer.ai.ragent.enums.SSEEventType;
+import com.nageoffer.ai.ragent.dto.CompletionPayload;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.infra.chat.StreamCancellationHandle;
 import jakarta.annotation.PostConstruct;
@@ -34,6 +35,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 @Slf4j
 @Component
@@ -74,12 +76,13 @@ public class StreamTaskManager {
         redissonClient.getTopic(CANCEL_TOPIC).removeListener(listenerId);
     }
 
-    public void register(String taskId, SseEmitterSender sender, Runnable onCancelCallback) {
+    public void register(String taskId, SseEmitterSender sender, Supplier<CompletionPayload> onCancelSupplier) {
         StreamTaskInfo taskInfo = getOrCreate(taskId);
         taskInfo.sender = sender;
-        taskInfo.onCancelCallback = onCancelCallback;
+        taskInfo.onCancelSupplier = onCancelSupplier;
         if (isTaskCancelledInRedis(taskId, taskInfo)) {
-            sendCancelAndDone(sender);
+            CompletionPayload payload = taskInfo.onCancelSupplier.get();
+            sendCancelAndDone(sender, payload);
             sender.complete();
         }
     }
@@ -141,20 +144,10 @@ public class StreamTaskManager {
         }
 
         // 在取消时执行回调，保存已累积的内容
-        executeOnCancelCallback(taskInfo);
         if (taskInfo.sender != null) {
-            sendCancelAndDone(taskInfo.sender);
+            CompletionPayload payload = taskInfo.onCancelSupplier.get();
+            sendCancelAndDone(taskInfo.sender, payload);
             taskInfo.sender.complete();
-        }
-    }
-
-    private void executeOnCancelCallback(StreamTaskInfo taskInfo) {
-        if (taskInfo.onCancelCallback != null) {
-            try {
-                taskInfo.onCancelCallback.run();
-            } catch (Exception e) {
-                log.warn("执行取消回调失败", e);
-            }
         }
     }
 
@@ -170,8 +163,9 @@ public class StreamTaskManager {
         return CANCEL_KEY_PREFIX + taskId;
     }
 
-    private void sendCancelAndDone(SseEmitterSender sender) {
-        sender.sendEvent(SSEEventType.CANCEL.value(), "[CANCEL]");
+    private void sendCancelAndDone(SseEmitterSender sender, CompletionPayload payload) {
+        CompletionPayload actualPayload = payload == null ? new CompletionPayload(null, null) : payload;
+        sender.sendEvent(SSEEventType.CANCEL.value(), actualPayload);
         sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
     }
 
@@ -184,6 +178,6 @@ public class StreamTaskManager {
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
         private volatile StreamCancellationHandle handle;
         private volatile SseEmitterSender sender;
-        private volatile Runnable onCancelCallback;
+        private volatile Supplier<CompletionPayload> onCancelSupplier;
     }
 }

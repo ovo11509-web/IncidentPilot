@@ -22,9 +22,9 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.config.MemoryProperties;
 import com.nageoffer.ai.ragent.config.RAGRateLimitProperties;
+import com.nageoffer.ai.ragent.dto.CompletionPayload;
 import com.nageoffer.ai.ragent.dto.MessageDelta;
 import com.nageoffer.ai.ragent.dto.MetaPayload;
-import com.nageoffer.ai.ragent.dto.TitlePayload;
 import com.nageoffer.ai.ragent.enums.SSEEventType;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
@@ -327,14 +327,14 @@ public class ChatQueueLimiter {
         boolean isNewConversation = conversationGroupService.findConversation(actualConversationId, userId) == null;
 
         memoryService.append(actualConversationId, userId, ChatMessage.user(question));
-        memoryService.append(actualConversationId, userId, ChatMessage.assistant(REJECT_MESSAGE));
+        Long messageId = memoryService.append(actualConversationId, userId, ChatMessage.assistant(REJECT_MESSAGE));
 
         String title = isNewConversation ? resolveTitle(actualConversationId, userId) : "";
         if (isNewConversation && StrUtil.isBlank(title)) {
             title = buildFallbackTitle(question);
         }
         String taskId = IdUtil.getSnowflakeNextIdStr();
-        return new RejectedContext(actualConversationId, taskId, title);
+        return new RejectedContext(actualConversationId, taskId, messageId, title);
     }
 
     private String resolveTitle(String conversationId, String userId) {
@@ -362,15 +362,15 @@ public class ChatQueueLimiter {
         if (rejectedContext != null) {
             sender.sendEvent(SSEEventType.META.value(), new MetaPayload(rejectedContext.conversationId, rejectedContext.taskId));
             sender.sendEvent(SSEEventType.REJECT.value(), new MessageDelta(RESPONSE_TYPE, REJECT_MESSAGE));
-            if (StrUtil.isNotBlank(rejectedContext.title)) {
-                sender.sendEvent(SSEEventType.TITLE.value(), new TitlePayload(rejectedContext.title));
-            }
+            String title = rejectedContext.title;
+            String messageId = String.valueOf(String.valueOf(rejectedContext.messageId));
+            sender.sendEvent(SSEEventType.FINISH.value(), new CompletionPayload(messageId, title));
         }
         sender.sendEvent(SSEEventType.DONE.value(), "[DONE]");
         sender.complete();
     }
 
-    private record RejectedContext(String conversationId, String taskId, String title) {
+    private record RejectedContext(String conversationId, String taskId, Long messageId, String title) {
     }
 
     private record ClaimResult(boolean claimed, double score) {
