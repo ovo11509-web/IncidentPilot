@@ -156,10 +156,13 @@ public class StreamChatEventHandler implements StreamCallback {
     }
 
     private String resolveTitleForEvent() {
+        if (!sendTitleOnComplete) {
+            return null;
+        }
         ConversationDO conversation = conversationGroupService.findConversation(conversationId, userId);
         if (conversation != null && StrUtil.isNotBlank(conversation.getTitle())) {
             return conversation.getTitle();
         }
-        return sendTitleOnComplete ? "新对话" : null;
+        return "新对话";
     }
 }
