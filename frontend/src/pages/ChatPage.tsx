@@ -47,8 +47,11 @@ export function ChatPage() {
     if (isCreatingNew) {
       return;
     }
+    if (currentSessionId) {
+      return;
+    }
     createSession().catch(() => null);
-  }, [sessionId, sessionsReady, isCreatingNew, selectSession, createSession]);
+  }, [sessionId, sessionsReady, isCreatingNew, currentSessionId, selectSession, createSession]);
 
   React.useEffect(() => {
     if (currentSessionId && currentSessionId !== sessionId) {

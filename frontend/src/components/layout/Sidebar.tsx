@@ -238,9 +238,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <div
                       key={session.id}
                       className={cn(
-                        "group flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition-all",
+                        "group relative flex items-center gap-2 rounded-xl px-4 py-1.5 text-[15px] transition-all",
                         currentSessionId === session.id
-                          ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                          ? "text-indigo-700 before:pointer-events-none before:absolute before:inset-y-0 before:inset-x-2 before:rounded-lg before:border before:border-indigo-100 before:bg-indigo-50 before:content-[''] before:z-0"
                           : "text-gray-600 hover:bg-gray-50"
                       )}
                       role="button"
@@ -281,10 +281,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                           onBlur={() => {
                             commitRename().catch(() => null);
                           }}
-                          className="h-7 flex-1 rounded-lg border border-indigo-200 bg-white px-2 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none"
+                          className="relative z-10 h-7 flex-1 rounded-lg border border-indigo-200 bg-white px-2 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none"
                         />
                       ) : (
-                        <span className="flex-1 truncate text-sm font-medium">
+                        <span className="relative z-10 flex-1 truncate text-sm font-medium">
                           {session.title || "新对话"}
                         </span>
                       )}
@@ -293,7 +293,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                           <button
                             type="button"
                             className={cn(
-                              "flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-opacity hover:bg-gray-200",
+                              "relative z-10 flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-opacity hover:bg-gray-200",
                               currentSessionId === session.id
                                 ? "opacity-100"
                                 : "opacity-0 group-hover:opacity-100"
