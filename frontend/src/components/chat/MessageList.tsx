@@ -19,6 +19,7 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
   const pendingScrollRef = React.useRef(true);
   const settleTimerRef = React.useRef<number | null>(null);
   const heightScrollRafRef = React.useRef<number | null>(null);
+  const prevStreamingRef = React.useRef(false);
   const initialTopMostItemIndex = React.useMemo(
     () => ({ index: "LAST" as const, align: "end" as const }),
     []
@@ -43,6 +44,21 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
       }
     }
   }, [sessionKey]);
+
+  React.useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = isStreaming;
+    if (!wasStreaming && isStreaming) {
+      scrollToBottom();
+      const timer = window.setTimeout(scrollToBottom, 80);
+      const lateTimer = window.setTimeout(scrollToBottom, 260);
+      return () => {
+        window.clearTimeout(timer);
+        window.clearTimeout(lateTimer);
+      };
+    }
+    return;
+  }, [isStreaming, scrollToBottom]);
 
   React.useLayoutEffect(() => {
     if (!pendingScrollRef.current || isStreaming || isLoading || messages.length === 0) {
