@@ -160,7 +160,14 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         // 聚合所有意图用于 prompt 规划
         IntentGroup mergedGroup = mergeIntentGroup(subIntents);
 
-        StreamCancellationHandle handle = streamLLMResponse(rewriteResult, ctx, mergedGroup, history, deepThinking, callback);
+        StreamCancellationHandle handle = streamLLMResponse(
+                rewriteResult,
+                ctx,
+                mergedGroup,
+                history,
+                deepThinking,
+                callback
+        );
         taskManager.bindHandle(taskId, handle);
     }
 
