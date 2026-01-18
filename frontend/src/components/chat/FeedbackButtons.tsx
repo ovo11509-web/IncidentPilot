@@ -11,9 +11,16 @@ interface FeedbackButtonsProps {
   feedback: FeedbackValue;
   content: string;
   className?: string;
+  alwaysVisible?: boolean;
 }
 
-export function FeedbackButtons({ messageId, feedback, content, className }: FeedbackButtonsProps) {
+export function FeedbackButtons({
+  messageId,
+  feedback,
+  content,
+  className,
+  alwaysVisible
+}: FeedbackButtonsProps) {
   const submitFeedback = useChatStore((state) => state.submitFeedback);
 
   const handleFeedback = (value: FeedbackValue) => {
@@ -33,10 +40,20 @@ export function FeedbackButtons({ messageId, feedback, content, className }: Fee
   return (
     <div
       className={cn(
-        "mt-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100",
+        "flex items-center gap-1 transition-opacity",
+        alwaysVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         className
       )}
     >
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handleCopy}
+        aria-label="复制内容"
+        className="h-8 w-8 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+      >
+        <Copy className="h-4 w-4" />
+      </Button>
       <Button
         variant="ghost"
         size="icon"
@@ -60,15 +77,6 @@ export function FeedbackButtons({ messageId, feedback, content, className }: Fee
         )}
       >
         <ThumbsDown className="h-4 w-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleCopy}
-        aria-label="复制内容"
-        className="h-8 w-8 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-      >
-        <Copy className="h-4 w-4" />
       </Button>
     </div>
   );

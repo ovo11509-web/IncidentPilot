@@ -73,7 +73,7 @@ export function MessageList({ messages, isStreaming, sessionKey }: MessageListPr
       components={{ List }}
       itemContent={(index, message) => (
         <div className={index === messages.length - 1 ? "animate-fade-up" : ""}>
-          <MessageItem message={message} />
+          <MessageItem message={message} isLast={index === messages.length - 1} />
         </div>
       )}
     />

@@ -9,9 +9,10 @@ import type { Message } from "@/types";
 
 interface MessageItemProps {
   message: Message;
+  isLast?: boolean;
 }
 
-export const MessageItem = React.memo(function MessageItem({ message }: MessageItemProps) {
+export const MessageItem = React.memo(function MessageItem({ message, isLast }: MessageItemProps) {
   const isUser = message.role === "user";
   const showFeedback =
     message.role === "assistant" &&
@@ -78,20 +79,23 @@ export const MessageItem = React.memo(function MessageItem({ message }: MessageI
             ) : null}
           </div>
         ) : null}
-        <MarkdownRenderer content={message.content || " "} />
-        {message.status === "streaming" && !isThinking ? (
-          <span className="dot-flash ml-1 text-gray-400" />
-        ) : null}
-        {message.status === "error" ? (
-          <p className="text-xs text-rose-500">生成已中断。</p>
-        ) : null}
-        {showFeedback ? (
-          <FeedbackButtons
-            messageId={message.id}
-            feedback={message.feedback ?? null}
-            content={message.content}
-          />
-        ) : null}
+        <div className="space-y-2">
+          <MarkdownRenderer content={message.content || " "} />
+          {message.status === "streaming" && !isThinking ? (
+            <span className="dot-flash ml-1 text-gray-400" />
+          ) : null}
+          {message.status === "error" ? (
+            <p className="text-xs text-rose-500">生成已中断。</p>
+          ) : null}
+          {showFeedback ? (
+            <FeedbackButtons
+              messageId={message.id}
+              feedback={message.feedback ?? null}
+              content={message.content}
+              alwaysVisible={Boolean(isLast)}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );

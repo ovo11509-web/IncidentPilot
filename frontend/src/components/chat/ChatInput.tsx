@@ -39,30 +39,9 @@ export function ChatInput() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setDeepThinkingEnabled(!deepThinkingEnabled)}
-          disabled={isStreaming}
-          aria-pressed={deepThinkingEnabled}
-          className={cn(
-            "relative flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-all",
-            deepThinkingEnabled
-              ? "border-amber-200 bg-amber-50 text-amber-600 shadow-sm"
-              : "border-transparent bg-gray-50 text-gray-500 hover:bg-gray-100",
-            isStreaming && "cursor-not-allowed opacity-60"
-          )}
-        >
-          <Brain className={cn("h-4 w-4", deepThinkingEnabled && "text-amber-500")} />
-          <span>深度思考</span>
-          {deepThinkingEnabled ? (
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-          ) : null}
-        </button>
-      </div>
       <div
         className={cn(
-          "relative flex flex-col rounded-2xl border-2 bg-white px-4 pt-4 pb-2 transition-all duration-300",
+          "relative flex flex-col rounded-2xl border-2 bg-white px-4 pt-3 pb-2 transition-all duration-300",
           isFocused
             ? "border-indigo-500 shadow-lg shadow-indigo-500/10"
             : "border-gray-200 hover:border-gray-300"
@@ -89,14 +68,35 @@ export function ChatInput() {
           />
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[10px] bg-gradient-to-b from-white/0 via-white/40 to-white/90" />
         </div>
-        <div className="mt-2 flex items-center justify-end">
+        <div className="relative mt-2 flex items-center">
+          <button
+            type="button"
+            onClick={() => setDeepThinkingEnabled(!deepThinkingEnabled)}
+            disabled={isStreaming}
+            aria-pressed={deepThinkingEnabled}
+            className={cn(
+              "absolute left-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+              deepThinkingEnabled
+                ? "border-amber-200 bg-amber-50 text-amber-600 shadow-sm"
+                : "border-transparent bg-gray-50 text-gray-500 hover:bg-gray-100",
+              isStreaming && "cursor-not-allowed opacity-60"
+            )}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Brain className={cn("h-3.5 w-3.5", deepThinkingEnabled && "text-amber-500")} />
+              深度思考
+              {deepThinkingEnabled ? (
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              ) : null}
+            </span>
+          </button>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={!hasContent && !isStreaming}
             aria-label={isStreaming ? "停止生成" : "发送消息"}
             className={cn(
-              "rounded-lg p-2 transition-all duration-300",
+              "ml-auto rounded-lg p-2 transition-all duration-300",
               isStreaming
                 ? "bg-rose-50 text-rose-500 hover:bg-rose-100"
                 : hasContent
