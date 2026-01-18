@@ -16,6 +16,10 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
   const virtuosoRef = React.useRef<VirtuosoHandle | null>(null);
   const lastSessionRef = React.useRef<string | null>(null);
   const pendingScrollRef = React.useRef(true);
+  const initialTopMostItemIndex = React.useMemo(
+    () => ({ index: "LAST" as const, align: "end" as const }),
+    []
+  );
 
   React.useEffect(() => {
     const nextKey = sessionKey ?? "empty";
@@ -25,7 +29,7 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
     }
   }, [sessionKey]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!pendingScrollRef.current || isStreaming || isLoading || messages.length === 0) {
       return;
     }
@@ -57,6 +61,9 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
   }, []);
 
   if (messages.length === 0) {
+    if (isLoading) {
+      return <div className="h-full" />;
+    }
     return (
       <div className="flex h-full items-center justify-center">
         <div className="relative max-w-md rounded-3xl border border-gray-200 bg-white p-8 text-center shadow-sm">
@@ -72,8 +79,10 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
 
   return (
     <Virtuoso
+      key={sessionKey ?? "empty"}
       ref={virtuosoRef}
       data={messages}
+      initialTopMostItemIndex={initialTopMostItemIndex}
       followOutput={(atBottom) => (isStreaming && atBottom ? "smooth" : false)}
       className="h-full"
       components={{ List }}
