@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Brain, ChevronDown, Sparkles, User } from "lucide-react";
+import { Brain, ChevronDown } from "lucide-react";
 
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -24,14 +24,11 @@ export const MessageItem = React.memo(function MessageItem({ message }: MessageI
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="flex max-w-[80%] items-start gap-3">
+        <div className="flex max-w-[80%] items-start">
           <div className="rounded-2xl rounded-tr-md bg-gradient-to-r from-indigo-500 to-purple-500 px-5 py-3.5 shadow-md shadow-indigo-500/20">
             <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-white">
               {message.content}
             </p>
-          </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-md">
-            <User className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -42,19 +39,7 @@ export const MessageItem = React.memo(function MessageItem({ message }: MessageI
   const isThinking = Boolean(message.isThinking);
 
   return (
-    <div className="group flex gap-4">
-      <div className="relative mt-1 h-9 w-9 shrink-0">
-        <div
-          className={cn(
-            "relative flex h-9 w-9 items-center justify-center rounded-full text-white",
-            isThinking
-              ? "bg-gradient-to-br from-amber-400 to-orange-500"
-              : "bg-gradient-to-br from-indigo-500 to-purple-500"
-          )}
-        >
-          {isThinking ? <Brain className="h-4 w-4 animate-pulse" /> : <Sparkles className="h-4 w-4" />}
-        </div>
-      </div>
+    <div className="group flex">
       <div className="min-w-0 flex-1 space-y-4">
         {isThinking ? (
           <ThinkingIndicator content={message.thinking} duration={message.thinkingDuration} />
