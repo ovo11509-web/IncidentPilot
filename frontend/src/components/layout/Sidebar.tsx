@@ -205,134 +205,140 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto sidebar-scroll">
-          {sessions.length === 0 && (!sessionsLoaded || isLoading) ? (
-            <div
-              className="flex h-full items-center justify-center text-[#999999]"
-              style={{ fontFamily: sessionTitleFont }}
-            >
-              <Loading label="加载会话中" />
-            </div>
-          ) : filteredSessions.length === 0 ? (
-            <div
-              className="flex h-full flex-col items-center justify-center text-[#999999]"
-              style={{ fontFamily: sessionTitleFont }}
-            >
-              <MessageSquare className="h-16 w-16" />
-              <p className="mt-2 text-[14px]">暂无对话记录</p>
-            </div>
-          ) : (
-            <div>
-              {groupedSessions.map((group, index) => (
-                <div key={group.label} className={cn("flex flex-col", index === 0 ? "mt-0" : "mt-4")}>
-                  <p className="mb-1.5 pl-3 text-[12px] font-normal leading-[18px] text-[#999999]">
-                    {group.label}
-                  </p>
-                  {group.items.map((session) => (
-                    <div
-                      key={session.id}
-                      className={cn(
-                        "group my-[1px] flex min-h-[40px] cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-[14px] leading-[22px] transition-[background-color] duration-200",
-                        currentSessionId === session.id
-                          ? "bg-[#EBF5FF] text-[#1677FF] hover:bg-[#DDEEFF]"
-                          : "text-[#333333] hover:bg-[#F5F5F5]"
-                      )}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        if (renamingId === session.id) return;
-                        if (renamingId) {
-                          cancelRename();
-                        }
-                        selectSession(session.id).catch(() => null);
-                        navigate(`/chat/${session.id}`);
-                        onClose();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+        <div className="relative flex-1 min-h-0">
+          <div className="h-full overflow-y-auto sidebar-scroll">
+            {sessions.length === 0 && (!sessionsLoaded || isLoading) ? (
+              <div
+                className="flex h-full items-center justify-center text-[#999999]"
+                style={{ fontFamily: sessionTitleFont }}
+              >
+                <Loading label="加载会话中" />
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div
+                className="flex h-full flex-col items-center justify-center text-[#999999]"
+                style={{ fontFamily: sessionTitleFont }}
+              >
+                <MessageSquare className="h-16 w-16" />
+                <p className="mt-2 text-[14px]">暂无对话记录</p>
+              </div>
+            ) : (
+              <div>
+                {groupedSessions.map((group, index) => (
+                  <div key={group.label} className={cn("flex flex-col", index === 0 ? "mt-0" : "mt-4")}>
+                    <p className="mb-1.5 pl-3 text-[12px] font-normal leading-[18px] text-[#999999]">
+                      {group.label}
+                    </p>
+                    {group.items.map((session) => (
+                      <div
+                        key={session.id}
+                        className={cn(
+                          "group my-[1px] flex min-h-[40px] cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-[14px] leading-[22px] transition-[background-color] duration-200",
+                          currentSessionId === session.id
+                            ? "bg-[#EBF5FF] text-[#1677FF] hover:bg-[#DDEEFF]"
+                            : "text-[#333333] hover:bg-[#F5F5F5]"
+                        )}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          if (renamingId === session.id) return;
+                          if (renamingId) {
+                            cancelRename();
+                          }
                           selectSession(session.id).catch(() => null);
                           navigate(`/chat/${session.id}`);
                           onClose();
-                        }
-                      }}
-                    >
-                      {renamingId === session.id ? (
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(event) => setRenameValue(event.target.value)}
-                          onClick={(event) => event.stopPropagation()}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              commitRename().catch(() => null);
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              cancelRename();
-                            }
-                          }}
-                          onBlur={() => {
-                            commitRename().catch(() => null);
-                          }}
-                          className="h-6 flex-1 rounded-md border border-gray-200 bg-white px-2 text-[14px] leading-[22px] text-[#333333] focus:border-[#1677FF] focus:outline-none"
-                        />
-                      ) : (
-                        <span className="min-w-0 flex-1 truncate font-normal">
-                          {session.title || "新对话"}
-                        </span>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "flex h-6 w-6 items-center justify-center rounded text-[#666666] transition-opacity duration-150 hover:bg-[rgba(0,0,0,0.06)]",
-                              currentSessionId === session.id
-                                ? "pointer-events-auto opacity-100 text-[#1677FF]"
-                                : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-                            )}
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            selectSession(session.id).catch(() => null);
+                            navigate(`/chat/${session.id}`);
+                            onClose();
+                          }
+                        }}
+                      >
+                        {renamingId === session.id ? (
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(event) => setRenameValue(event.target.value)}
                             onClick={(event) => event.stopPropagation()}
-                            aria-label="会话操作"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="start"
-                          className="min-w-[120px] rounded-lg border-0 bg-white p-0 py-1 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
-                        >
-                          <DropdownMenuItem
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              startRename(session.id, session.title || "新对话");
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                commitRename().catch(() => null);
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                cancelRename();
+                              }
                             }}
-                            className="px-4 py-2 text-[14px] text-[#333333] focus:bg-[#F5F5F5] focus:text-[#333333] data-[highlighted]:bg-[#F5F5F5] data-[highlighted]:text-[#333333]"
-                          >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            重命名
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setDeleteTarget({
-                                id: session.id,
-                                title: session.title || "新对话"
-                              });
+                            onBlur={() => {
+                              commitRename().catch(() => null);
                             }}
-                            className="px-4 py-2 text-[14px] text-[#FF4D4F] focus:bg-[#F5F5F5] focus:text-[#FF4D4F] data-[highlighted]:bg-[#F5F5F5] data-[highlighted]:text-[#FF4D4F]"
+                            className="h-6 flex-1 rounded-md border border-gray-200 bg-white px-2 text-[14px] leading-[22px] text-[#333333] focus:border-[#1677FF] focus:outline-none"
+                          />
+                        ) : (
+                          <span className="min-w-0 flex-1 truncate font-normal">
+                            {session.title || "新对话"}
+                          </span>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className={cn(
+                                "flex h-6 w-6 items-center justify-center rounded text-[#666666] transition-opacity duration-150 hover:bg-[rgba(0,0,0,0.06)]",
+                                currentSessionId === session.id
+                                  ? "pointer-events-auto opacity-100 text-[#1677FF]"
+                                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                              )}
+                              onClick={(event) => event.stopPropagation()}
+                              aria-label="会话操作"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="start"
+                            className="min-w-[120px] rounded-lg border-0 bg-white p-0 py-1 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
                           >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
+                            <DropdownMenuItem
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startRename(session.id, session.title || "新对话");
+                              }}
+                              className="px-4 py-2 text-[14px] text-[#333333] focus:bg-[#F5F5F5] focus:text-[#333333] data-[highlighted]:bg-[#F5F5F5] data-[highlighted]:text-[#333333]"
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              重命名
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setDeleteTarget({
+                                  id: session.id,
+                                  title: session.title || "新对话"
+                                });
+                              }}
+                              className="px-4 py-2 text-[14px] text-[#FF4D4F] focus:bg-[#F5F5F5] focus:text-[#FF4D4F] data-[highlighted]:bg-[#F5F5F5] data-[highlighted]:text-[#FF4D4F]"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-gradient-to-b from-transparent to-white/80"
+          />
         </div>
         <div className="mt-auto pt-3">
           <DropdownMenu>
