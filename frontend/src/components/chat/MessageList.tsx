@@ -60,8 +60,17 @@ export function MessageList({ messages, isLoading, isStreaming, sessionKey }: Me
       const timer = window.setTimeout(stickToBottom, 120);
       return () => window.clearTimeout(timer);
     }
+    if (wasStreaming && !isStreaming) {
+      scrollToBottom();
+      const timer = window.setTimeout(scrollToBottom, 120);
+      const lateTimer = window.setTimeout(scrollToBottom, 360);
+      return () => {
+        window.clearTimeout(timer);
+        window.clearTimeout(lateTimer);
+      };
+    }
     return;
-  }, [isStreaming, stickToBottom]);
+  }, [isStreaming, stickToBottom, scrollToBottom]);
 
   React.useLayoutEffect(() => {
     if (!pendingScrollRef.current || isStreaming || isLoading || messages.length === 0) {
