@@ -19,8 +19,11 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
     message.status !== "streaming" &&
     message.id &&
     !message.id.startsWith("assistant-");
+  const isThinking = Boolean(message.isThinking);
   const [thinkingExpanded, setThinkingExpanded] = React.useState(false);
   const hasThinking = Boolean(message.thinking && message.thinking.trim().length > 0);
+  const hasContent = message.content.trim().length > 0;
+  const isWaiting = message.status === "streaming" && !isThinking && !hasContent;
 
   if (isUser) {
     return (
@@ -33,8 +36,6 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
   }
 
   const thinkingDuration = message.thinkingDuration ? `${message.thinkingDuration}秒` : "";
-  const isThinking = Boolean(message.isThinking);
-
   return (
     <div className="group flex">
       <div className="min-w-0 flex-1 space-y-4">
@@ -76,10 +77,16 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
           </div>
         ) : null}
         <div className="space-y-2">
-          <MarkdownRenderer content={message.content || " "} />
-          {message.status === "streaming" && !isThinking ? (
-            <span className="dot-flash ml-1 text-gray-400" />
+          {isWaiting ? (
+            <div className="ai-wait" aria-label="思考中">
+              <span className="ai-wait-dots" aria-hidden="true">
+                <span className="ai-wait-dot" />
+                <span className="ai-wait-dot" />
+                <span className="ai-wait-dot" />
+              </span>
+            </div>
           ) : null}
+          {hasContent ? <MarkdownRenderer content={message.content} /> : null}
           {message.status === "error" ? (
             <p className="text-xs text-rose-500">生成已中断。</p>
           ) : null}
