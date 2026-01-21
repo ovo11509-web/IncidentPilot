@@ -83,10 +83,10 @@ public class RAGConstant {
     public static final String INTENT_CLASSIFIER_PROMPT_PATH = "prompt/intent-classifier.st";
 
     /**
-     * 引导式问答选择解析提示词模板路径
-     * 用于解析用户在引导式问答场景下的选项选择
+     * 引导式问答提示词模板路径
+     * 用于生成引导式问答的选项提示内容
      */
-    public static final String GUIDANCE_SELECTION_PROMPT_PATH = "prompt/guidance-selection.st";
+    public static final String GUIDANCE_PROMPT_PATH = "prompt/guidance-prompt.st";
 
     /**
      * 系统对话提示词模板路径

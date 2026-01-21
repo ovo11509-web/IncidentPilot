@@ -76,7 +76,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 import static com.nageoffer.ai.ragent.constant.RAGConstant.DEFAULT_TOP_K;
@@ -140,42 +139,16 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
 
         String userId = UserContext.getUserId();
         List<ChatMessage> history = memoryService.load(actualConversationId, userId);
-        GuidanceDecision existingDecision = guidanceService.handleExistingSession(actualConversationId, userId, question);
-        if (existingDecision.isPrompt()) {
-            memoryService.append(actualConversationId, userId, ChatMessage.user(question));
-            callback.onContent(existingDecision.getPrompt());
+        memoryService.append(actualConversationId, userId, ChatMessage.user(question));
+
+        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
+        List<SubQuestionIntent> subIntents = buildSubQuestionIntents(rewriteResult);
+
+        GuidanceDecision guidanceDecision = guidanceService.detectAmbiguity(rewriteResult.rewrittenQuestion(), subIntents);
+        if (guidanceDecision.isPrompt()) {
+            callback.onContent(guidanceDecision.getPrompt());
             callback.onComplete();
             return;
-        }
-
-        memoryService.append(actualConversationId, userId, ChatMessage.user(question));
-        String effectiveQuestion = question;
-        List<IntentNode> resolvedNodes = null;
-        if (existingDecision.isResolved() && CollUtil.isNotEmpty(existingDecision.getResolvedNodes())) {
-            effectiveQuestion = existingDecision.getResolvedQuestion();
-            resolvedNodes = existingDecision.getResolvedNodes();
-        }
-
-        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(effectiveQuestion, history);
-
-        List<SubQuestionIntent> subIntents;
-        if (CollUtil.isNotEmpty(resolvedNodes)) {
-            List<NodeScore> fixed = resolvedNodes.stream()
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.collectingAndThen(
-                            Collectors.toMap(IntentNode::getId, node -> new NodeScore(node, 1.0D), (a, b) -> a),
-                            map -> new java.util.ArrayList<>(map.values())
-                    ));
-            subIntents = List.of(new SubQuestionIntent(rewriteResult.rewrittenQuestion(), fixed));
-        } else {
-            subIntents = buildSubQuestionIntents(rewriteResult);
-            GuidanceDecision newDecision = guidanceService.detectAmbiguity(
-                    effectiveQuestion, subIntents, actualConversationId, userId);
-            if (newDecision.isPrompt()) {
-                callback.onContent(newDecision.getPrompt());
-                callback.onComplete();
-                return;
-            }
         }
 
         boolean allSystemOnly = subIntents.stream()
