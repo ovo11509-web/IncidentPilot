@@ -1,0 +1,376 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.nageoffer.ai.ragent.ingestion.service;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.lang.Assert;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nageoffer.ai.ragent.controller.request.DocumentSourceRequest;
+import com.nageoffer.ai.ragent.controller.request.IngestionTaskCreateRequest;
+import com.nageoffer.ai.ragent.controller.vo.IngestionTaskNodeVO;
+import com.nageoffer.ai.ragent.controller.vo.IngestionTaskVO;
+import com.nageoffer.ai.ragent.framework.context.UserContext;
+import com.nageoffer.ai.ragent.framework.exception.ClientException;
+import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentSource;
+import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
+import com.nageoffer.ai.ragent.ingestion.domain.context.NodeLog;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionStatus;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.SourceType;
+import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
+import com.nageoffer.ai.ragent.ingestion.domain.pipeline.PipelineDefinition;
+import com.nageoffer.ai.ragent.ingestion.domain.result.IngestionResult;
+import com.nageoffer.ai.ragent.ingestion.engine.IngestionEngine;
+import com.nageoffer.ai.ragent.dao.entity.IngestionTaskDO;
+import com.nageoffer.ai.ragent.dao.entity.IngestionTaskNodeDO;
+import com.nageoffer.ai.ragent.dao.mapper.IngestionTaskMapper;
+import com.nageoffer.ai.ragent.dao.mapper.IngestionTaskNodeMapper;
+import com.nageoffer.ai.ragent.ingestion.util.MimeTypeDetector;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+@Service
+@RequiredArgsConstructor
+public class IngestionTaskService {
+
+    private final IngestionEngine engine;
+    private final IngestionPipelineService pipelineService;
+    private final IngestionTaskMapper taskMapper;
+    private final IngestionTaskNodeMapper taskNodeMapper;
+    private final ObjectMapper objectMapper;
+
+    @Transactional(rollbackFor = Exception.class)
+    public IngestionResult execute(IngestionTaskCreateRequest request) {
+        Assert.notNull(request, () -> new ClientException("请求不能为空"));
+        DocumentSource source = toSource(request.getSource());
+        return executeInternal(request.getPipelineId(), source, request.getMetadata(), null, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public IngestionResult upload(String pipelineId, MultipartFile file, Map<String, Object> metadata) {
+        Assert.notNull(file, () -> new ClientException("文件不能为空"));
+        try {
+            byte[] bytes = file.getBytes();
+            String fileName = file.getOriginalFilename();
+            if (!StringUtils.hasText(fileName)) {
+                fileName = "upload.bin";
+            }
+            String mimeType = MimeTypeDetector.detect(bytes, fileName);
+            DocumentSource source = DocumentSource.builder()
+                    .type(SourceType.FILE)
+                    .location(fileName)
+                    .fileName(fileName)
+                    .build();
+            return executeInternal(pipelineId, source, metadata, bytes, mimeType);
+        } catch (Exception e) {
+            throw new ClientException("读取上传文件失败: " + e.getMessage());
+        }
+    }
+
+    public IngestionTaskVO get(String taskId) {
+        IngestionTaskDO task = taskMapper.selectById(taskId);
+        Assert.notNull(task, () -> new ClientException("未找到任务"));
+        return toVO(task);
+    }
+
+    public IPage<IngestionTaskVO> page(Page<IngestionTaskVO> page, String status) {
+        Page<IngestionTaskDO> mpPage = new Page<>(page.getCurrent(), page.getSize());
+        LambdaQueryWrapper<IngestionTaskDO> qw = new LambdaQueryWrapper<IngestionTaskDO>()
+                .eq(IngestionTaskDO::getDeleted, 0)
+                .eq(StringUtils.hasText(status), IngestionTaskDO::getStatus, status)
+                .orderByDesc(IngestionTaskDO::getCreateTime);
+        IPage<IngestionTaskDO> result = taskMapper.selectPage(mpPage, qw);
+        Page<IngestionTaskVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        voPage.setRecords(result.getRecords().stream().map(this::toVO).toList());
+        return voPage;
+    }
+
+    public List<IngestionTaskNodeVO> listNodes(String taskId) {
+        LambdaQueryWrapper<IngestionTaskNodeDO> qw = new LambdaQueryWrapper<IngestionTaskNodeDO>()
+                .eq(IngestionTaskNodeDO::getDeleted, 0)
+                .eq(IngestionTaskNodeDO::getTaskId, taskId)
+                .orderByAsc(IngestionTaskNodeDO::getNodeOrder)
+                .orderByAsc(IngestionTaskNodeDO::getId);
+        List<IngestionTaskNodeDO> nodes = taskNodeMapper.selectList(qw);
+        return nodes.stream().map(this::toNodeVO).toList();
+    }
+
+    private IngestionResult executeInternal(String pipelineId,
+                                            DocumentSource source,
+                                            Map<String, Object> metadata,
+                                            byte[] rawBytes,
+                                            String mimeType) {
+        String resolvedPipelineId = resolvePipelineId(pipelineId);
+        PipelineDefinition pipeline = pipelineService.getDefinition(resolvedPipelineId);
+
+        IngestionTaskDO task = IngestionTaskDO.builder()
+                .pipelineId(Long.parseLong(resolvedPipelineId))
+                .sourceType(source.getType() == null ? null : source.getType().name())
+                .sourceLocation(source.getLocation())
+                .sourceFileName(source.getFileName())
+                .status(IngestionStatus.RUNNING.name())
+                .chunkCount(0)
+                .startedAt(new Date())
+                .createdBy(UserContext.getUsername())
+                .build();
+        taskMapper.insert(task);
+
+        IngestionContext context = IngestionContext.builder()
+                .taskId(String.valueOf(task.getId()))
+                .pipelineId(resolvedPipelineId)
+                .source(source)
+                .rawBytes(rawBytes)
+                .mimeType(mimeType)
+                .metadata(metadata == null ? new HashMap<>() : new HashMap<>(metadata))
+                .logs(new ArrayList<>())
+                .build();
+
+        IngestionContext result = engine.execute(pipeline, context);
+        saveNodeLogs(task, pipeline, result.getLogs());
+        updateTaskFromContext(task, result);
+        return IngestionResult.builder()
+                .taskId(result.getTaskId())
+                .pipelineId(result.getPipelineId())
+                .status(result.getStatus())
+                .chunkCount(result.getChunks() == null ? 0 : result.getChunks().size())
+                .message(result.getError() == null ? "OK" : result.getError().getMessage())
+                .build();
+    }
+
+    private void updateTaskFromContext(IngestionTaskDO task, IngestionContext context) {
+        task.setStatus(context.getStatus() == null ? IngestionStatus.FAILED.name() : context.getStatus().name());
+        task.setChunkCount(context.getChunks() == null ? 0 : context.getChunks().size());
+        task.setErrorMessage(context.getError() == null ? null : context.getError().getMessage());
+        task.setCompletedAt(new Date());
+        task.setUpdatedBy("");
+        task.setLogsJson(writeJson(buildLogSummary(context.getLogs())));
+        task.setMetadataJson(writeJson(buildTaskMetadata(context)));
+        taskMapper.updateById(task);
+    }
+
+    private void saveNodeLogs(IngestionTaskDO task, PipelineDefinition pipeline, List<NodeLog> logs) {
+        if (logs == null || logs.isEmpty()) {
+            return;
+        }
+        Map<String, Integer> nodeOrderMap = buildNodeOrderMap(pipeline);
+        for (NodeLog log : logs) {
+            String status = resolveNodeStatus(log);
+            IngestionTaskNodeDO nodeDO = IngestionTaskNodeDO.builder()
+                    .taskId(task.getId())
+                    .pipelineId(task.getPipelineId())
+                    .nodeId(log.getNodeId())
+                    .nodeType(log.getNodeType())
+                    .nodeOrder(nodeOrderMap.getOrDefault(log.getNodeId(), 0))
+                    .status(status)
+                    .durationMs(log.getDurationMs())
+                    .message(log.getMessage())
+                    .errorMessage(log.getError())
+                    .outputJson(writeJson(log.getOutput()))
+                    .build();
+            taskNodeMapper.insert(nodeDO);
+        }
+    }
+
+    private Map<String, Integer> buildNodeOrderMap(PipelineDefinition pipeline) {
+        Map<String, Integer> orderMap = new HashMap<>();
+        if (pipeline == null || pipeline.getNodes() == null || pipeline.getNodes().isEmpty()) {
+            return orderMap;
+        }
+        Map<String, NodeConfig> nodeMap = new LinkedHashMap<>();
+        for (NodeConfig node : pipeline.getNodes()) {
+            if (node == null || !StringUtils.hasText(node.getNodeId())) {
+                continue;
+            }
+            nodeMap.putIfAbsent(node.getNodeId(), node);
+        }
+        if (nodeMap.isEmpty()) {
+            return orderMap;
+        }
+        Set<String> referenced = new HashSet<>();
+        for (NodeConfig node : nodeMap.values()) {
+            if (StringUtils.hasText(node.getNextNodeId())) {
+                referenced.add(node.getNextNodeId());
+            }
+        }
+        int order = 1;
+        Set<String> visited = new HashSet<>();
+        for (String nodeId : nodeMap.keySet()) {
+            if (referenced.contains(nodeId)) {
+                continue;
+            }
+            String current = nodeId;
+            while (StringUtils.hasText(current) && !visited.contains(current)) {
+                orderMap.put(current, order++);
+                visited.add(current);
+                NodeConfig config = nodeMap.get(current);
+                if (config == null) {
+                    break;
+                }
+                current = config.getNextNodeId();
+            }
+        }
+        for (String nodeId : nodeMap.keySet()) {
+            if (!visited.contains(nodeId)) {
+                orderMap.put(nodeId, order++);
+            }
+        }
+        return orderMap;
+    }
+
+    private String resolveNodeStatus(NodeLog log) {
+        if (log == null) {
+            return "FAILED";
+        }
+        if (!log.isSuccess()) {
+            return "FAILED";
+        }
+        String message = log.getMessage();
+        if (message != null && message.startsWith("Skipped:")) {
+            return "SKIPPED";
+        }
+        return "SUCCESS";
+    }
+
+    private Map<String, Object> buildTaskMetadata(IngestionContext context) {
+        Map<String, Object> data = new HashMap<>();
+        if (context.getMetadata() != null) {
+            data.putAll(context.getMetadata());
+        }
+        if (context.getKeywords() != null && !context.getKeywords().isEmpty()) {
+            data.put("keywords", context.getKeywords());
+        }
+        if (context.getQuestions() != null && !context.getQuestions().isEmpty()) {
+            data.put("questions", context.getQuestions());
+        }
+        return data;
+    }
+
+    private String resolvePipelineId(String pipelineId) {
+        if (StringUtils.hasText(pipelineId)) {
+            return pipelineId;
+        }
+        throw new ClientException("必须传流水线ID");
+    }
+
+    private DocumentSource toSource(DocumentSourceRequest request) {
+        Assert.notNull(request, () -> new ClientException("文档来源不能为空"));
+        DocumentSource source = DocumentSource.builder()
+                .type(request.getType())
+                .location(request.getLocation())
+                .fileName(request.getFileName())
+                .credentials(request.getCredentials())
+                .build();
+        if (source.getType() == null) {
+            throw new ClientException("文档来源类型不能为空");
+        }
+        return source;
+    }
+
+    private IngestionTaskVO toVO(IngestionTaskDO task) {
+        IngestionTaskVO vo = new IngestionTaskVO();
+        vo.setId(task.getId());
+        vo.setPipelineId(task.getPipelineId());
+        vo.setSourceType(task.getSourceType());
+        vo.setSourceLocation(task.getSourceLocation());
+        vo.setSourceFileName(task.getSourceFileName());
+        vo.setStatus(task.getStatus());
+        vo.setChunkCount(task.getChunkCount());
+        vo.setErrorMessage(task.getErrorMessage());
+        vo.setLogs(readLogs(task.getLogsJson()));
+        vo.setMetadata(BeanUtil.beanToMap(task.getMetadataJson()));
+        vo.setStartedAt(task.getStartedAt());
+        vo.setCompletedAt(task.getCompletedAt());
+        vo.setCreateTime(task.getCreateTime());
+        vo.setUpdateTime(task.getUpdateTime());
+        return vo;
+    }
+
+    private IngestionTaskNodeVO toNodeVO(IngestionTaskNodeDO node) {
+        IngestionTaskNodeVO vo = new IngestionTaskNodeVO();
+        vo.setId(node.getId());
+        vo.setTaskId(node.getTaskId());
+        vo.setPipelineId(node.getPipelineId());
+        vo.setNodeId(node.getNodeId());
+        vo.setNodeType(node.getNodeType());
+        vo.setNodeOrder(node.getNodeOrder());
+        vo.setStatus(node.getStatus());
+        vo.setDurationMs(node.getDurationMs());
+        vo.setMessage(node.getMessage());
+        vo.setErrorMessage(node.getErrorMessage());
+        vo.setOutput(BeanUtil.beanToMap(node.getOutputJson()));
+        vo.setCreateTime(node.getCreateTime());
+        vo.setUpdateTime(node.getUpdateTime());
+        return vo;
+    }
+
+    private String writeJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private List<NodeLog> buildLogSummary(
+            List<NodeLog> logs) {
+        if (logs == null) {
+            return List.of();
+        }
+        return logs.stream()
+                .map(log -> NodeLog.builder()
+                        .nodeId(log.getNodeId())
+                        .nodeType(log.getNodeType())
+                        .message(log.getMessage())
+                        .durationMs(log.getDurationMs())
+                        .success(log.isSuccess())
+                        .error(log.getError())
+                        .output(null)
+                        .build())
+                .toList();
+    }
+
+    private List<NodeLog> readLogs(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(raw, new TypeReference<List<NodeLog>>() {
+            });
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+}
