@@ -73,11 +73,11 @@ public class IngestionTaskService {
     public IngestionResult execute(IngestionTaskCreateRequest request) {
         Assert.notNull(request, () -> new ClientException("请求不能为空"));
         DocumentSource source = toSource(request.getSource());
-        return executeInternal(request.getPipelineId(), source, request.getMetadata(), null, null);
+        return executeInternal(request.getPipelineId(), source, null, null);
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public IngestionResult upload(String pipelineId, MultipartFile file, Map<String, Object> metadata) {
+    public IngestionResult upload(String pipelineId, MultipartFile file) {
         Assert.notNull(file, () -> new ClientException("文件不能为空"));
         try {
             byte[] bytes = file.getBytes();
@@ -91,7 +91,7 @@ public class IngestionTaskService {
                     .location(fileName)
                     .fileName(fileName)
                     .build();
-            return executeInternal(pipelineId, source, metadata, bytes, mimeType);
+            return executeInternal(pipelineId, source, bytes, mimeType);
         } catch (Exception e) {
             throw new ClientException("读取上传文件失败: " + e.getMessage());
         }
@@ -127,7 +127,6 @@ public class IngestionTaskService {
 
     private IngestionResult executeInternal(String pipelineId,
                                             DocumentSource source,
-                                            Map<String, Object> metadata,
                                             byte[] rawBytes,
                                             String mimeType) {
         String resolvedPipelineId = resolvePipelineId(pipelineId);
@@ -151,7 +150,6 @@ public class IngestionTaskService {
                 .source(source)
                 .rawBytes(rawBytes)
                 .mimeType(mimeType)
-                .metadata(metadata == null ? new HashMap<>() : new HashMap<>(metadata))
                 .logs(new ArrayList<>())
                 .build();
 

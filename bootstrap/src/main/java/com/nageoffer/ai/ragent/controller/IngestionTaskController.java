@@ -67,10 +67,9 @@ public class IngestionTaskController {
      */
     @SneakyThrows
     @PostMapping(value = "/ingestion/tasks/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Result<IngestionResult> upload(@RequestParam(value = "pipelineId", required = false) String pipelineId,
-                                          @RequestParam(value = "metadata", required = false) String metadataJson,
+    public Result<IngestionResult> upload(@RequestParam(value = "pipelineId") String pipelineId,
                                           @RequestPart("file") MultipartFile file) {
-        return Results.success(taskService.upload(pipelineId, file, BeanUtil.beanToMap(metadataJson)));
+        return Results.success(taskService.upload(pipelineId, file));
     }
 
     /**
