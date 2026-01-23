@@ -38,12 +38,11 @@ public class HttpClientConfig {
     @Bean
     public OkHttpClient okHttpClient() {
         return new OkHttpClient.Builder()
-                // 设置连接超时时间为10秒
-                .connectTimeout(Duration.ofSeconds(10))
-                // 设置读取超时时间为60秒
-                .readTimeout(Duration.ofSeconds(60))
-                // 设置写入超时时间为10秒
-                .writeTimeout(Duration.ofSeconds(10))
+                .connectTimeout(Duration.ofSeconds(30))
+                .writeTimeout(Duration.ofSeconds(60))
+                .readTimeout(Duration.ZERO)
+                .callTimeout(Duration.ZERO)
+                .retryOnConnectionFailure(true)
                 .build();
     }
 }
