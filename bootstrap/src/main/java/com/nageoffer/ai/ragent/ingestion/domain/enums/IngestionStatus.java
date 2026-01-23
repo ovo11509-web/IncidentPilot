@@ -17,29 +17,65 @@
 
 package com.nageoffer.ai.ragent.ingestion.domain.enums;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
 /**
  * 摄取任务状态枚举
  * 定义文档摄取任务的执行状态
  */
+@Getter
+@RequiredArgsConstructor
 public enum IngestionStatus {
 
     /**
      * 等待中 - 任务已创建但尚未开始执行
      */
-    PENDING,
+    PENDING("Pending"),
 
     /**
      * 运行中 - 任务正在执行中
      */
-    RUNNING,
+    RUNNING("Running"),
 
     /**
      * 失败 - 任务执行失败
      */
-    FAILED,
+    FAILED("Failed"),
 
     /**
      * 已完成 - 任务执行成功完成
      */
-    COMPLETED
+    COMPLETED("Completed");
+
+    /**
+     * 状态值（首字母大写）
+     */
+    private final String value;
+
+    /**
+     * 根据字符串值解析状态
+     */
+    @JsonCreator
+    public static IngestionStatus fromValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        for (IngestionStatus status : values()) {
+            if (status.value.equalsIgnoreCase(value) || status.name().equalsIgnoreCase(value)) {
+                return status;
+            }
+        }
+        throw new IllegalArgumentException("Unknown ingestion status: " + value);
+    }
+
+    /**
+     * 获取序列化值
+     */
+    @JsonValue
+    public String getValue() {
+        return value;
+    }
 }
