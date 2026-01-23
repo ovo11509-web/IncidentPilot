@@ -23,12 +23,12 @@
       "nodeId": "enhancer-1",
       "nodeType": "ENHANCER",
       "settings": {
-        "modelId": "qwen-max",
+        "modelId": "qwen-plus",
         "tasks": [
           {
             "type": "CONTEXT_ENHANCE",
-            "systemPrompt": "你是文档整理专家。请对以下可能存在格式问题的文档内容进行整理：\n1. 修复明显的格式错误（表格错位、段落混乱）\n2. 保持原文核心信息完整\n3. 保持专业术语准确性\n4. 直接输出整理后的文本，不要添加任何解释",
-            "userPromptTemplate": "请整理以下PDF文档内容：\n\n{text}"
+            "systemPrompt": "你是文档整理专家。请严格按照以下要求整理文档：\n1. 修复格式错误（表格错位、段落混乱、编号错误）\n2. 保持原文所有信息完整，不删减内容\n3. 保持专业术语准确性\n4. 只输出整理后的文档正文，不要添加任何说明、解释、前言、分隔线或总结\n5. 直接从文档第一个字开始输出",
+            "userPromptTemplate": "请整理以下PDF文档内容：\n\n{{text}}"
           }
         ]
       },
@@ -48,8 +48,7 @@
       "nodeId": "indexer-1",
       "nodeType": "INDEXER",
       "settings": {
-        "collectionName": "pdf_documents",
-        "embeddingModel": "text-embedding-v3",
+        "embeddingModel": "qwen-emb-8b",
         "includeEnhancedContent": true,
         "metadataFields": [
           "category",

@@ -27,7 +27,7 @@ import java.util.List;
 /**
  * 索引器设置实体类
  * <p>
- * 定义向量索引节点的配置参数，包括集合名称、嵌入模型等
+ * 定义向量索引节点的配置参数，包括嵌入模型等
  * 索引器负责将处理后的文本块存储到向量数据库中
  * </p>
  */
@@ -36,11 +36,6 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class IndexerSettings {
-
-    /**
-     * 向量数据库中的集合（Collection）名称
-     */
-    private String collectionName;
 
     /**
      * 用于生成向量嵌入的模型标识

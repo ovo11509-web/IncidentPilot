@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.ingestion.domain.context;
 
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionStatus;
+import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -95,6 +96,12 @@ public class IngestionContext {
      * 摄取过程中的元数据信息
      */
     private Map<String, Object> metadata;
+
+    /**
+     * 向量空间ID，指定向量数据写入的目标集合
+     * 如果不指定，则使用默认的向量空间
+     */
+    private VectorSpaceId vectorSpaceId;
 
     /**
      * 当前摄取任务的状态

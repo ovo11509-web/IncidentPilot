@@ -44,6 +44,7 @@ import com.nageoffer.ai.ragent.dao.entity.IngestionTaskNodeDO;
 import com.nageoffer.ai.ragent.dao.mapper.IngestionTaskMapper;
 import com.nageoffer.ai.ragent.dao.mapper.IngestionTaskNodeMapper;
 import com.nageoffer.ai.ragent.ingestion.util.MimeTypeDetector;
+import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,7 +74,7 @@ public class IngestionTaskService {
     public IngestionResult execute(IngestionTaskCreateRequest request) {
         Assert.notNull(request, () -> new ClientException("请求不能为空"));
         DocumentSource source = toSource(request.getSource());
-        return executeInternal(request.getPipelineId(), source, null, null);
+        return executeInternal(request.getPipelineId(), source, null, null, request.getVectorSpaceId());
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -91,7 +92,7 @@ public class IngestionTaskService {
                     .location(fileName)
                     .fileName(fileName)
                     .build();
-            return executeInternal(pipelineId, source, bytes, mimeType);
+            return executeInternal(pipelineId, source, bytes, mimeType, null);
         } catch (Exception e) {
             throw new ClientException("读取上传文件失败: " + e.getMessage());
         }
@@ -128,7 +129,8 @@ public class IngestionTaskService {
     private IngestionResult executeInternal(String pipelineId,
                                             DocumentSource source,
                                             byte[] rawBytes,
-                                            String mimeType) {
+                                            String mimeType,
+                                            VectorSpaceId vectorSpaceId) {
         String resolvedPipelineId = resolvePipelineId(pipelineId);
         PipelineDefinition pipeline = pipelineService.getDefinition(resolvedPipelineId);
 
@@ -141,6 +143,7 @@ public class IngestionTaskService {
                 .chunkCount(0)
                 .startedAt(new Date())
                 .createdBy(UserContext.getUsername())
+                .updatedBy(UserContext.getUsername())
                 .build();
         taskMapper.insert(task);
 
@@ -150,6 +153,7 @@ public class IngestionTaskService {
                 .source(source)
                 .rawBytes(rawBytes)
                 .mimeType(mimeType)
+                .vectorSpaceId(vectorSpaceId)
                 .logs(new ArrayList<>())
                 .build();
 
@@ -170,7 +174,7 @@ public class IngestionTaskService {
         task.setChunkCount(context.getChunks() == null ? 0 : context.getChunks().size());
         task.setErrorMessage(context.getError() == null ? null : context.getError().getMessage());
         task.setCompletedAt(new Date());
-        task.setUpdatedBy("");
+        task.setUpdatedBy(UserContext.getUsername());
         task.setLogsJson(writeJson(buildLogSummary(context.getLogs())));
         task.setMetadataJson(writeJson(buildTaskMetadata(context)));
         taskMapper.updateById(task);
@@ -183,6 +187,7 @@ public class IngestionTaskService {
         Map<String, Integer> nodeOrderMap = buildNodeOrderMap(pipeline);
         for (NodeLog log : logs) {
             String status = resolveNodeStatus(log);
+            String outputJson = truncateOutputJson(log.getOutput());
             IngestionTaskNodeDO nodeDO = IngestionTaskNodeDO.builder()
                     .taskId(task.getId())
                     .pipelineId(task.getPipelineId())
@@ -193,7 +198,7 @@ public class IngestionTaskService {
                     .durationMs(log.getDurationMs())
                     .message(log.getMessage())
                     .errorMessage(log.getError())
-                    .outputJson(writeJson(log.getOutput()))
+                    .outputJson(outputJson)
                     .build();
             taskNodeMapper.insert(nodeDO);
         }
@@ -371,4 +376,27 @@ public class IngestionTaskService {
             return List.of();
         }
     }
+
+    /**
+     * 截断过大的输出 JSON，防止超过 MySQL 的 max_allowed_packet 限制
+     * 默认限制为 1MB
+     */
+    private String truncateOutputJson(Object output) {
+        if (output == null) {
+            return null;
+        }
+        String json = writeJson(output);
+        if (json == null) {
+            return null;
+        }
+        // 限制为 1MB (1,048,576 字节)，留有余量避免接近 4MB 上限
+        int maxSize = 1024 * 1024;
+        if (json.length() <= maxSize) {
+            return json;
+        }
+        // 截断并添加提示信息
+        String truncated = json.substring(0, maxSize - 100);
+        return truncated + "... [输出过大，已截断，原始大小: " + json.length() + " 字节]";
+    }
 }
+

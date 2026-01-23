@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.controller.request;
 
+import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
 import lombok.Data;
 
 import java.util.Map;
@@ -43,4 +44,10 @@ public class IngestionTaskCreateRequest {
      * 自定义的附加属性键值对
      */
     private Map<String, Object> metadata;
+
+    /**
+     * 向量空间ID，指定向量数据写入的目标集合
+     * 如果不指定，则使用默认的向量空间
+     */
+    private VectorSpaceId vectorSpaceId;
 }

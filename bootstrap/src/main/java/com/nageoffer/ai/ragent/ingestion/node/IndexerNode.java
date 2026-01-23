@@ -32,10 +32,16 @@ import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import com.nageoffer.ai.ragent.ingestion.domain.result.NodeResult;
 import com.nageoffer.ai.ragent.ingestion.domain.settings.IndexerSettings;
-import com.nageoffer.ai.ragent.ingestion.service.IngestionVectorStoreService;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingClient;
 import com.nageoffer.ai.ragent.infra.model.ModelSelector;
 import com.nageoffer.ai.ragent.infra.model.ModelTarget;
+import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
+import com.nageoffer.ai.ragent.rag.vector.VectorSpaceSpec;
+import com.nageoffer.ai.ragent.rag.vector.VectorStoreAdmin;
+import io.milvus.v2.client.MilvusClientV2;
+import io.milvus.v2.service.vector.request.InsertReq;
+import io.milvus.v2.service.vector.response.InsertResp;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -45,6 +51,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 public class IndexerNode implements IngestionNode {
 
@@ -53,19 +60,22 @@ public class IndexerNode implements IngestionNode {
     private final ObjectMapper objectMapper;
     private final ModelSelector modelSelector;
     private final Map<String, EmbeddingClient> embeddingClientsByProvider;
-    private final IngestionVectorStoreService vectorStoreService;
+    private final VectorStoreAdmin vectorStoreAdmin;
+    private final MilvusClientV2 milvusClient;
     private final RAGDefaultProperties ragDefaultProperties;
 
     public IndexerNode(ObjectMapper objectMapper,
                        ModelSelector modelSelector,
                        List<EmbeddingClient> embeddingClients,
-                       IngestionVectorStoreService vectorStoreService,
+                       VectorStoreAdmin vectorStoreAdmin,
+                       MilvusClientV2 milvusClient,
                        RAGDefaultProperties ragDefaultProperties) {
         this.objectMapper = objectMapper;
         this.modelSelector = modelSelector;
         this.embeddingClientsByProvider = embeddingClients.stream()
                 .collect(Collectors.toMap(EmbeddingClient::provider, Function.identity()));
-        this.vectorStoreService = vectorStoreService;
+        this.vectorStoreAdmin = vectorStoreAdmin;
+        this.milvusClient = milvusClient;
         this.ragDefaultProperties = ragDefaultProperties;
     }
 
@@ -81,7 +91,7 @@ public class IndexerNode implements IngestionNode {
             return NodeResult.fail(new ClientException("没有可索引的分块"));
         }
         IndexerSettings settings = parseSettings(config.getSettings());
-        String collectionName = resolveCollectionName(settings);
+        String collectionName = resolveCollectionName(context, settings);
         if (!StringUtils.hasText(collectionName)) {
             return NodeResult.fail(new ClientException("索引器需要指定集合名称"));
         }
@@ -98,9 +108,9 @@ public class IndexerNode implements IngestionNode {
         List<List<Float>> vectors = embedBatch(texts, target);
         float[][] vectorArray = toArray(vectors, expectedDim);
 
-        vectorStoreService.ensureCollection(collectionName, expectedDim, "ingestion pipeline");
+        ensureVectorSpace(collectionName);
         List<JsonObject> rows = buildRows(context, chunks, texts, vectorArray, settings.getMetadataFields());
-        vectorStoreService.insertRows(collectionName, rows);
+        insertRows(collectionName, rows);
         return NodeResult.ok("已写入 " + rows.size() + " 个分块到集合 " + collectionName);
     }
 
@@ -111,11 +121,40 @@ public class IndexerNode implements IngestionNode {
         return objectMapper.convertValue(node, IndexerSettings.class);
     }
 
-    private String resolveCollectionName(IndexerSettings settings) {
-        if (settings != null && StringUtils.hasText(settings.getCollectionName())) {
-            return settings.getCollectionName();
+    private String resolveCollectionName(IngestionContext context, IndexerSettings settings) {
+        if (context.getVectorSpaceId() != null && StringUtils.hasText(context.getVectorSpaceId().getLogicalName())) {
+            return context.getVectorSpaceId().getLogicalName();
         }
         return ragDefaultProperties.getCollectionName();
+    }
+
+    private void ensureVectorSpace(String collectionName) {
+        boolean vectorSpaceExists = vectorStoreAdmin.vectorSpaceExists(VectorSpaceId.builder()
+                .logicalName(collectionName)
+                .build());
+        if (vectorSpaceExists) {
+            return;
+        }
+
+        VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
+                .spaceId(VectorSpaceId.builder()
+                        .logicalName(collectionName)
+                        .build())
+                .remark("RAG向量存储空间")
+                .build();
+        vectorStoreAdmin.ensureVectorSpace(spaceSpec);
+    }
+
+    private void insertRows(String collectionName, List<JsonObject> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        InsertReq req = InsertReq.builder()
+                .collectionName(collectionName)
+                .data(rows)
+                .build();
+        InsertResp resp = milvusClient.insert(req);
+        log.info("Milvus 写入成功，集合={}，行数={}", collectionName, resp.getInsertCnt());
     }
 
     private String selectContent(DocumentChunk chunk, boolean includeEnhanced) {
@@ -192,7 +231,8 @@ public class IndexerNode implements IngestionNode {
             chunk.setChunkId(chunkId);
             chunk.setEmbedding(vectors[i]);
 
-            String content = texts.get(i) == null ? "" : texts.get(i);
+            // 使用原始内容作为存储内容，而不是用于embedding的文本
+            String content = chunk.getContent() == null ? "" : chunk.getContent();
             if (content.length() > 65535) {
                 content = content.substring(0, 65535);
             }
