@@ -31,8 +31,13 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * 本地文件抓取器
+ * 负责从本地文件系统或对象存储（如 S3 协议）中读取文件内容
+ */
 @Component
 @RequiredArgsConstructor
+@Deprecated
 public class LocalFileFetcher implements DocumentFetcher {
 
     private final FileStorageService fileStorageService;
