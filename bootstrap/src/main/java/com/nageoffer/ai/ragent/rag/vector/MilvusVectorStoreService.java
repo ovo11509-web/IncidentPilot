@@ -21,10 +21,10 @@ import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.IdUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.InsertReq;
@@ -48,7 +48,7 @@ public class MilvusVectorStoreService implements VectorStoreService {
     private final KnowledgeBaseMapper kbMapper;
 
     @Override
-    public void indexDocumentChunks(String kbId, String docId, List<Chunk> chunks, float[][] vectors) {
+    public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks, float[][] vectors) {
         Assert.isFalse(chunks == null || chunks.isEmpty(), () -> new ClientException("文档分块不允许为空"));
         Assert.isFalse(vectors == null || vectors.length == 0, () -> new ClientException("向量不允许为空"));
 
@@ -65,7 +65,7 @@ public class MilvusVectorStoreService implements VectorStoreService {
 
         List<JsonObject> rows = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
-            Chunk chunk = chunks.get(i);
+            VectorChunk chunk = chunks.get(i);
 
             String content = chunk.getContent() == null ? "" : chunk.getContent();
             if (content.length() > 65535) {
@@ -97,7 +97,7 @@ public class MilvusVectorStoreService implements VectorStoreService {
     }
 
     @Override
-    public void updateChunk(String kbId, String docId, Chunk chunk, float[] vector) {
+    public void updateChunk(String kbId, String docId, VectorChunk chunk, float[] vector) {
         Assert.isFalse(chunk == null, () -> new ClientException("Chunk 对象不能为空"));
         Assert.isFalse(vector == null || vector.length == 0, () -> new ClientException("向量不能为空"));
 

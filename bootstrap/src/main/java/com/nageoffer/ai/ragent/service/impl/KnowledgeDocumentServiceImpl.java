@@ -24,7 +24,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkCreateRequest;
 import com.nageoffer.ai.ragent.controller.vo.KnowledgeDocumentVO;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategyFactory;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
@@ -36,7 +38,6 @@ import com.nageoffer.ai.ragent.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
-import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import com.nageoffer.ai.ragent.rag.extractor.DocumentTextExtractor;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.service.FileStorageService;
@@ -63,8 +64,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeBaseMapper kbMapper;
     private final KnowledgeDocumentMapper docMapper;
     private final DocumentTextExtractor textExtractor;
-    @Qualifier("structureAwareTextChunker")
-    private final ChunkingStrategy textChunker;
+    private final ChunkingStrategyFactory chunkingStrategyFactory;
     private final FileStorageService fileStorageService;
     private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
@@ -131,9 +131,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                     .overlapSize(overlapChars)
                     .metadata(metadata)
                     .build();
+            ChunkingStrategy chunkingStrategy = chunkingStrategyFactory.requireStrategy(ChunkingMode.STRUCTURE_AWARE);
 
-            List<VectorChunk> chunkResults = textChunker.chunk(text, config);
-
+            List<VectorChunk> chunkResults = chunkingStrategy.chunk(text, config);
             List<KnowledgeChunkCreateRequest> chunks = chunkResults.stream()
                     .map(result -> {
                         KnowledgeChunkCreateRequest req = new KnowledgeChunkCreateRequest();
@@ -143,8 +143,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                         return req;
                     })
                     .toList();
-
             knowledgeChunkService.batchCreate(docId, chunks);
+
             documentDO.setChunkCount(chunks.size());
             patchStatus(documentDO, DocumentStatus.SUCCESS);
             docMapper.updateById(documentDO);
@@ -155,8 +155,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 vectors[i] = toArray(embeddingService.embed(texts.get(i)));
             }
 
-            List<Chunk> legacyChunks = chunkResults.stream()
-                    .map(result -> Chunk.builder()
+            List<VectorChunk> legacyChunks = chunkResults.stream()
+                    .map(result -> VectorChunk.builder()
                             .chunkId(result.getChunkId())
                             .index(result.getIndex())
                             .content(result.getContent())

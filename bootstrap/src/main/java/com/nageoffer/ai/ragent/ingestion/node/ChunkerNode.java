@@ -25,7 +25,6 @@ import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import com.nageoffer.ai.ragent.ingestion.domain.result.NodeResult;
@@ -34,9 +33,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -76,18 +73,10 @@ public class ChunkerNode implements IngestionNode {
     }
 
     private ChunkingOptions convertToChunkConfig(ChunkerSettings settings) {
-        Map<String, Object> metadata = new HashMap<>();
-        if (settings.getStrategy() == ChunkingMode.SEMANTIC) {
-            metadata.put("targetChars", settings.getChunkSize());
-            metadata.put("maxChars", (int) (settings.getChunkSize() * 1.5));
-            metadata.put("minChars", settings.getChunkSize() / 2);
-        }
-
         return ChunkingOptions.builder()
                 .chunkSize(settings.getChunkSize())
                 .overlapSize(settings.getOverlapSize())
                 .separator(settings.getSeparator())
-                .metadata(metadata)
                 .build();
     }
 

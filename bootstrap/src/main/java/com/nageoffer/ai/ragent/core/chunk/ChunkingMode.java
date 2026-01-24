@@ -49,12 +49,7 @@ public enum ChunkingMode {
     /**
      * 按段落切分 - 以段落为单位进行切分
      */
-    PARAGRAPH("paragraph"),
-
-    /**
-     * 语义切分 - 基于语义相似度进行智能切分
-     */
-    SEMANTIC("semantic");
+    PARAGRAPH("paragraph");
 
     /**
      * 策略值（小写 snake_case）
