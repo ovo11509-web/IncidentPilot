@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.ingestion.domain.enums;
+package com.nageoffer.ai.ragent.core.chunk;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -29,12 +29,17 @@ import lombok.RequiredArgsConstructor;
  */
 @Getter
 @RequiredArgsConstructor
-public enum ChunkStrategy {
+public enum ChunkingMode {
 
     /**
      * 固定大小切分 - 按固定字符数或token数切分
      */
     FIXED_SIZE("fixed_size"),
+
+    /**
+     * 对Markdown友好的切分 - 保留Markdown结构
+     */
+    STRUCTURE_AWARE("structure_aware"),
 
     /**
      * 按句子切分 - 以句子为单位进行切分
@@ -60,12 +65,12 @@ public enum ChunkStrategy {
      * 根据字符串值解析策略
      */
     @JsonCreator
-    public static ChunkStrategy fromValue(String value) {
+    public static ChunkingMode fromValue(String value) {
         if (value == null) {
             return null;
         }
         String normalized = normalize(value);
-        for (ChunkStrategy strategy : values()) {
+        for (ChunkingMode strategy : values()) {
             if (strategy.value.equalsIgnoreCase(normalized) || strategy.name().equalsIgnoreCase(normalized)) {
                 return strategy;
             }

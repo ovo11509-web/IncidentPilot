@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.ingestion.strategy.chunker;
+package com.nageoffer.ai.ragent.core.chunk.strategy;
 
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
-import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkStrategy;
-import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import com.nageoffer.ai.ragent.rag.chunk.StructureAwareSemanticChunkService;
 import lombok.RequiredArgsConstructor;
@@ -41,17 +42,17 @@ public class SemanticChunker implements ChunkingStrategy {
     private final StructureAwareSemanticChunkService semanticChunkService;
 
     @Override
-    public ChunkStrategy getStrategyType() {
-        return ChunkStrategy.SEMANTIC;
+    public ChunkingMode getType() {
+        return ChunkingMode.SEMANTIC;
     }
 
     @Override
-    public List<DocumentChunk> chunk(String text, ChunkerSettings settings) {
+    public List<VectorChunk> chunk(String text, ChunkingOptions settings) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }
         List<Chunk> chunks = semanticChunkService.split(text);
-        List<DocumentChunk> out = new ArrayList<>();
+        List<VectorChunk> out = new ArrayList<>();
         int cursor = 0;
         for (Chunk chunk : chunks) {
             String content = chunk.getContent();
@@ -64,12 +65,10 @@ public class SemanticChunker implements ChunkingStrategy {
             }
             int end = Math.min(text.length(), start + content.length());
             cursor = end;
-            out.add(DocumentChunk.builder()
+            out.add(VectorChunk.builder()
                     .chunkId(chunk.getChunkId())
                     .index(chunk.getIndex() == null ? out.size() : chunk.getIndex())
                     .content(content)
-                    .startOffset(start)
-                    .endOffset(end)
                     .build());
         }
         return out;

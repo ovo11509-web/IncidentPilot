@@ -25,8 +25,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.config.RAGDefaultProperties;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
 import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentSource;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
@@ -92,7 +92,7 @@ public class IndexerNode implements IngestionNode {
 
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
-        List<DocumentChunk> chunks = context.getChunks();
+        List<VectorChunk> chunks = context.getChunks();
         if (chunks == null || chunks.isEmpty()) {
             return NodeResult.fail(new ClientException("没有可索引的分块"));
         }
@@ -102,9 +102,8 @@ public class IndexerNode implements IngestionNode {
             return NodeResult.fail(new ClientException("索引器需要指定集合名称"));
         }
 
-        boolean includeEnhanced = settings.getIncludeEnhancedContent() != null && settings.getIncludeEnhancedContent();
         List<String> texts = chunks.stream()
-                .map(chunk -> selectContent(chunk, includeEnhanced))
+                .map(VectorChunk::getContent)
                 .toList();
         ModelTarget target = resolveEmbeddingTarget(settings.getEmbeddingModel());
         int expectedDim = resolveDimension(target);
@@ -163,13 +162,6 @@ public class IndexerNode implements IngestionNode {
         log.info("Milvus 写入成功，集合={}，行数={}", collectionName, resp.getInsertCnt());
     }
 
-    private String selectContent(DocumentChunk chunk, boolean includeEnhanced) {
-        if (includeEnhanced && StringUtils.hasText(chunk.getEnhancedContent())) {
-            return chunk.getEnhancedContent();
-        }
-        return chunk.getContent();
-    }
-
     private List<List<Float>> embedBatch(List<String> texts, ModelTarget target) {
         EmbeddingClient client = embeddingClientsByProvider.get(target.candidate().getProvider());
         if (client == null) {
@@ -225,14 +217,14 @@ public class IndexerNode implements IngestionNode {
     }
 
     private List<JsonObject> buildRows(IngestionContext context,
-                                       List<DocumentChunk> chunks,
+                                       List<VectorChunk> chunks,
                                        List<String> texts,
                                        float[][] vectors,
                                        List<String> metadataFields) {
         Map<String, Object> mergedMetadata = mergeMetadata(context);
         List<JsonObject> rows = new java.util.ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
-            DocumentChunk chunk = chunks.get(i);
+            VectorChunk chunk = chunks.get(i);
             String chunkId = StringUtils.hasText(chunk.getChunkId()) ? chunk.getChunkId() : IdUtil.getSnowflakeNextIdStr();
             chunk.setChunkId(chunkId);
             chunk.setEmbedding(vectors[i]);

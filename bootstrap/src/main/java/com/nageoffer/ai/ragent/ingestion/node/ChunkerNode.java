@@ -19,21 +19,24 @@ package com.nageoffer.ai.ragent.ingestion.node;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategyFactory;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
-import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkStrategy;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import com.nageoffer.ai.ragent.ingestion.domain.result.NodeResult;
 import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
-import com.nageoffer.ai.ragent.ingestion.strategy.chunker.ChunkingStrategy;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -41,16 +44,11 @@ import java.util.stream.Collectors;
  * 负责将输入的完整文本（原始文本或增强后的文本）按照指定的策略切分成多个较小的文本块（Chunk）
  */
 @Component
+@RequiredArgsConstructor
 public class ChunkerNode implements IngestionNode {
 
     private final ObjectMapper objectMapper;
-    private final Map<ChunkStrategy, ChunkingStrategy> strategies;
-
-    public ChunkerNode(ObjectMapper objectMapper, List<ChunkingStrategy> strategies) {
-        this.objectMapper = objectMapper;
-        this.strategies = strategies.stream()
-                .collect(Collectors.toMap(ChunkingStrategy::getStrategyType, Function.identity()));
-    }
+    private final ChunkingStrategyFactory chunkingStrategyFactory;
 
     @Override
     public String getNodeType() {
@@ -64,24 +62,48 @@ public class ChunkerNode implements IngestionNode {
             return NodeResult.fail(new ClientException("可分块文本为空"));
         }
         ChunkerSettings settings = parseSettings(config.getSettings());
-        ChunkStrategy strategyType = settings.getStrategy() == null ? ChunkStrategy.FIXED_SIZE : settings.getStrategy();
-        ChunkingStrategy strategy = strategies.get(strategyType);
-        if (strategy == null) {
-            return NodeResult.fail(new ClientException("未找到分块策略: " + strategyType));
+        ChunkingStrategy chunker = chunkingStrategyFactory.requireStrategy(settings.getStrategy());
+        if (chunker == null) {
+            return NodeResult.fail(new ClientException("未找到分块策略: " + settings.getStrategy()));
         }
-        List<DocumentChunk> chunks = strategy.chunk(text, settings);
+
+        ChunkingOptions chunkConfig = convertToChunkConfig(settings);
+        List<VectorChunk> results = chunker.chunk(text, chunkConfig);
+        List<VectorChunk> chunks = convertToVectorChunks(results);
+
         context.setChunks(chunks);
-        return NodeResult.ok("已分块 " + (chunks == null ? 0 : chunks.size()) + " 段");
+        return NodeResult.ok("已分块 " + chunks.size() + " 段");
+    }
+
+    private ChunkingOptions convertToChunkConfig(ChunkerSettings settings) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (settings.getStrategy() == ChunkingMode.SEMANTIC) {
+            metadata.put("targetChars", settings.getChunkSize());
+            metadata.put("maxChars", (int) (settings.getChunkSize() * 1.5));
+            metadata.put("minChars", settings.getChunkSize() / 2);
+        }
+
+        return ChunkingOptions.builder()
+                .chunkSize(settings.getChunkSize())
+                .overlapSize(settings.getOverlapSize())
+                .separator(settings.getSeparator())
+                .metadata(metadata)
+                .build();
+    }
+
+    private List<VectorChunk> convertToVectorChunks(List<VectorChunk> results) {
+        return results.stream()
+                .map(result -> VectorChunk.builder()
+                        .chunkId(result.getChunkId())
+                        .index(result.getIndex())
+                        .content(result.getContent())
+                        .metadata(result.getMetadata())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     private ChunkerSettings parseSettings(JsonNode node) {
-        if (node == null || node.isNull()) {
-            return ChunkerSettings.builder().strategy(ChunkStrategy.FIXED_SIZE).chunkSize(512).overlapSize(128).build();
-        }
         ChunkerSettings settings = objectMapper.convertValue(node, ChunkerSettings.class);
-        if (settings.getStrategy() == null) {
-            settings.setStrategy(ChunkStrategy.FIXED_SIZE);
-        }
         if (settings.getChunkSize() == null || settings.getChunkSize() <= 0) {
             settings.setChunkSize(512);
         }

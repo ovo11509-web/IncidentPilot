@@ -17,7 +17,7 @@
 
 package com.nageoffer.ai.ragent.ingestion.domain.settings;
 
-import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkStrategy;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,7 +37,7 @@ public class ChunkerSettings {
      * 分块策略
      * 如固定大小、按句子、按段落、语义切分等
      */
-    private ChunkStrategy strategy;
+    private ChunkingMode strategy;
 
     /**
      * 块的目标大小（字符数或token数）

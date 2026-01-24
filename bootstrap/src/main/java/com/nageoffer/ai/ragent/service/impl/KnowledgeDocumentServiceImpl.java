@@ -24,6 +24,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkCreateRequest;
 import com.nageoffer.ai.ragent.controller.vo.KnowledgeDocumentVO;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeBaseMapper;
@@ -32,9 +35,8 @@ import com.nageoffer.ai.ragent.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
-import com.nageoffer.ai.ragent.rag.chunk.Chunk;
-import com.nageoffer.ai.ragent.rag.chunk.StructureAwareSemanticChunkService;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
+import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import com.nageoffer.ai.ragent.rag.extractor.DocumentTextExtractor;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.service.FileStorageService;
@@ -42,12 +44,16 @@ import com.nageoffer.ai.ragent.service.KnowledgeChunkService;
 import com.nageoffer.ai.ragent.service.KnowledgeDocumentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -57,11 +63,24 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeBaseMapper kbMapper;
     private final KnowledgeDocumentMapper docMapper;
     private final DocumentTextExtractor textExtractor;
-    private final StructureAwareSemanticChunkService chunkService;
+    @Qualifier("structureAwareTextChunker")
+    private final ChunkingStrategy textChunker;
     private final FileStorageService fileStorageService;
     private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
+
+    @Value("${kb.chunk.semantic.targetChars:1400}")
+    private int targetChars;
+
+    @Value("${kb.chunk.semantic.maxChars:1800}")
+    private int maxChars;
+
+    @Value("${kb.chunk.semantic.minChars:600}")
+    private int minChars;
+
+    @Value("${kb.chunk.semantic.overlapChars:0}")
+    private int overlapChars;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -102,20 +121,49 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         try (InputStream is = fileStorageService.openStream(documentDO.getFileUrl())) {
             String text = textExtractor.extract(is, documentDO.getDocName());
 
-            List<Chunk> chunks = chunkService.split(text);
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("targetChars", targetChars);
+            metadata.put("maxChars", maxChars);
+            metadata.put("minChars", minChars);
 
-            knowledgeChunkService.batchCreate(docId, BeanUtil.copyToList(chunks, KnowledgeChunkCreateRequest.class));
+            ChunkingOptions config = ChunkingOptions.builder()
+                    .chunkSize(targetChars)
+                    .overlapSize(overlapChars)
+                    .metadata(metadata)
+                    .build();
+
+            List<VectorChunk> chunkResults = textChunker.chunk(text, config);
+
+            List<KnowledgeChunkCreateRequest> chunks = chunkResults.stream()
+                    .map(result -> {
+                        KnowledgeChunkCreateRequest req = new KnowledgeChunkCreateRequest();
+                        req.setChunkId(result.getChunkId());
+                        req.setIndex(result.getIndex());
+                        req.setContent(result.getContent());
+                        return req;
+                    })
+                    .toList();
+
+            knowledgeChunkService.batchCreate(docId, chunks);
             documentDO.setChunkCount(chunks.size());
             patchStatus(documentDO, DocumentStatus.SUCCESS);
             docMapper.updateById(documentDO);
 
-            List<String> texts = chunks.stream().map(Chunk::getContent).toList();
+            List<String> texts = chunkResults.stream().map(VectorChunk::getContent).toList();
             float[][] vectors = new float[texts.size()][];
             for (int i = 0; i < texts.size(); i++) {
                 vectors[i] = toArray(embeddingService.embed(texts.get(i)));
             }
 
-            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, chunks, vectors);
+            List<Chunk> legacyChunks = chunkResults.stream()
+                    .map(result -> Chunk.builder()
+                            .chunkId(result.getChunkId())
+                            .index(result.getIndex())
+                            .content(result.getContent())
+                            .build())
+                    .toList();
+
+            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, legacyChunks, vectors);
         } catch (Exception e) {
             log.error("文件分块失败：docId={}", docId, e);
             patchStatus(documentDO, DocumentStatus.FAILED);

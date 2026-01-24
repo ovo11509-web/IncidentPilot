@@ -15,65 +15,55 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.ingestion.domain.context;
+package com.nageoffer.ai.ragent.core.chunk;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 文档分块实体类
- * 表示从原始文档中切分出的单个文本块，包含块内容、位置信息、元数据和向量嵌入等信息
+ * 分块配置对象
+ * 统一的分块参数配置，支持各种分块策略
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class DocumentChunk {
+public class ChunkingOptions {
 
     /**
-     * 块的唯一标识符
+     * 块的目标大小（字符数）
      */
-    private String chunkId;
+    @Builder.Default
+    private Integer chunkSize = 512;
 
     /**
-     * 块在文档中的序号索引，从0开始
+     * 相邻块之间的重叠大小
      */
-    private int index;
+    @Builder.Default
+    private Integer overlapSize = 128;
 
     /**
-     * 块的原始文本内容
+     * 自定义分割符（用于特定策略）
      */
-    private String content;
+    private String separator;
 
     /**
-     * 经过增强处理后的文本内容
-     * 可能包含上下文增强、摘要等处理后的内容
+     * 扩展元数据（用于传递策略特定参数）
      */
-    private String enhancedContent;
+    @Builder.Default
+    private Map<String, Object> metadata = new HashMap<>();
 
     /**
-     * 块在原始文档中的起始字符偏移量
+     * 获取元数据值
      */
-    private int startOffset;
-
-    /**
-     * 块在原始文档中的结束字符偏移量
-     */
-    private int endOffset;
-
-    /**
-     * 块的元数据信息
-     * 可包含来源信息、页码、标题等附加属性
-     */
-    private Map<String, Object> metadata;
-
-    /**
-     * 块的向量嵌入表示
-     * 用于向量相似度检索的浮点数数组
-     */
-    private float[] embedding;
+    @SuppressWarnings("unchecked")
+    public <T> T getMetadata(String key, T defaultValue) {
+        Object value = metadata.get(key);
+        return value != null ? (T) value : defaultValue;
+    }
 }

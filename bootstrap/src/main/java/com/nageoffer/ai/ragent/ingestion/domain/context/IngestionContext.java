@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.ingestion.domain.context;
 
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionStatus;
 import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
 import lombok.AllArgsConstructor;
@@ -75,7 +76,7 @@ public class IngestionContext {
     /**
      * 文档切分后的文本块列表
      */
-    private List<DocumentChunk> chunks;
+    private List<VectorChunk> chunks;
 
     /**
      * 经过增强处理后的文本内容

@@ -43,11 +43,6 @@ public class IndexerSettings {
     private String embeddingModel;
 
     /**
-     * 是否将增强后的内容一并索引
-     */
-    private Boolean includeEnhancedContent;
-
-    /**
      * 要存储的元数据字段列表
      * 指定哪些元数据字段应被存储到向量数据库中
      */

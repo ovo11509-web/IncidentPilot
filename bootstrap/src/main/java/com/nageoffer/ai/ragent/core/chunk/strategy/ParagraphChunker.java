@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.ingestion.strategy.chunker;
+package com.nageoffer.ai.ragent.core.chunk.strategy;
 
 import cn.hutool.core.util.IdUtil;
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
-import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkStrategy;
-import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -28,42 +29,41 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 句子切分策略实现类
- * 该类通过识别句子边界（如标点符号和换行符）将文本切分为多个分块（Chunk）
+ * 按段落进行文本分块的策略实现类
  */
 @Component
-public class SentenceChunker implements ChunkingStrategy {
+public class ParagraphChunker implements ChunkingStrategy {
 
     @Override
-    public ChunkStrategy getStrategyType() {
-        return ChunkStrategy.SENTENCE;
+    public ChunkingMode getType() {
+        return ChunkingMode.PARAGRAPH;
     }
 
     @Override
-    public List<DocumentChunk> chunk(String text, ChunkerSettings settings) {
+    public List<VectorChunk> chunk(String text, ChunkingOptions settings) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }
         int chunkSize = settings != null && settings.getChunkSize() != null ? settings.getChunkSize() : 512;
         int overlap = settings != null && settings.getOverlapSize() != null ? settings.getOverlapSize() : 128;
 
-        List<Span> sentences = splitSentences(text);
-        if (sentences.isEmpty()) {
+        List<Span> paragraphs = splitParagraphs(text);
+        if (paragraphs.isEmpty()) {
             return List.of();
         }
 
-        List<DocumentChunk> chunks = new ArrayList<>();
+        List<VectorChunk> chunks = new ArrayList<>();
         int index = 0;
-        int sentenceIndex = 0;
-        int nextStart = sentences.get(0).start;
+        int paraIndex = 0;
+        int nextStart = paragraphs.get(0).start;
 
-        while (sentenceIndex < sentences.size()) {
-            Span first = sentences.get(sentenceIndex);
+        while (paraIndex < paragraphs.size()) {
+            Span first = paragraphs.get(paraIndex);
             int chunkStart = Math.max(nextStart, first.start);
             int chunkEnd = chunkStart;
-            int cursor = sentenceIndex;
-            while (cursor < sentences.size()) {
-                Span span = sentences.get(cursor);
+            int cursor = paraIndex;
+            while (cursor < paragraphs.size()) {
+                Span span = paragraphs.get(cursor);
                 int candidateEnd = span.end;
                 int candidateSize = candidateEnd - chunkStart;
                 if (candidateSize > chunkSize && chunkEnd > chunkStart) {
@@ -78,34 +78,40 @@ public class SentenceChunker implements ChunkingStrategy {
 
             String content = text.substring(chunkStart, chunkEnd).trim();
             if (StringUtils.hasText(content)) {
-                chunks.add(DocumentChunk.builder()
+                chunks.add(VectorChunk.builder()
                         .chunkId(IdUtil.getSnowflakeNextIdStr())
                         .index(index++)
                         .content(content)
-                        .startOffset(chunkStart)
-                        .endOffset(chunkEnd)
                         .build());
             }
             if (chunkEnd >= text.length()) {
                 break;
             }
             nextStart = Math.max(chunkEnd - Math.max(0, overlap), chunkStart);
-            sentenceIndex = findSentenceIndex(sentences, nextStart);
+            paraIndex = findParagraphIndex(paragraphs, nextStart);
         }
 
         return chunks;
     }
 
-    private List<Span> splitSentences(String text) {
+    private List<Span> splitParagraphs(String text) {
         List<Span> spans = new ArrayList<>();
         int len = text.length();
         int start = 0;
-        for (int i = 0; i < len; i++) {
-            char c = text.charAt(i);
-            if (isBoundary(c)) {
-                int end = i + 1;
-                spans.add(new Span(start, end));
-                start = end;
+        int i = 0;
+        while (i < len) {
+            if (text.charAt(i) == '\n') {
+                int j = i;
+                while (j < len && text.charAt(j) == '\n') {
+                    j++;
+                }
+                if (j - i >= 2) {
+                    spans.add(new Span(start, i));
+                    start = j;
+                }
+                i = j;
+            } else {
+                i++;
             }
         }
         if (start < len) {
@@ -114,18 +120,14 @@ public class SentenceChunker implements ChunkingStrategy {
         return spans;
     }
 
-    private boolean isBoundary(char c) {
-        return c == '.' || c == '!' || c == '?' || c == '。' || c == '！' || c == '？' || c == '\n';
-    }
-
-    private int findSentenceIndex(List<Span> sentences, int start) {
-        for (int i = 0; i < sentences.size(); i++) {
-            Span span = sentences.get(i);
+    private int findParagraphIndex(List<Span> spans, int start) {
+        for (int i = 0; i < spans.size(); i++) {
+            Span span = spans.get(i);
             if (span.end > start) {
                 return i;
             }
         }
-        return sentences.size();
+        return spans.size();
     }
 
     private record Span(int start, int end) {

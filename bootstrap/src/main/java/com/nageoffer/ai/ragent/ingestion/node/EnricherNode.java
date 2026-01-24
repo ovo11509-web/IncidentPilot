@@ -19,10 +19,10 @@ package com.nageoffer.ai.ragent.ingestion.node;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkEnrichType;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
@@ -71,7 +71,7 @@ public class EnricherNode implements IngestionNode {
 
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
-        List<DocumentChunk> chunks = context.getChunks();
+        List<VectorChunk> chunks = context.getChunks();
         if (chunks == null || chunks.isEmpty()) {
             return NodeResult.ok("No chunks to enrich");
         }
@@ -80,7 +80,7 @@ public class EnricherNode implements IngestionNode {
             return NodeResult.ok("No enricher tasks configured");
         }
         boolean attachMetadata = settings.getAttachDocumentMetadata() == null || settings.getAttachDocumentMetadata();
-        for (DocumentChunk chunk : chunks) {
+        for (VectorChunk chunk : chunks) {
             if (chunk == null || !StringUtils.hasText(chunk.getContent())) {
                 continue;
             }
@@ -119,7 +119,7 @@ public class EnricherNode implements IngestionNode {
         return objectMapper.convertValue(node, EnricherSettings.class);
     }
 
-    private String buildUserPrompt(String template, DocumentChunk chunk, IngestionContext context) {
+    private String buildUserPrompt(String template, VectorChunk chunk, IngestionContext context) {
         String input = chunk.getContent();
         if (!StringUtils.hasText(template)) {
             return input;
@@ -133,7 +133,7 @@ public class EnricherNode implements IngestionNode {
         return PromptTemplateRenderer.render(template, vars);
     }
 
-    private void applyResult(DocumentChunk chunk, ChunkEnrichType type, String response) {
+    private void applyResult(VectorChunk chunk, ChunkEnrichType type, String response) {
         switch (type) {
             case KEYWORDS -> chunk.getMetadata().put("keywords", JsonResponseParser.parseStringList(response));
             case SUMMARY ->

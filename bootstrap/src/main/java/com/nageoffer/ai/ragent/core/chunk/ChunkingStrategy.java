@@ -15,33 +15,29 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.ingestion.strategy.chunker;
-
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
-import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkStrategy;
-import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
+package com.nageoffer.ai.ragent.core.chunk;
 
 import java.util.List;
 
 /**
- * 文档分块策略接口
- * 用于将长文本按照特定的策略划分为多个较小的文档块（DocumentChunk）
+ * 文本分块器核心接口
+ * 定义统一的文本分块能力
  */
 public interface ChunkingStrategy {
 
     /**
-     * 获取当前分块策略的类型
+     * 获取分块器类型标识
      *
-     * @return 分块策略类型枚举 {@link ChunkStrategy}
+     * @return 分块器类型名称
      */
-    ChunkStrategy getStrategyType();
+    ChunkingMode getType();
 
     /**
      * 对文本进行分块处理
      *
-     * @param text     待分块的原始文本内容
-     * @param settings 分块配置参数，如块大小、重叠度等 {@link ChunkerSettings}
-     * @return 分块后的文档块列表 {@link List<DocumentChunk>}
+     * @param text   待分块的原始文本内容
+     * @param config 分块配置参数
+     * @return 分块后的结果列表
      */
-    List<DocumentChunk> chunk(String text, ChunkerSettings settings);
+    List<VectorChunk> chunk(String text, ChunkingOptions config);
 }

@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.ingestion.strategy.chunker;
+package com.nageoffer.ai.ragent.core.chunk.strategy;
 
 import cn.hutool.core.util.IdUtil;
-import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentChunk;
-import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkStrategy;
-import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -28,54 +29,58 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 固定大小的分块策略实现类
- * 该类通过指定的分块大小和重叠大小对文档内容进行切分
+ * 固定大小分块器
+ * 按照指定的块大小和重叠大小进行文本切分，并在标点符号处优化边界
  */
 @Component
-public class FixedSizeChunker implements ChunkingStrategy {
+public class FixedSizeTextChunker implements ChunkingStrategy {
 
     @Override
-    public ChunkStrategy getStrategyType() {
-        return ChunkStrategy.FIXED_SIZE;
+    public ChunkingMode getType() {
+        return ChunkingMode.FIXED_SIZE;
     }
 
     @Override
-    public List<DocumentChunk> chunk(String text, ChunkerSettings settings) {
+    public List<VectorChunk> chunk(String text, ChunkingOptions config) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }
-        int chunkSize = settings != null && settings.getChunkSize() != null ? settings.getChunkSize() : 512;
-        int overlap = settings != null && settings.getOverlapSize() != null ? settings.getOverlapSize() : 128;
+
+        int chunkSize = config.getChunkSize();
+        int overlap = config.getOverlapSize();
         int len = text.length();
 
-        List<DocumentChunk> chunks = new ArrayList<>();
+        List<VectorChunk> chunks = new ArrayList<>();
         int index = 0;
         int start = 0;
+
         while (start < len) {
             int targetEnd = Math.min(start + chunkSize, len);
             int end = adjustToBoundary(text, start, targetEnd);
             if (end <= start) {
                 end = targetEnd;
             }
+
             String content = text.substring(start, end).trim();
             if (StringUtils.hasText(content)) {
-                chunks.add(DocumentChunk.builder()
+                chunks.add(VectorChunk.builder()
                         .chunkId(IdUtil.getSnowflakeNextIdStr())
                         .index(index++)
                         .content(content)
-                        .startOffset(start)
-                        .endOffset(end)
                         .build());
             }
+
             if (end >= len) {
                 break;
             }
+
             int nextStart = end - Math.max(0, overlap);
             if (nextStart <= start) {
                 nextStart = end;
             }
             start = nextStart;
         }
+
         return chunks;
     }
 
