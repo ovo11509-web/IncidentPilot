@@ -18,10 +18,12 @@
 package com.nageoffer.ai.ragent.core.chunk.strategy;
 
 import cn.hutool.core.util.IdUtil;
+import com.nageoffer.ai.ragent.core.chunk.AbstractEmbeddingChunker;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
+import com.nageoffer.ai.ragent.infra.embedding.EmbeddingClient;
+import com.nageoffer.ai.ragent.infra.model.ModelSelector;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -33,7 +35,11 @@ import java.util.List;
  * 按照指定的块大小和重叠大小进行文本切分，并在标点符号处优化边界
  */
 @Component
-public class FixedSizeTextChunker implements ChunkingStrategy {
+public class FixedSizeTextChunker extends AbstractEmbeddingChunker {
+
+    public FixedSizeTextChunker(ModelSelector modelSelector, List<EmbeddingClient> embeddingClients) {
+        super(modelSelector, embeddingClients);
+    }
 
     @Override
     public ChunkingMode getType() {
@@ -41,7 +47,7 @@ public class FixedSizeTextChunker implements ChunkingStrategy {
     }
 
     @Override
-    public List<VectorChunk> chunk(String text, ChunkingOptions config) {
+    protected List<VectorChunk> doChunk(String text, ChunkingOptions config) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }

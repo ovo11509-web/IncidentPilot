@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.core.chunk;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -60,5 +61,6 @@ public class VectorChunk {
      * 块的向量嵌入表示
      * 用于向量相似度检索的浮点数数组
      */
+    @JsonIgnore
     private float[] embedding;
 }

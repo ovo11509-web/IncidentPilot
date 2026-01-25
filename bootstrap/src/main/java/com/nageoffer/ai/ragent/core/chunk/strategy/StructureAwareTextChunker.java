@@ -19,10 +19,12 @@ package com.nageoffer.ai.ragent.core.chunk.strategy;
 
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import com.nageoffer.ai.ragent.core.chunk.AbstractEmbeddingChunker;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
+import com.nageoffer.ai.ragent.infra.embedding.EmbeddingClient;
+import com.nageoffer.ai.ragent.infra.model.ModelSelector;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
@@ -41,7 +43,11 @@ import java.util.regex.Pattern;
  * - 支持可选的 overlap
  */
 @Component
-public class StructureAwareTextChunker implements ChunkingStrategy {
+public class StructureAwareTextChunker extends AbstractEmbeddingChunker {
+
+    public StructureAwareTextChunker(ModelSelector modelSelector, List<EmbeddingClient> embeddingClients) {
+        super(modelSelector, embeddingClients);
+    }
 
     // ----------- 可调参数（字符预算） -----------
     /**
@@ -79,7 +85,7 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
     }
 
     @Override
-    public List<VectorChunk> chunk(String text, ChunkingOptions config) {
+    protected List<VectorChunk> doChunk(String text, ChunkingOptions config) {
         if (StrUtil.isBlank(text)) return List.of();
 
         // 1) 扫描成“块”（记录原文的 start/end 下标，确保输出 substring 完全等于原文）

@@ -18,10 +18,12 @@
 package com.nageoffer.ai.ragent.core.chunk.strategy;
 
 import cn.hutool.core.util.IdUtil;
+import com.nageoffer.ai.ragent.core.chunk.AbstractEmbeddingChunker;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.infra.embedding.EmbeddingClient;
+import com.nageoffer.ai.ragent.infra.model.ModelSelector;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -33,7 +35,11 @@ import java.util.List;
  * 该类通过识别句子边界（如标点符号和换行符）将文本切分为多个分块（Chunk）
  */
 @Component
-public class SentenceChunker implements ChunkingStrategy {
+public class SentenceChunker extends AbstractEmbeddingChunker {
+
+    public SentenceChunker(ModelSelector modelSelector, List<EmbeddingClient> embeddingClients) {
+        super(modelSelector, embeddingClients);
+    }
 
     @Override
     public ChunkingMode getType() {
@@ -41,7 +47,7 @@ public class SentenceChunker implements ChunkingStrategy {
     }
 
     @Override
-    public List<VectorChunk> chunk(String text, ChunkingOptions settings) {
+    protected List<VectorChunk> doChunk(String text, ChunkingOptions settings) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }

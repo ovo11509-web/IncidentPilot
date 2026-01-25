@@ -87,6 +87,7 @@ public class ChunkerNode implements IngestionNode {
                         .index(result.getIndex())
                         .content(result.getContent())
                         .metadata(result.getMetadata())
+                        .embedding(result.getEmbedding())
                         .build())
                 .collect(Collectors.toList());
     }

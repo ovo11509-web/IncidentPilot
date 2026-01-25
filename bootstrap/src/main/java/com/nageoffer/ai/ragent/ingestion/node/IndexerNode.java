@@ -110,8 +110,7 @@ public class IndexerNode implements IngestionNode {
         if (expectedDim <= 0) {
             return NodeResult.fail(new ClientException("未配置向量维度"));
         }
-        List<List<Float>> vectors = embedBatch(texts, target);
-        float[][] vectorArray = toArray(vectors, expectedDim);
+        float[][] vectorArray = resolveVectorArray(chunks, texts, target, expectedDim);
 
         ensureVectorSpace(collectionName);
         List<JsonObject> rows = buildRows(context, chunks, texts, vectorArray, settings.getMetadataFields());
@@ -212,6 +211,41 @@ public class IndexerNode implements IngestionNode {
                 vec[j] = row.get(j);
             }
             out[i] = vec;
+        }
+        return out;
+    }
+
+    private float[][] resolveVectorArray(List<VectorChunk> chunks,
+                                         List<String> texts,
+                                         ModelTarget target,
+                                         int expectedDim) {
+        if (hasEmbeddings(chunks)) {
+            try {
+                return toArrayFromChunks(chunks, expectedDim);
+            } catch (ClientException ex) {
+                log.warn("分块向量不匹配，使用模型重算: {}", ex.getMessage());
+            }
+        }
+        List<List<Float>> vectors = embedBatch(texts, target);
+        return toArray(vectors, expectedDim);
+    }
+
+    private boolean hasEmbeddings(List<VectorChunk> chunks) {
+        return chunks.stream()
+                .allMatch(chunk -> chunk.getEmbedding() != null && chunk.getEmbedding().length > 0);
+    }
+
+    private float[][] toArrayFromChunks(List<VectorChunk> chunks, int expectedDim) {
+        float[][] out = new float[chunks.size()][];
+        for (int i = 0; i < chunks.size(); i++) {
+            float[] vector = chunks.get(i).getEmbedding();
+            if (vector == null || vector.length == 0) {
+                throw new ClientException("向量结果缺失，索引: " + i);
+            }
+            if (expectedDim > 0 && vector.length != expectedDim) {
+                throw new ClientException("向量维度不匹配，索引: " + i);
+            }
+            out[i] = vector;
         }
         return out;
     }

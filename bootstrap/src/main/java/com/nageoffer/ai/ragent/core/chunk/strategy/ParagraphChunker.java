@@ -18,10 +18,12 @@
 package com.nageoffer.ai.ragent.core.chunk.strategy;
 
 import cn.hutool.core.util.IdUtil;
+import com.nageoffer.ai.ragent.core.chunk.AbstractEmbeddingChunker;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.infra.embedding.EmbeddingClient;
+import com.nageoffer.ai.ragent.infra.model.ModelSelector;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -32,7 +34,11 @@ import java.util.List;
  * 按段落进行文本分块的策略实现类
  */
 @Component
-public class ParagraphChunker implements ChunkingStrategy {
+public class ParagraphChunker extends AbstractEmbeddingChunker {
+
+    public ParagraphChunker(ModelSelector modelSelector, List<EmbeddingClient> embeddingClients) {
+        super(modelSelector, embeddingClients);
+    }
 
     @Override
     public ChunkingMode getType() {
@@ -40,7 +46,7 @@ public class ParagraphChunker implements ChunkingStrategy {
     }
 
     @Override
-    public List<VectorChunk> chunk(String text, ChunkingOptions settings) {
+    protected List<VectorChunk> doChunk(String text, ChunkingOptions settings) {
         if (!StringUtils.hasText(text)) {
             return List.of();
         }
