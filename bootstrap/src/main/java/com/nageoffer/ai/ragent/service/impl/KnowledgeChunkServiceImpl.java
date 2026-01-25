@@ -246,6 +246,10 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void rebuildByDocId(String docId) {
+        doRebuildByDocId(docId);
+    }
+
+    private void doRebuildByDocId(String docId) {
         KnowledgeDocumentDO documentDO = documentMapper.selectById(docId);
         Assert.notNull(documentDO, () -> new ClientException("文档不存在"));
 
@@ -328,9 +332,8 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         String kbId = String.valueOf(documentDO.getKbId());
         log.info("批量{}Chunk 成功, kbId={}, docId={}, count={}", enabled ? "启用" : "禁用", kbId, docId, needUpdateIds.size());
 
-
         if (enabled) {
-            rebuildByDocId(docId);
+            doRebuildByDocId(docId);
         } else {
             for (Long chunkId : needUpdateIds) {
                 deleteChunkFromMilvus(kbId, String.valueOf(chunkId));
