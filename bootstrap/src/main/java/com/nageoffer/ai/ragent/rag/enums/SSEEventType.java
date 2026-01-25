@@ -19,6 +19,9 @@ package com.nageoffer.ai.ragent.rag.enums;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * SSE 事件类型枚举
+ */
 @RequiredArgsConstructor
 public enum SSEEventType {
 

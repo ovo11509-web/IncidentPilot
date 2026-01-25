@@ -43,19 +43,7 @@ public enum IntentLevel {
      */
     TOPIC(2);
 
-    /**
-     * 层级编码
-     */
     private final int code;
-
-    /**
-     * 获取层级编码
-     *
-     * @return 层级编码值
-     */
-    public int getCode() {
-        return code;
-    }
 
     /**
      * 根据编码获取对应的意图层级
