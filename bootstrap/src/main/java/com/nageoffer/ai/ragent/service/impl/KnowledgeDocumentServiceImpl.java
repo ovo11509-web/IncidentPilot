@@ -146,11 +146,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             patchStatus(documentDO, DocumentStatus.SUCCESS);
             docMapper.updateById(documentDO);
 
-            List<String> texts = chunkResults.stream().map(VectorChunk::getContent).toList();
-            float[][] vectors = new float[texts.size()][];
-            for (int i = 0; i < texts.size(); i++) {
-                vectors[i] = toArray(embeddingService.embed(texts.get(i)));
-            }
+            float[][] vectors = buildVectors(chunkResults);
 
             List<VectorChunk> legacyChunks = chunkResults.stream()
                     .map(result -> VectorChunk.builder()
@@ -224,6 +220,27 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         doc.setStatus(status.getCode());
         doc.setUpdatedBy("");
         docMapper.updateById(doc);
+    }
+
+    private float[][] buildVectors(List<VectorChunk> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return new float[0][];
+        }
+        boolean hasEmbedding = chunks.stream()
+                .allMatch(chunk -> chunk.getEmbedding() != null && chunk.getEmbedding().length > 0);
+        if (hasEmbedding) {
+            float[][] vectors = new float[chunks.size()][];
+            for (int i = 0; i < chunks.size(); i++) {
+                vectors[i] = chunks.get(i).getEmbedding();
+            }
+            return vectors;
+        }
+        List<String> texts = chunks.stream().map(VectorChunk::getContent).toList();
+        float[][] vectors = new float[texts.size()][];
+        for (int i = 0; i < texts.size(); i++) {
+            vectors[i] = toArray(embeddingService.embed(texts.get(i)));
+        }
+        return vectors;
     }
 
     private static float[] toArray(List<Float> list) {

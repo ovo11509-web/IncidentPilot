@@ -18,7 +18,6 @@
 package com.nageoffer.ai.ragent.rag.vector;
 
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
-import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 
 import java.util.List;
 

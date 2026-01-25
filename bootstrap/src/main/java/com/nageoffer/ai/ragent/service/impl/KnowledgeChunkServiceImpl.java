@@ -28,12 +28,12 @@ import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkCreateRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkPageRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkUpdateRequest;
 import com.nageoffer.ai.ragent.controller.vo.KnowledgeChunkVO;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeChunkDO;
 import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeChunkMapper;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
-import com.nageoffer.ai.ragent.rag.chunk.Chunk;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.service.KnowledgeChunkService;
@@ -172,7 +172,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         vectorStoreService.updateChunk(
                 String.valueOf(chunkDO.getKbId()),
                 docId,
-                Chunk.builder()
+                VectorChunk.builder()
                         .chunkId(chunkId)
                         .content(newContent)
                         .index(chunkDO.getChunkIndex())
@@ -267,9 +267,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         }
 
         // 3. 重新 embed + upsert
-        List<Chunk> chunks = enabledChunks.stream()
+        List<VectorChunk> chunks = enabledChunks.stream()
                 .map(
-                        each -> Chunk.builder()
+                        each -> VectorChunk.builder()
                                 .content(each.getContent())
                                 .index(each.getChunkIndex())
                                 .chunkId(IdUtil.getSnowflakeNextIdStr())
@@ -277,7 +277,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 )
                 .collect(Collectors.toList());
 
-        List<String> texts = chunks.stream().map(Chunk::getContent).toList();
+        List<String> texts = chunks.stream().map(VectorChunk::getContent).toList();
         float[][] vectors = new float[texts.size()][];
         for (int i = 0; i < texts.size(); i++) {
             vectors[i] = toArray(embeddingService.embed(texts.get(i)));
@@ -347,7 +347,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         List<Float> embedding = embeddingService.embed(chunkDO.getContent());
         float[] vector = toArray(embedding);
 
-        Chunk chunk = Chunk.builder()
+        VectorChunk chunk = VectorChunk.builder()
                 .index(chunkDO.getChunkIndex())
                 .content(chunkDO.getContent())
                 .chunkId(String.valueOf(chunkDO.getId()))
