@@ -23,6 +23,7 @@ import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkBatchRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkCreateRequest;
 import com.nageoffer.ai.ragent.controller.request.KnowledgeChunkPageRequest;
@@ -34,6 +35,7 @@ import com.nageoffer.ai.ragent.dao.entity.KnowledgeDocumentDO;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeChunkMapper;
 import com.nageoffer.ai.ragent.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
+import com.nageoffer.ai.ragent.framework.exception.ServiceException;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.service.KnowledgeChunkService;
@@ -96,7 +98,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         Integer chunkIndex = requestParam.getIndex();
         if (chunkIndex == null) {
             // 自动取当前最大值 + 1
-            Integer maxIndex = chunkMapper.selectOne(
+            int maxIndex = chunkMapper.selectOne(
                     new LambdaQueryWrapper<KnowledgeChunkDO>()
                             .eq(KnowledgeChunkDO::getDocId, docId)
                             .orderByDesc(KnowledgeChunkDO::getChunkIndex)
@@ -176,8 +178,8 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                         .chunkId(chunkId)
                         .content(newContent)
                         .index(chunkDO.getChunkIndex())
-                        .build(),
-                toArray(embeddingService.embed(newContent))
+                        .embedding(toArray(embeddingService.embed(newContent)))
+                        .build()
         );
     }
 
@@ -266,7 +268,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
             return;
         }
 
-        // 3. 重新 embed + upsert
+        // 3. 重新向量化并重建索引
         List<VectorChunk> chunks = enabledChunks.stream()
                 .map(
                         each -> VectorChunk.builder()
@@ -277,13 +279,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 )
                 .collect(Collectors.toList());
 
-        List<String> texts = chunks.stream().map(VectorChunk::getContent).toList();
-        float[][] vectors = new float[texts.size()][];
-        for (int i = 0; i < texts.size(); i++) {
-            vectors[i] = toArray(embeddingService.embed(texts.get(i)));
-        }
+        attachEmbeddings(chunks);
 
-        vectorStoreService.indexDocumentChunks(kbId, docId, chunks, vectors);
+        vectorStoreService.indexDocumentChunks(kbId, docId, chunks);
 
         log.info("重建文档向量成功, kbId={}, docId={}, chunkCount={}", kbId, docId, enabledChunks.size());
     }
@@ -306,7 +304,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
             );
         } else {
             // 操作指定 chunk
-            chunks = chunkMapper.selectBatchIds(requestParam.getChunkIds());
+            chunks = chunkMapper.selectByIds(requestParam.getChunkIds());
             // 校验所有 chunk 都属于该文档
             chunks.forEach(c -> {
                 if (!c.getDocId().equals(Long.parseLong(docId))) {
@@ -351,8 +349,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .index(chunkDO.getChunkIndex())
                 .content(chunkDO.getContent())
                 .chunkId(String.valueOf(chunkDO.getId()))
+                .embedding(vector)
                 .build();
-        vectorStoreService.indexDocumentChunks(kbId, docId, List.of(chunk), new float[][]{vector});
+        vectorStoreService.indexDocumentChunks(kbId, docId, List.of(chunk));
 
         log.debug("同步 Chunk 到 Milvus 成功, kbId={}, docId={}, chunkId={}", kbId, docId, chunkDO.getId());
     }
@@ -393,5 +392,19 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
             arr[i] = list.get(i);
         }
         return arr;
+    }
+
+    private void attachEmbeddings(List<VectorChunk> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return;
+        }
+        List<String> texts = chunks.stream().map(VectorChunk::getContent).toList();
+        List<List<Float>> vectors = embeddingService.embedBatch(texts);
+        if (vectors == null || vectors.size() != chunks.size()) {
+            throw new ServiceException("向量结果数量不匹配");
+        }
+        for (int i = 0; i < chunks.size(); i++) {
+            chunks.get(i).setEmbedding(toArray(vectors.get(i)));
+        }
     }
 }

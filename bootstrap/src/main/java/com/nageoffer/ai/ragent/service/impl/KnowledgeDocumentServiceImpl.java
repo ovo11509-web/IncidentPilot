@@ -37,7 +37,6 @@ import com.nageoffer.ai.ragent.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
-import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.rag.extractor.DocumentTextExtractor;
 import com.nageoffer.ai.ragent.rag.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.service.FileStorageService;
@@ -65,7 +64,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final DocumentTextExtractor textExtractor;
     private final ChunkingStrategyFactory chunkingStrategyFactory;
     private final FileStorageService fileStorageService;
-    private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
 
@@ -146,17 +144,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             patchStatus(documentDO, DocumentStatus.SUCCESS);
             docMapper.updateById(documentDO);
 
-            float[][] vectors = buildVectors(chunkResults);
-
-            List<VectorChunk> legacyChunks = chunkResults.stream()
-                    .map(result -> VectorChunk.builder()
-                            .chunkId(result.getChunkId())
-                            .index(result.getIndex())
-                            .content(result.getContent())
-                            .build())
-                    .toList();
-
-            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, legacyChunks, vectors);
+            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, chunkResults);
         } catch (Exception e) {
             log.error("文件分块失败：docId={}", docId, e);
             patchStatus(documentDO, DocumentStatus.FAILED);
@@ -220,32 +208,5 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         doc.setStatus(status.getCode());
         doc.setUpdatedBy("");
         docMapper.updateById(doc);
-    }
-
-    private float[][] buildVectors(List<VectorChunk> chunks) {
-        if (chunks == null || chunks.isEmpty()) {
-            return new float[0][];
-        }
-        boolean hasEmbedding = chunks.stream()
-                .allMatch(chunk -> chunk.getEmbedding() != null && chunk.getEmbedding().length > 0);
-        if (hasEmbedding) {
-            float[][] vectors = new float[chunks.size()][];
-            for (int i = 0; i < chunks.size(); i++) {
-                vectors[i] = chunks.get(i).getEmbedding();
-            }
-            return vectors;
-        }
-        List<String> texts = chunks.stream().map(VectorChunk::getContent).toList();
-        float[][] vectors = new float[texts.size()][];
-        for (int i = 0; i < texts.size(); i++) {
-            vectors[i] = toArray(embeddingService.embed(texts.get(i)));
-        }
-        return vectors;
-    }
-
-    private static float[] toArray(List<Float> list) {
-        float[] arr = new float[list.size()];
-        for (int i = 0; i < list.size(); i++) arr[i] = list.get(i);
-        return arr;
     }
 }

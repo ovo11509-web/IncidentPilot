@@ -48,20 +48,15 @@ public class MilvusVectorStoreService implements VectorStoreService {
     private final KnowledgeBaseMapper kbMapper;
 
     @Override
-    public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks, float[][] vectors) {
+    public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
         Assert.isFalse(chunks == null || chunks.isEmpty(), () -> new ClientException("文档分块不允许为空"));
-        Assert.isFalse(vectors == null || vectors.length == 0, () -> new ClientException("向量不允许为空"));
 
         KnowledgeBaseDO kbDO = kbMapper.selectById(kbId);
         Assert.isFalse(kbDO == null, () -> new ClientException("知识库不存在"));
 
         // 维度校验（你的 schema dim=4096）
         final int dim = 4096;
-        for (int i = 0; i < vectors.length; i++) {
-            if (vectors[i] == null || vectors[i].length != dim) {
-                throw new ClientException("向量维度不匹配，第 " + i + " 行，期望维度为 " + dim);
-            }
-        }
+        List<float[]> vectors = extractVectors(chunks, dim);
 
         List<JsonObject> rows = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
@@ -81,7 +76,7 @@ public class MilvusVectorStoreService implements VectorStoreService {
             row.addProperty("doc_id", chunk.getChunkId());
             row.addProperty("content", content);
             row.add("metadata", metadata);
-            row.add("embedding", toJsonArray(vectors[i]));
+            row.add("embedding", toJsonArray(vectors.get(i)));
 
             rows.add(row);
         }
@@ -97,18 +92,15 @@ public class MilvusVectorStoreService implements VectorStoreService {
     }
 
     @Override
-    public void updateChunk(String kbId, String docId, VectorChunk chunk, float[] vector) {
+    public void updateChunk(String kbId, String docId, VectorChunk chunk) {
         Assert.isFalse(chunk == null, () -> new ClientException("Chunk 对象不能为空"));
-        Assert.isFalse(vector == null || vector.length == 0, () -> new ClientException("向量不能为空"));
 
         KnowledgeBaseDO kbDO = kbMapper.selectById(kbId);
         Assert.isFalse(kbDO == null, () -> new ClientException("知识库不存在"));
 
         // 维度校验
         final int dim = 4096;
-        if (vector.length != dim) {
-            throw new ClientException("向量维度不匹配，期望维度为 " + dim);
-        }
+        float[] vector = extractVector(chunk, dim);
 
         String chunkPk = chunk.getChunkId() != null ? chunk.getChunkId() : IdUtil.getSnowflakeNextIdStr();
 
@@ -141,6 +133,27 @@ public class MilvusVectorStoreService implements VectorStoreService {
 
         log.info("Milvus 更新 chunk 向量索引成功, collection={}, kbId={}, docId={}, chunkId={}, upsertCnt={}",
                 collection, kbId, docId, chunkPk, resp.getUpsertCnt());
+    }
+
+    private List<float[]> extractVectors(List<VectorChunk> chunks, int expectedDim) {
+        List<float[]> vectors = new ArrayList<>(chunks.size());
+        for (int i = 0; i < chunks.size(); i++) {
+            VectorChunk chunk = chunks.get(i);
+            float[] vector = extractVector(chunk, expectedDim);
+            vectors.add(vector);
+        }
+        return vectors;
+    }
+
+    private float[] extractVector(VectorChunk chunk, int expectedDim) {
+        float[] vector = chunk.getEmbedding();
+        if (vector == null || vector.length == 0) {
+            throw new ClientException("向量不能为空");
+        }
+        if (vector.length != expectedDim) {
+            throw new ClientException("向量维度不匹配，期望维度为 " + expectedDim);
+        }
+        return vector;
     }
 
     @Override
@@ -193,4 +206,3 @@ public class MilvusVectorStoreService implements VectorStoreService {
         return arr;
     }
 }
-
