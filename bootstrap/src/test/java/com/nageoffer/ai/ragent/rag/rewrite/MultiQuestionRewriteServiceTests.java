@@ -17,6 +17,8 @@
 
 package com.nageoffer.ai.ragent.rag.rewrite;
 
+import com.nageoffer.ai.ragent.rag.core.rewrite.MultiQuestionRewriteService;
+import com.nageoffer.ai.ragent.rag.core.rewrite.RewriteResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;

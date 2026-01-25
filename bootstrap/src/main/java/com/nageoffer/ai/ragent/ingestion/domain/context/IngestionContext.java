@@ -19,7 +19,7 @@ package com.nageoffer.ai.ragent.ingestion.domain.context;
 
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionStatus;
-import com.nageoffer.ai.ragent.rag.vector.VectorSpaceId;
+import com.nageoffer.ai.ragent.rag.core.vector.VectorSpaceId;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

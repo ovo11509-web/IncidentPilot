@@ -17,6 +17,11 @@
 
 package com.nageoffer.ai.ragent.rag.mcp;
 
+import com.nageoffer.ai.ragent.rag.core.mcp.MCPRequest;
+import com.nageoffer.ai.ragent.rag.core.mcp.MCPResponse;
+import com.nageoffer.ai.ragent.rag.core.mcp.MCPService;
+import com.nageoffer.ai.ragent.rag.core.mcp.MCPTool;
+import com.nageoffer.ai.ragent.rag.core.mcp.MCPToolRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;

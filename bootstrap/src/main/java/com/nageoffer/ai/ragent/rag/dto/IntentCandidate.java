@@ -17,7 +17,7 @@
 
 package com.nageoffer.ai.ragent.rag.dto;
 
-import com.nageoffer.ai.ragent.rag.intent.NodeScore;
+import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 
 /**
  * 意图候选及其子问题索引
