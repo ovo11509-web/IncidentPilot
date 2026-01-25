@@ -22,17 +22,58 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentVO;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 知识库文档服务接口
+ */
 public interface KnowledgeDocumentService {
 
+    /**
+     * 上传文档
+     *
+     * @param kbId 知识库 ID
+     * @param file 待上传的文件
+     * @return 知识库文档视图对象
+     */
     KnowledgeDocumentVO upload(String kbId, MultipartFile file);
 
+    /**
+     * 开始文档分片处理
+     *
+     * @param docId 文档 ID
+     */
     void startChunk(String docId);
 
+    /**
+     * 删除文档
+     *
+     * @param docId 文档 ID
+     */
     void delete(String docId);
 
+    /**
+     * 获取文档详情
+     *
+     * @param docId 文档 ID
+     * @return 知识库文档视图对象
+     */
     KnowledgeDocumentVO get(String docId);
 
+    /**
+     * 分页查询文档
+     *
+     * @param kbId    知识库 ID
+     * @param page    分页参数
+     * @param status  状态筛选
+     * @param keyword 关键词搜索
+     * @return 文档分页结果
+     */
     IPage<KnowledgeDocumentVO> page(String kbId, Page<KnowledgeDocumentVO> page, String status, String keyword);
 
+    /**
+     * 启用或禁用文档
+     *
+     * @param docId   文档 ID
+     * @param enabled 是否启用
+     */
     void enable(String docId, boolean enabled);
 }
