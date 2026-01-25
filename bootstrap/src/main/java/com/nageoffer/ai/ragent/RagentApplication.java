@@ -25,7 +25,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * Ragent 核心应用启动类
  */
 @SpringBootApplication
-@MapperScan("com.nageoffer.ai.ragent.dao.mapper")
+@MapperScan(basePackages = {
+        "com.nageoffer.ai.ragent.rag.dao.mapper",
+        "com.nageoffer.ai.ragent.ingestion.dao.mapper",
+        "com.nageoffer.ai.ragent.knowledge.dao.mapper",
+        "com.nageoffer.ai.ragent.user.dao.mapper"
+})
 public class RagentApplication {
 
     public static void main(String[] args) {
