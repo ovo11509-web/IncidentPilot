@@ -9,6 +9,7 @@ import { KnowledgeDocumentsPage } from "@/pages/admin/knowledge/KnowledgeDocumen
 import { KnowledgeChunksPage } from "@/pages/admin/knowledge/KnowledgeChunksPage";
 import { IntentTreePage } from "@/pages/admin/intent-tree/IntentTreePage";
 import { IngestionPage } from "@/pages/admin/ingestion/IngestionPage";
+import { SystemSettingsPage } from "@/pages/admin/settings/SystemSettingsPage";
 import { useAuthStore } from "@/stores/authStore";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -107,6 +108,10 @@ export const router = createBrowserRouter([
       {
         path: "ingestion",
         element: <IngestionPage />
+      },
+      {
+        path: "settings",
+        element: <SystemSettingsPage />
       }
     ]
   },
