@@ -342,7 +342,7 @@ export function KnowledgeChunksPage() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => setEditDialog({ open: true, chunk })}>
-                          <PenSquare className="mr-2 h-4 w-4" />
+                          <PenSquare className="mr-0.1 h-4 w-4" />
                           编辑
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => handleToggleEnabled(chunk)}>
@@ -354,7 +354,7 @@ export function KnowledgeChunksPage() {
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(chunk)}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-0.1 h-4 w-4" />
                           删除
                         </Button>
                       </div>
