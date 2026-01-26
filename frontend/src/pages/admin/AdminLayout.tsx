@@ -27,7 +27,7 @@ export function AdminLayout() {
     },
     {
       path: "/admin/ingestion",
-      label: "数据摄入",
+      label: "数据通道",
       icon: Upload
     },
     {
