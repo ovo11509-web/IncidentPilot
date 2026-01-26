@@ -20,6 +20,7 @@ package com.nageoffer.ai.ragent.rag.service.impl;
 import cn.hutool.core.lang.Assert;
 import com.nageoffer.ai.ragent.rag.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.rag.service.FileStorageService;
+import com.nageoffer.ai.ragent.rag.util.FileTypeDetector;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.apache.tika.Tika;
@@ -49,39 +50,27 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
         Assert.isFalse(file == null || file.isEmpty(), "上传文件不能为空");
 
         String originalFilename = file.getOriginalFilename();
-        String suffix = extractSuffix(originalFilename);
-
-        String s3Key = UUID.randomUUID().toString().replace("-", "")
-                + (suffix.isBlank() ? "" : "." + suffix);
-
         long size = file.getSize();
 
-        // 更稳的类型检测方式：可以基于文件名/流
         String detected;
         try (InputStream is = file.getInputStream()) {
-            // Tika 支持 detect(InputStream, String)
             detected = TIKA.detect(is, originalFilename);
         }
 
-        // 上传：使用 InputStream，避免一次性读入内存
         try (InputStream uploadIs = file.getInputStream()) {
-            s3Client.putObject(
-                    b -> b.bucket(bucketName)
-                            .key(s3Key)
-                            .contentType(detected)
-                            .build(),
-                    RequestBody.fromInputStream(uploadIs, size)
-            );
+            return uploadInternal(bucketName, uploadIs, size, originalFilename, detected);
         }
+    }
 
-        String url = toS3Url(bucketName, s3Key);
-
-        return StoredFileDTO.builder()
-                .url(url)
-                .detectedType(normalizeType(detected, suffix))
-                .size(size)
-                .originalFilename(originalFilename)
-                .build();
+    @Override
+    public StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType) {
+        Assert.notBlank(bucketName, "bucketName 不能为空");
+        Assert.notNull(content, "上传内容不能为空");
+        String detected = contentType;
+        if (detected == null || detected.isBlank()) {
+            detected = TIKA.detect(content, originalFilename);
+        }
+        return uploadInternal(bucketName, new java.io.ByteArrayInputStream(content), content.length, originalFilename, detected);
     }
 
     @Override
@@ -127,6 +116,36 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
     private record S3Location(String bucket, String key) {
     }
 
+    private StoredFileDTO uploadInternal(String bucketName,
+                                         InputStream inputStream,
+                                         long size,
+                                         String originalFilename,
+                                         String detectedContentType) {
+        String safeName = originalFilename == null ? "" : originalFilename;
+        String suffix = extractSuffix(safeName);
+
+        String s3Key = UUID.randomUUID().toString().replace("-", "")
+                + (suffix.isBlank() ? "" : "." + suffix);
+
+        s3Client.putObject(
+                b -> b.bucket(bucketName)
+                        .key(s3Key)
+                        .contentType(detectedContentType)
+                        .build(),
+                RequestBody.fromInputStream(inputStream, size)
+        );
+
+        String url = toS3Url(bucketName, s3Key);
+        String detectedType = FileTypeDetector.detectType(originalFilename, detectedContentType);
+
+        return StoredFileDTO.builder()
+                .url(url)
+                .detectedType(detectedType)
+                .size(size)
+                .originalFilename(originalFilename)
+                .build();
+    }
+
     private String extractSuffix(String filename) {
         if (filename == null) return "";
         int idx = filename.lastIndexOf('.');
@@ -136,13 +155,4 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
         return filename.substring(idx + 1).trim();
     }
 
-    /**
-     * 你已有 normalizeType，这里保留签名，按你项目实现替换
-     */
-    private String normalizeType(String tikaType, String suffix) {
-        if (tikaType == null) {
-            return suffix == null ? "" : suffix;
-        }
-        return tikaType;
-    }
 }

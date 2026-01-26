@@ -26,6 +26,8 @@ public interface FileStorageService {
 
     StoredFileDTO upload(String bucketName, MultipartFile file);
 
+    StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType);
+
     InputStream openStream(String url);
 
     void deleteByUrl(String url);
