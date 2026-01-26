@@ -21,6 +21,7 @@ export interface IngestionPipeline {
   id: string;
   name: string;
   description?: string | null;
+  createdBy?: string | null;
   nodes?: IngestionPipelineNode[];
   createTime?: string;
   updateTime?: string;
@@ -58,6 +59,7 @@ export interface IngestionTask {
   metadata?: Record<string, unknown> | null;
   startedAt?: string | null;
   completedAt?: string | null;
+  createdBy?: string | null;
   createTime?: string | null;
   updateTime?: string | null;
 }

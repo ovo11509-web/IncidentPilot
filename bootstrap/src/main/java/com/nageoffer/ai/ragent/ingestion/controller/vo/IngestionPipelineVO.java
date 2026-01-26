@@ -22,7 +22,6 @@ import lombok.Data;
 import java.util.Date;
 import java.util.List;
 
-
 /**
  * 数据摄取管道视图对象
  */
@@ -43,6 +42,11 @@ public class IngestionPipelineVO {
      * 管道描述
      */
     private String description;
+
+    /**
+     * 创建人
+     */
+    private String createdBy;
 
     /**
      * 管道节点列表

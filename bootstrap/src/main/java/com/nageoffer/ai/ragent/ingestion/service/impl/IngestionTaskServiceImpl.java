@@ -336,6 +336,7 @@ public class IngestionTaskServiceImpl implements IngestionTaskService {
                 .metadata(BeanUtil.beanToMap(task.getMetadataJson()))
                 .startedAt(task.getStartedAt())
                 .completedAt(task.getCompletedAt())
+                .createdBy(task.getCreatedBy())
                 .createTime(task.getCreateTime())
                 .updateTime(task.getUpdateTime())
                 .build();

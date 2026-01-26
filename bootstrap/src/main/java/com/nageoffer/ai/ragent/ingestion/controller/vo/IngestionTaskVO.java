@@ -97,6 +97,11 @@ public class IngestionTaskVO {
     private Date completedAt;
 
     /**
+     * 创建人
+     */
+    private String createdBy;
+
+    /**
      * 创建时间
      */
     private Date createTime;
