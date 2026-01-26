@@ -285,6 +285,15 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteByDocId(String docId) {
+        if (docId == null) {
+            return;
+        }
+        chunkMapper.delete(new LambdaQueryWrapper<KnowledgeChunkDO>().eq(KnowledgeChunkDO::getDocId, docId));
+    }
+
     private void doRebuildByDocId(String docId) {
         KnowledgeDocumentDO documentDO = documentMapper.selectById(docId);
         Assert.notNull(documentDO, () -> new ClientException("文档不存在"));

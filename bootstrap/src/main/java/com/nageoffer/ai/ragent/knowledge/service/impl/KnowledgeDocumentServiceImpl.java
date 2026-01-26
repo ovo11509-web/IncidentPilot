@@ -48,6 +48,7 @@ import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.rag.service.FileStorageService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentService;
+import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentScheduleService;
 import com.nageoffer.ai.ragent.ingestion.util.HttpClientHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -83,6 +84,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final EmbeddingService embeddingService;
     private final HttpClientHelper httpClientHelper;
     private final ObjectMapper objectMapper;
+    private final KnowledgeDocumentScheduleService scheduleService;
     @Qualifier("knowledgeChunkExecutor")
     private final Executor knowledgeChunkExecutor;
     private final PlatformTransactionManager transactionManager;
@@ -161,6 +163,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         boolean alreadyChunked = knowledgeChunkService.existsByDocId(docId);
         Assert.isFalse(alreadyChunked, () -> new ClientException("文档已分块"));
 
+        scheduleService.upsertSchedule(documentDO);
         patchStatus(documentDO, DocumentStatus.RUNNING);
         try {
             knowledgeChunkExecutor.execute(() -> runChunkTask(documentDO));
@@ -213,6 +216,13 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             log.error("文件分块失败：docId={}", docId, e);
             markChunkFailed(documentDO.getId());
         }
+    }
+
+    public void chunkDocument(KnowledgeDocumentDO documentDO) {
+        if (documentDO == null) {
+            return;
+        }
+        runChunkTask(documentDO);
     }
 
     private void markChunkFailed(Long docId) {
@@ -272,6 +282,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         documentDO.setEnabled(enabled ? 1 : 0);
         documentDO.setUpdatedBy(UserContext.getUsername());
         docMapper.updateById(documentDO);
+        scheduleService.syncScheduleIfExists(documentDO);
 
         // 同步更新 Chunk 表的状态
         knowledgeChunkService.updateEnabledByDocId(docId, enabled);

@@ -130,4 +130,11 @@ public interface KnowledgeChunkService {
      * @return 分片列表
      */
     List<KnowledgeChunkVO> listByDocId(String docId);
+
+    /**
+     * 删除指定文档的所有分片
+     *
+     * @param docId 文档 ID
+     */
+    void deleteByDocId(String docId);
 }

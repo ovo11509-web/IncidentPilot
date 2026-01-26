@@ -58,6 +58,34 @@ public class HttpClientHelper {
         }
     }
 
+    public HttpHeadResponse head(String url, Map<String, String> headers) {
+        Request.Builder builder = new Request.Builder().url(url);
+        if (headers != null) {
+            headers.forEach(builder::addHeader);
+        }
+        try (Response response = client.newCall(builder.head().build()).execute()) {
+            if (!response.isSuccessful()) {
+                throw new ServiceException("网络请求失败: " + response.code());
+            }
+            String contentType = response.header("Content-Type");
+            String disposition = response.header("Content-Disposition");
+            String fileName = resolveFileName(disposition, url);
+            String etag = response.header("ETag");
+            String lastModified = response.header("Last-Modified");
+            String contentLengthHeader = response.header("Content-Length");
+            Long contentLength = null;
+            if (contentLengthHeader != null) {
+                try {
+                    contentLength = Long.parseLong(contentLengthHeader);
+                } catch (NumberFormatException ignore) {
+                }
+            }
+            return new HttpHeadResponse(etag, lastModified, contentType, contentLength, fileName);
+        } catch (IOException e) {
+            throw new ServiceException("网络请求失败: " + e.getMessage());
+        }
+    }
+
     private String resolveFileName(String disposition, String url) {
         if (disposition != null) {
             String[] parts = disposition.split(";");
@@ -94,5 +122,9 @@ public class HttpClientHelper {
     }
 
     public record HttpFetchResponse(byte[] body, String contentType, String fileName) {
+    }
+
+    public record HttpHeadResponse(String etag, String lastModified, String contentType, Long contentLength,
+                                   String fileName) {
     }
 }
