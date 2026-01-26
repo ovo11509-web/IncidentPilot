@@ -262,9 +262,11 @@ export function KnowledgeDocumentsPage() {
                 {documents.map((doc) => (
                   <TableRow key={doc.id}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 max-w-[280px] items-center gap-2">
                         <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                        <span>{doc.docName || "-"}</span>
+                        <span className="flex-1 truncate" title={doc.docName || ""}>
+                          {doc.docName || "-"}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
