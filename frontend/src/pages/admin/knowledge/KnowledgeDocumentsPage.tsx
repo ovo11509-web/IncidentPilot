@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FileUp, FolderOpen, PlayCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Check, FileUp, FolderOpen, PlayCircle, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -499,6 +499,8 @@ type UploadFormValues = z.infer<typeof uploadSchema>;
 function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [noChunk, setNoChunk] = useState(false); // 不分块状态
+  const [originalChunkSize, setOriginalChunkSize] = useState("512"); // 保存原始块大小
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadSchema),
     defaultValues: {
@@ -519,6 +521,7 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
   const sourceType = form.watch("sourceType");
   const chunkStrategy = form.watch("chunkStrategy");
   const scheduleEnabled = form.watch("scheduleEnabled");
+  const chunkSize = form.watch("chunkSize"); // 监听块大小变化
   const isUrlSource = sourceType === "url";
   const isFixedSize = chunkStrategy === "fixed_size";
 
@@ -526,6 +529,8 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
     if (open) {
       setFile(null);
       form.reset();
+      setNoChunk(false); // 重置不分块状态
+      setOriginalChunkSize("512"); // 重置原始值
     }
   }, [open, form]);
 
@@ -534,6 +539,27 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
       setFile(null);
     }
   }, [isUrlSource]);
+
+  // 监听块大小变化，如果用户手动修改了值，取消"不分块"状态
+  useEffect(() => {
+    if (noChunk && chunkSize !== String(INT_MAX)) {
+      setNoChunk(false);
+    }
+  }, [chunkSize, noChunk]);
+
+  // 处理"不分块"按钮点击
+  const handleNoChunkToggle = () => {
+    if (noChunk) {
+      // 取消选中，恢复原始值
+      form.setValue("chunkSize", originalChunkSize);
+      setNoChunk(false);
+    } else {
+      // 选中，保存当前值并设置为最大值
+      setOriginalChunkSize(chunkSize || "512");
+      form.setValue("chunkSize", String(INT_MAX));
+      setNoChunk(true);
+    }
+  };
 
   const parseNumber = (value?: string) => {
     if (!value || !value.trim()) return null;
@@ -721,8 +747,13 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
                             <Button
                               type="button"
                               variant="outline"
-                              onClick={() => form.setValue("chunkSize", String(INT_MAX))}
+                              onClick={handleNoChunkToggle}
+                              className={noChunk
+                                ? "bg-slate-100 border-slate-400 font-medium"
+                                : ""
+                              }
                             >
+                              {noChunk && <Check className="w-4 h-4 mr-1" />}
                               不分块
                             </Button>
                           </div>
