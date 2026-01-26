@@ -337,7 +337,7 @@ export function KnowledgeDocumentsPage() {
                           variant="outline"
                           onClick={() => setChunkTarget(doc)}
                         >
-                          <PlayCircle className="mr-2 h-4 w-4" />
+                          <PlayCircle className="mr-0.1 h-4 w-4" />
                           分块
                         </Button>
                         <Button
@@ -346,7 +346,7 @@ export function KnowledgeDocumentsPage() {
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(doc)}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-0.1 h-4 w-4" />
                           删除
                         </Button>
                       </div>
