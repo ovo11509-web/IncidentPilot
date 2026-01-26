@@ -6,8 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
+import { cn } from "@/lib/utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,13 +49,14 @@ const CHUNK_STRATEGY_OPTIONS = [
 
 const INT_MAX = 2147483647;
 
-const statusBadgeVariant = (status?: string | null) => {
-  if (!status) return "outline";
+const statusDotClass = (status?: string | null) => {
+  if (!status) return "bg-muted-foreground/40";
   const normalized = status.toLowerCase();
-  if (normalized === "success") return "default";
-  if (normalized === "failed") return "destructive";
-  if (normalized === "running") return "secondary";
-  return "outline";
+  if (normalized === "success") return "bg-emerald-500";
+  if (normalized === "failed") return "bg-red-500";
+  if (normalized === "running") return "bg-amber-500";
+  if (normalized === "pending") return "bg-slate-400";
+  return "bg-muted-foreground/40";
 };
 
 const formatDate = (value?: string | null) => {
@@ -295,9 +296,36 @@ export function KnowledgeDocumentsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusBadgeVariant(doc.status)}>{doc.status || "-"}</Badge>
+                      <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className={cn("h-2 w-2 rounded-full", statusDotClass(doc.status))} />
+                        <span>{doc.status || "-"}</span>
+                      </div>
                     </TableCell>
-                    <TableCell>{Boolean(doc.enabled) ? "启用" : "禁用"}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const enabled = Boolean(doc.enabled);
+                        return (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={enabled}
+                            aria-label={enabled ? "已启用，点击禁用" : "已禁用，点击启用"}
+                            onClick={() => handleToggleEnabled(doc)}
+                            className={cn(
+                              "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background",
+                              enabled ? "bg-primary/80" : "bg-muted"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "inline-block h-4 w-4 transform rounded-full bg-background shadow transition-transform",
+                                enabled ? "translate-x-4" : "translate-x-1"
+                              )}
+                            />
+                          </button>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>{doc.chunkCount ?? "-"}</TableCell>
                     <TableCell>{doc.fileType || "-"}</TableCell>
                     <TableCell>{formatSize(doc.fileSize)}</TableCell>
@@ -311,13 +339,6 @@ export function KnowledgeDocumentsPage() {
                         >
                           <PlayCircle className="mr-2 h-4 w-4" />
                           分块
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleToggleEnabled(doc)}
-                        >
-                          {Boolean(doc.enabled) ? "禁用" : "启用"}
                         </Button>
                         <Button
                           size="sm"
