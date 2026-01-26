@@ -198,7 +198,7 @@ const taskSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["location"],
-        message: "请输入来源位置"
+        message: "请输入来源地址"
       });
     }
   });
@@ -1924,7 +1924,7 @@ function TaskDialog({ open, pipelineOptions, onOpenChange, onSubmit, onUpload }:
     try {
       const location = values.location?.trim() || "";
       if (!location) {
-        form.setError("location", { message: "请输入来源位置" });
+        form.setError("location", { message: "请输入来源地址" });
         return;
       }
       const normalizedType = values.sourceType ? values.sourceType.toUpperCase() : values.sourceType;
@@ -2040,7 +2040,7 @@ function TaskDialog({ open, pipelineOptions, onOpenChange, onSubmit, onUpload }:
                 name="location"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>来源位置</FormLabel>
+                    <FormLabel>来源地址</FormLabel>
                     <FormControl>
                       <Input placeholder={sourceMeta.locationPlaceholder} {...field} />
                     </FormControl>

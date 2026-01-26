@@ -473,7 +473,7 @@ const uploadSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["sourceLocation"],
-        message: "请输入来源位置"
+        message: "请输入来源地址"
       });
     }
     if (values.scheduleEnabled && isBlank(values.scheduleCron)) {
@@ -583,7 +583,10 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[620px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[620px]"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>上传文档</DialogTitle>
           <DialogDescription>支持本地文件或远程URL，并配置分块策略</DialogDescription>
@@ -621,7 +624,7 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
                 name="sourceLocation"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>来源位置</FormLabel>
+                    <FormLabel>来源地址</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="https://raw.githubusercontent.com/bytedance/deer-flow/main/docs/API.md"
