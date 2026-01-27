@@ -232,7 +232,7 @@ export function KnowledgeChunksPage() {
         <div>
           <h1 className="text-2xl font-semibold">分块管理</h1>
           <p className="text-sm text-muted-foreground">
-            {doc?.docName || docId} {kbId ? `（KB: ${kbId}）` : ""}
+            {doc?.docName || docId} {kbId ? `（知识库: ${kbId}）` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -526,12 +526,12 @@ function ChunkDialog({ mode, open, chunk, onOpenChange, onSubmit }: ChunkDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[720px]">
+      <DialogContent className="sm:max-w-[720px] overflow-hidden flex flex-col max-h-[90vh]" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "新建分块" : "编辑分块"}</DialogTitle>
           <DialogDescription>手动维护分块内容</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1 px-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:opacity-0 hover:[&::-webkit-scrollbar-thumb]:opacity-100 [&::-webkit-scrollbar-thumb]:transition-opacity">
           {mode === "create" ? (
             <>
               <div>
@@ -546,7 +546,7 @@ function ChunkDialog({ mode, open, chunk, onOpenChange, onSubmit }: ChunkDialogP
           ) : null}
           <div>
             <label className="text-sm font-medium">内容</label>
-            <Textarea rows={8} value={content} onChange={(event) => setContent(event.target.value)} />
+            <Textarea className="resize-none" rows={8} value={content} onChange={(event) => setContent(event.target.value)} />
           </div>
         </div>
         <DialogFooter>
