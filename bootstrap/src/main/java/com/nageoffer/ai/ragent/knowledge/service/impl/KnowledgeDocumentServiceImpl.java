@@ -49,6 +49,7 @@ import com.nageoffer.ai.ragent.rag.service.FileStorageService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentScheduleService;
+import com.nageoffer.ai.ragent.knowledge.schedule.CronScheduleHelper;
 import com.nageoffer.ai.ragent.ingestion.util.HttpClientHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -97,6 +98,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private int minChars;
     @Value("${kb.chunk.semantic.overlapChars:0}")
     private int overlapChars;
+    @Value("${rag.knowledge.schedule.min-interval-seconds:60}")
+    private long scheduleMinIntervalSeconds;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -123,6 +126,15 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         }
         if (scheduleEnabled && !StringUtils.hasText(scheduleCron)) {
             throw new ClientException("定时表达式不能为空");
+        }
+        if (scheduleEnabled) {
+            try {
+                if (CronScheduleHelper.isIntervalLessThan(scheduleCron, new java.util.Date(), scheduleMinIntervalSeconds)) {
+                    throw new ClientException("定时周期不能小于 " + scheduleMinIntervalSeconds + " 秒");
+                }
+            } catch (IllegalArgumentException e) {
+                throw new ClientException("定时表达式不合法");
+            }
         }
 
         StoredFileDTO stored = resolveStoredFile(kbDO.getCollectionName(), sourceType, sourceLocation, file);
@@ -211,7 +223,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 docMapper.updateById(update);
             });
 
-            vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, chunkResults);
+            String kbId = String.valueOf(documentDO.getKbId());
+            vectorStoreService.deleteDocumentVectors(kbId, docId);
+            vectorStoreService.indexDocumentChunks(kbId, docId, chunkResults);
         } catch (Exception e) {
             log.error("文件分块失败：docId={}", docId, e);
             markChunkFailed(documentDO.getId());

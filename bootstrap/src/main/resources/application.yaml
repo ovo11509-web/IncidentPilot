@@ -61,6 +61,13 @@ rag:
     summary-max-chars: 200
     title-max-length: 30
 
+  knowledge:
+    schedule:
+      scan-delay-ms: 10000
+      lock-seconds: 900
+      batch-size: 20
+      min-interval-seconds: 60
+
 ai:
   providers:
     ollama:

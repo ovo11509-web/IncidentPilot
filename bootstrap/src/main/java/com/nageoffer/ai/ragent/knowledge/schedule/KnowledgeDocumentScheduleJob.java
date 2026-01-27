@@ -36,7 +36,6 @@ import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import com.nageoffer.ai.ragent.knowledge.service.impl.KnowledgeDocumentServiceImpl;
 import com.nageoffer.ai.ragent.rag.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.rag.service.FileStorageService;
-import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.ingestion.util.HttpClientHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -70,21 +69,22 @@ public class KnowledgeDocumentScheduleJob {
     private final KnowledgeBaseMapper kbMapper;
     private final KnowledgeChunkService knowledgeChunkService;
     private final KnowledgeDocumentServiceImpl documentService;
-    private final VectorStoreService vectorStoreService;
     private final FileStorageService fileStorageService;
     private final HttpClientHelper httpClientHelper;
     private final PlatformTransactionManager transactionManager;
     @Qualifier("knowledgeChunkExecutor")
     private final Executor knowledgeChunkExecutor;
 
-    @Value("${kb.schedule.lock-seconds:900}")
+    @Value("${rag.knowledge.schedule.lock-seconds:900}")
     private long lockSeconds;
-    @Value("${kb.schedule.batch-size:20}")
+    @Value("${rag.knowledge.schedule.batch-size:20}")
     private int batchSize;
+    @Value("${rag.knowledge.schedule.max-file-size-bytes:104857600}")
+    private long maxFileSizeBytes;
 
     private final String instanceId = resolveInstanceId();
 
-    @Scheduled(fixedDelayString = "${kb.schedule.scan-delay-ms:30000}")
+    @Scheduled(fixedDelayString = "${rag.knowledge.schedule.scan-delay-ms:10000}")
     public void scan() {
         Date now = new Date();
         List<KnowledgeDocumentScheduleDO> schedules = scheduleMapper.selectList(
@@ -115,7 +115,8 @@ public class KnowledgeDocumentScheduleJob {
             try {
                 knowledgeChunkExecutor.execute(() -> executeSchedule(schedule.getId()));
             } catch (RejectedExecutionException e) {
-                log.error("定时任务提交失败: scheduleId={}", schedule.getId(), e);
+                log.error("定时任务提交失败: scheduleId={}, docId={}, kbId={}",
+                        schedule.getId(), schedule.getDocId(), schedule.getKbId(), e);
                 releaseLock(schedule.getId());
             }
         }
@@ -127,6 +128,7 @@ public class KnowledgeDocumentScheduleJob {
         if (schedule == null) {
             return;
         }
+        renewLock(scheduleId);
 
         KnowledgeDocumentDO document = documentMapper.selectById(schedule.getDocId());
         if (document == null || (document.getDeleted() != null && document.getDeleted() == 1)) {
@@ -182,6 +184,7 @@ public class KnowledgeDocumentScheduleJob {
                 markScheduleSkipped(schedule, exec.getId(), startTime, nextRunTime, fetchResult);
                 return;
             }
+            renewLock(scheduleId);
 
             KnowledgeBaseDO kbDO = kbMapper.selectById(document.getKbId());
             if (kbDO == null) {
@@ -194,8 +197,6 @@ public class KnowledgeDocumentScheduleJob {
                     fetchResult.fileName(),
                     fetchResult.contentType()
             );
-
-            vectorStoreService.deleteDocumentVectors(String.valueOf(document.getKbId()), String.valueOf(document.getId()));
 
             TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
             txTemplate.executeWithoutResult(status -> {
@@ -219,6 +220,7 @@ public class KnowledgeDocumentScheduleJob {
             document.setChunkCount(0);
             document.setStatus(DocumentStatus.RUNNING.getCode());
 
+            renewLock(scheduleId);
             UserContext.set(LoginUser.builder().username(SYSTEM_USER).build());
             try {
                 documentService.chunkDocument(document);
@@ -226,9 +228,16 @@ public class KnowledgeDocumentScheduleJob {
                 UserContext.clear();
             }
 
+            KnowledgeDocumentDO latest = documentMapper.selectById(document.getId());
+            if (latest == null || !DocumentStatus.SUCCESS.getCode().equals(latest.getStatus())) {
+                markScheduleFailed(schedule, exec.getId(), startTime, nextRunTime, "分块失败");
+                return;
+            }
+
             markScheduleSuccess(schedule, exec.getId(), startTime, nextRunTime, fetchResult, stored);
         } catch (Exception e) {
-            log.error("定时刷新失败: scheduleId={}, docId={}", scheduleId, document.getId(), e);
+            log.error("定时刷新失败: scheduleId={}, docId={}, kbId={}",
+                    scheduleId, document.getId(), document.getKbId(), e);
             markScheduleFailed(schedule, exec.getId(), startTime, nextRunTime, e.getMessage());
         } finally {
             releaseLock(scheduleId);
@@ -250,6 +259,9 @@ public class KnowledgeDocumentScheduleJob {
         }
 
         if (headResponse != null) {
+            if (maxFileSizeBytes > 0 && headResponse.contentLength() != null && headResponse.contentLength() > maxFileSizeBytes) {
+                throw new ClientException("远程文件大小超过限制: " + maxFileSizeBytes + " bytes");
+            }
             String etag = trim(headResponse.etag());
             String lastModified = trim(headResponse.lastModified());
             boolean etagMatch = StringUtils.hasText(etag) && etag.equals(trim(schedule.getLastEtag()));
@@ -259,25 +271,40 @@ public class KnowledgeDocumentScheduleJob {
             }
         }
 
-        HttpClientHelper.HttpFetchResponse fetchResponse = httpClientHelper.get(url, Map.of());
+        HttpClientHelper.HttpFetchResponse fetchResponse = maxFileSizeBytes > 0
+                ? httpClientHelper.getWithLimit(url, Map.of(), maxFileSizeBytes)
+                : httpClientHelper.get(url, Map.of());
         byte[] body = fetchResponse.body() == null ? new byte[0] : fetchResponse.body();
+        if (body.length == 0) {
+            throw new ClientException("远程文件内容为空");
+        }
         String hash = sha256Hex(body);
         if (StringUtils.hasText(hash) && hash.equals(trim(schedule.getLastContentHash()))) {
-            String etag = headResponse == null ? null : trim(headResponse.etag());
-            String lastModified = headResponse == null ? null : trim(headResponse.lastModified());
+            String etag = StringUtils.hasText(fetchResponse.etag())
+                    ? trim(fetchResponse.etag())
+                    : (headResponse == null ? null : trim(headResponse.etag()));
+            String lastModified = StringUtils.hasText(fetchResponse.lastModified())
+                    ? trim(fetchResponse.lastModified())
+                    : (headResponse == null ? null : trim(headResponse.lastModified()));
             return RemoteFetchResult.skipped("内容哈希未变化", etag, lastModified, hash);
         }
 
         String fileName = StringUtils.hasText(fetchResponse.fileName())
                 ? fetchResponse.fileName()
                 : document.getDocName();
+        String etag = StringUtils.hasText(fetchResponse.etag())
+                ? trim(fetchResponse.etag())
+                : (headResponse == null ? null : trim(headResponse.etag()));
+        String lastModified = StringUtils.hasText(fetchResponse.lastModified())
+                ? trim(fetchResponse.lastModified())
+                : (headResponse == null ? null : trim(headResponse.lastModified()));
         return RemoteFetchResult.changed(
                 body,
                 fetchResponse.contentType(),
                 fileName,
                 hash,
-                headResponse == null ? null : trim(headResponse.etag()),
-                headResponse == null ? null : trim(headResponse.lastModified())
+                etag,
+                lastModified
         );
     }
 
@@ -398,6 +425,18 @@ public class KnowledgeDocumentScheduleJob {
         KnowledgeDocumentScheduleDO update = new KnowledgeDocumentScheduleDO();
         update.setLockOwner(null);
         update.setLockUntil(null);
+        scheduleMapper.update(update, updateWrapper);
+    }
+
+    private void renewLock(Long scheduleId) {
+        if (scheduleId == null) {
+            return;
+        }
+        Date lockUntil = new Date(System.currentTimeMillis() + Math.max(lockSeconds, 60) * 1000);
+        UpdateWrapper<KnowledgeDocumentScheduleDO> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", scheduleId).eq("lock_owner", instanceId);
+        KnowledgeDocumentScheduleDO update = new KnowledgeDocumentScheduleDO();
+        update.setLockUntil(lockUntil);
         scheduleMapper.update(update, updateWrapper);
     }
 

@@ -26,6 +26,7 @@ import com.nageoffer.ai.ragent.knowledge.schedule.CronScheduleHelper;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentScheduleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -37,6 +38,8 @@ import java.util.Date;
 public class KnowledgeDocumentScheduleServiceImpl implements KnowledgeDocumentScheduleService {
 
     private final KnowledgeDocumentScheduleMapper scheduleMapper;
+    @Value("${rag.knowledge.schedule.min-interval-seconds:60}")
+    private long scheduleMinIntervalSeconds;
 
     @Override
     public void upsertSchedule(KnowledgeDocumentDO documentDO) {
@@ -71,6 +74,9 @@ public class KnowledgeDocumentScheduleServiceImpl implements KnowledgeDocumentSc
         Date nextRunTime = null;
         if (enabled) {
             try {
+                if (CronScheduleHelper.isIntervalLessThan(cron, new Date(), scheduleMinIntervalSeconds)) {
+                    throw new ClientException("定时周期不能小于 " + scheduleMinIntervalSeconds + " 秒");
+                }
                 nextRunTime = CronScheduleHelper.nextRunTime(cron, new Date());
             } catch (IllegalArgumentException e) {
                 throw new ClientException("定时表达式不合法");
