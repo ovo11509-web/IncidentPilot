@@ -617,7 +617,7 @@ function IntentNodeDialog({
 
   return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[640px]">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sidebar-scroll sm:max-w-[640px]">
           <DialogHeader>
             <DialogTitle>{mode === "create" ? "新建意图节点" : "编辑意图节点"}</DialogTitle>
             <DialogDescription>
@@ -799,81 +799,56 @@ function IntentNodeDialog({
                   />
               )}
 
-              <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>描述</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="节点的语义说明与说明场景" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                  )}
-              />
-
-              <FormField
-                  control={form.control}
-                  name="examplesText"
-                  render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>示例问题</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="每行一个示例问题" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                  )}
-              />
-
-              <FormField
-                  control={form.control}
-                  name="promptSnippet"
-                  render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>短规则片段（可选）</FormLabel>
-                        <FormControl>
-                          <Textarea
-                              rows={3}
-                              placeholder="多意图场景下的特定规则，会添加到整体提示词中"
-                              {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                  )}
-              />
-
-              <FormField
-                  control={form.control}
-                  name="promptTemplate"
-                  render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Prompt模板（可选）</FormLabel>
-                        <FormControl>
-                          <Textarea
-                              rows={4}
-                              placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置"
-                              {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                  )}
-              />
-
-              {kind === 2 && (
+              <details className="rounded-lg border px-4 py-3" open>
+                <summary className="cursor-pointer text-sm font-medium text-foreground">
+                  描述与示例
+                </summary>
+                <div className="mt-3 space-y-4">
                   <FormField
                       control={form.control}
-                      name="paramPromptTemplate"
+                      name="description"
                       render={({ field }) => (
                           <FormItem>
-                            <FormLabel>参数提取提示词模板（MCP专属）</FormLabel>
+                            <FormLabel>描述</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="节点的语义说明与说明场景" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+
+                  <FormField
+                      control={form.control}
+                      name="examplesText"
+                      render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>示例问题</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="每行一个示例问题" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+                </div>
+              </details>
+
+              <details className="rounded-lg border px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-foreground">
+                  Prompt 配置
+                </summary>
+                <div className="mt-3 space-y-4">
+                  <FormField
+                      control={form.control}
+                      name="promptSnippet"
+                      render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>短规则片段（可选）</FormLabel>
                             <FormControl>
                               <Textarea
-                                  rows={4}
-                                  placeholder="用于从用户输入中提取MCP工具参数的提示词模板"
+                                  rows={3}
+                                  placeholder="多意图场景下的特定规则，会添加到整体提示词中"
                                   {...field}
                               />
                             </FormControl>
@@ -881,49 +856,93 @@ function IntentNodeDialog({
                           </FormItem>
                       )}
                   />
-              )}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                    control={form.control}
-                    name="sortOrder"
-                    render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>排序</FormLabel>
-                          <FormControl>
-                            <Input
-                                type="number"
-                                value={field.value ?? ""}
-                                onChange={(event) => {
-                                  const nextValue = event.target.value;
-                                  field.onChange(nextValue === "" ? undefined : Number(nextValue));
-                                }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                    )}
-                />
-
-                <FormField
-                    control={form.control}
-                    name="enabled"
-                    render={({ field }) => (
-                        <FormItem className="flex flex-col justify-end">
-                          <div className="flex items-center gap-2">
+                  <FormField
+                      control={form.control}
+                      name="promptTemplate"
+                      render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Prompt模板（可选）</FormLabel>
                             <FormControl>
-                              <Checkbox
-                                  checked={field.value}
-                                  onCheckedChange={(value) => field.onChange(Boolean(value))}
+                              <Textarea
+                                  rows={4}
+                                  placeholder="场景用的完整Prompt模板，KB和MCP节点都可配置"
+                                  {...field}
                               />
                             </FormControl>
-                            <FormLabel>启用节点</FormLabel>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                    )}
-                />
-              </div>
+                            <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+
+                  {kind === 2 && (
+                      <FormField
+                          control={form.control}
+                          name="paramPromptTemplate"
+                          render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>参数提取提示词模板（MCP专属）</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                      rows={4}
+                                      placeholder="用于从用户输入中提取MCP工具参数的提示词模板"
+                                      {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                  )}
+                </div>
+              </details>
+
+              <details className="rounded-lg border px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-foreground">
+                  高级设置
+                </summary>
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <FormField
+                      control={form.control}
+                      name="sortOrder"
+                      render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>排序</FormLabel>
+                            <FormControl>
+                              <Input
+                                  type="number"
+                                  value={field.value ?? ""}
+                                  onChange={(event) => {
+                                    const nextValue = event.target.value;
+                                    field.onChange(nextValue === "" ? undefined : Number(nextValue));
+                                  }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+
+                  <FormField
+                      control={form.control}
+                      name="enabled"
+                      render={({ field }) => (
+                          <FormItem className="flex flex-col justify-end">
+                            <div className="flex items-center gap-2">
+                              <FormControl>
+                                <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={(value) => field.onChange(Boolean(value))}
+                                />
+                              </FormControl>
+                              <FormLabel>启用节点</FormLabel>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+                </div>
+              </details>
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
