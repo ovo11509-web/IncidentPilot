@@ -56,6 +56,22 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
+/**
+ * 知识库文档定时刷新任务
+ * <p>
+ * 该组件负责定期扫描和执行知识库文档的自动刷新任务，主要用于处理URL类型的文档源
+ * 支持基于Cron表达式的定时调度，并提供分布式锁机制以确保任务不会重复执行
+ * </p>
+ *
+ * <p>主要功能：</p>
+ * <ul>
+ *   <li>定期扫描待执行的定时任务</li>
+ *   <li>检查远程文件是否发生变化（基于ETag、Last-Modified、内容哈希）</li>
+ *   <li>下载更新的远程文件并重新进行文档分块处理</li>
+ *   <li>记录任务执行历史和状态</li>
+ *   <li>支持分布式环境下的任务锁定机制</li>
+ * </ul>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
