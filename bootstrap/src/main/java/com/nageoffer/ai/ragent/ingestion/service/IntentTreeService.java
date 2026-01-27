@@ -40,7 +40,7 @@ public interface IntentTreeService extends IService<IntentNodeDO> {
     /**
      * 更新节点
      */
-    void updateNode(Long id, IntentNodeUpdateRequest requestParam);
+    void updateNode(String id, IntentNodeUpdateRequest requestParam);
 
     /**
      * 删除节点（逻辑删除）

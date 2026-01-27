@@ -30,7 +30,7 @@ import java.util.List;
 @Builder
 public class IntentNodeTreeVO {
 
-    private Long id;
+    private String id;
     private String intentCode;
     private String name;
     private Integer level;

@@ -153,7 +153,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
     }
 
     @Override
-    public void updateNode(Long id, IntentNodeUpdateRequest req) {
+    public void updateNode(String id, IntentNodeUpdateRequest req) {
         IntentNodeDO node = this.getById(id);
         if (node == null || Objects.equals(node.getDeleted(), 1)) {
             throw new ServiceException("节点不存在或已删除: id=" + id);

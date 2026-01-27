@@ -64,7 +64,7 @@ public class IntentTreeController {
      * 更新意图节点
      */
     @PutMapping("/intent-tree/{id}")
-    public void updateNode(@PathVariable Long id, @RequestBody IntentNodeUpdateRequest requestParam) {
+    public void updateNode(@PathVariable String id, @RequestBody IntentNodeUpdateRequest requestParam) {
         intentTreeService.updateNode(id, requestParam);
     }
 
