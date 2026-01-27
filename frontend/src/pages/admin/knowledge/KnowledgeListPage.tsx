@@ -175,13 +175,22 @@ export function KnowledgeListPage() {
                   <TableHead>文档数</TableHead>
                   <TableHead>负责人</TableHead>
                   <TableHead>创建时间</TableHead>
+                  <TableHead>修改时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {knowledgeBases.map((kb) => (
                   <TableRow key={kb.id}>
-                    <TableCell className="font-medium">{kb.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-4 hover:underline"
+                        onClick={() => navigate(`/admin/knowledge/${kb.id}`)}
+                      >
+                        {kb.name}
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{kb.embeddingModel}</Badge>
                     </TableCell>
@@ -195,32 +204,29 @@ export function KnowledgeListPage() {
                     <TableCell className="text-muted-foreground">
                       {formatDate(kb.createTime)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                    <TableCell className="text-muted-foreground">
+                      {formatDate(kb.updateTime)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center gap-2">
                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            navigate(`/admin/knowledge/${kb.id}`);
-                          }}
-                        >
-                          <FolderOpen className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           onClick={() => {
                             setRenameDialog({ open: true, kb });
                           }}
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-4 h-4 mr-0.1" />
+                          编辑
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="text-destructive hover:text-destructive"
                           onClick={() => setDeleteTarget(kb)}
                         >
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                          <Trash2 className="w-4 h-4 mr-0.1" />
+                          删除
                         </Button>
                       </div>
                     </TableCell>
