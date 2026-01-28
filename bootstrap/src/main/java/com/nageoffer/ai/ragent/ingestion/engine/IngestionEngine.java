@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.ingestion.engine;
 
+import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.context.NodeLog;
@@ -70,7 +71,7 @@ public class IngestionEngine {
 
         // 找到起始节点（没有被任何节点引用的节点）
         String startNodeId = findStartNode(nodeConfigMap);
-        if (startNodeId == null) {
+        if (StrUtil.isBlank(startNodeId)) {
             throw new ClientException("流水线未找到起始节点");
         }
 
