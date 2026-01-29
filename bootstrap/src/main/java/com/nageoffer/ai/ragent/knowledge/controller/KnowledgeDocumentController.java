@@ -22,6 +22,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentUploadRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentUpdateRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentVO;
+import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentChunkLogVO;
 import com.nageoffer.ai.ragent.framework.convention.Result;
 import com.nageoffer.ai.ragent.framework.web.Results;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentService;
@@ -118,5 +119,15 @@ public class KnowledgeDocumentController {
                                @RequestParam("value") boolean enabled) {
         documentService.enable(docId, enabled);
         return Results.success();
+    }
+
+    /**
+     * 查询文档分块日志列表
+     */
+    @GetMapping("/knowledge-base/docs/{docId}/chunk-logs")
+    public Result<IPage<KnowledgeDocumentChunkLogVO>> getChunkLogs(@PathVariable String docId,
+                                                                   @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
+                                                                   @RequestParam(value = "pageSize", defaultValue = "10") int pageSize) {
+        return Results.success(documentService.getChunkLogs(docId, new Page<>(pageNo, pageSize)));
     }
 }

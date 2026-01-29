@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, FileUp, FolderOpen, PlayCircle, RefreshCw, Trash2, Pencil } from "lucide-react";
+import { Check, FileUp, FolderOpen, PlayCircle, RefreshCw, Trash2, Pencil, FileBarChart } from "lucide-react";
 import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-import type { KnowledgeBase, KnowledgeDocument, KnowledgeDocumentUploadPayload, PageResult } from "@/services/knowledgeService";
+import type { KnowledgeBase, KnowledgeDocument, KnowledgeDocumentUploadPayload, KnowledgeDocumentChunkLog, PageResult } from "@/services/knowledgeService";
 import {
   deleteDocument,
   enableDocument,
@@ -26,7 +26,8 @@ import {
   getDocument,
   updateDocument,
   startDocumentChunk,
-  uploadDocument
+  uploadDocument,
+  getChunkLogsPage
 } from "@/services/knowledgeService";
 import { getIngestionPipelines, type IngestionPipeline } from "@/services/ingestionService";
 import { getErrorMessage } from "@/utils/error";
@@ -144,6 +145,10 @@ export function KnowledgeDocumentsPage() {
   const [detailName, setDetailName] = useState("");
   const [detailSaving, setDetailSaving] = useState(false);
   const [detailPipelineName, setDetailPipelineName] = useState<string>("");
+  const [logTarget, setLogTarget] = useState<KnowledgeDocument | null>(null);
+  const [logData, setLogData] = useState<PageResult<KnowledgeDocumentChunkLog> | null>(null);
+  const [logPageNo, setLogPageNo] = useState(1);
+  const [logLoading, setLogLoading] = useState(false);
 
   const documents = pageData?.records || [];
 
@@ -278,6 +283,38 @@ export function KnowledgeDocumentsPage() {
     } finally {
       setDetailSaving(false);
     }
+  };
+
+  const loadChunkLogs = async (docId: string, pageNo = 1) => {
+    setLogLoading(true);
+    try {
+      const data = await getChunkLogsPage(docId, pageNo, 10);
+      setLogData(data);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "加载分块日志失败"));
+      console.error(error);
+    } finally {
+      setLogLoading(false);
+    }
+  };
+
+  const handleOpenChunkLogs = (doc: KnowledgeDocument) => {
+    setLogTarget(doc);
+    setLogPageNo(1);
+    loadChunkLogs(String(doc.id), 1);
+  };
+
+  const formatDuration = (ms?: number | null) => {
+    if (!ms && ms !== 0) return "-";
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  };
+
+  const formatLogStatus = (status?: string) => {
+    if (status === "success") return "成功";
+    if (status === "failed") return "失败";
+    if (status === "running") return "进行中";
+    return status || "-";
   };
 
   const detailSourceType = detailTarget?.sourceType?.toLowerCase();
@@ -470,6 +507,14 @@ export function KnowledgeDocumentsPage() {
                           title="分块"
                         >
                           <PlayCircle className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleOpenChunkLogs(doc)}
+                          title="分块详情"
+                        >
+                          <FileBarChart className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
@@ -685,6 +730,136 @@ export function KnowledgeDocumentsPage() {
               disabled={detailSaving || !detailName.trim() || !detailNameChanged}
             >
               {detailSaving ? "保存中..." : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(logTarget)} onOpenChange={(open) => (!open ? setLogTarget(null) : null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sidebar-scroll sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>分块详情</DialogTitle>
+            <DialogDescription>
+              文档 [{logTarget?.docName}] 的分块执行日志
+            </DialogDescription>
+          </DialogHeader>
+          {logLoading ? (
+            <div className="py-8 text-center text-muted-foreground">加载中...</div>
+          ) : logData && logData.records.length > 0 ? (
+            <div className="space-y-4">
+              {logData.records.map((log) => (
+                <div key={log.id} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">执行状态:</span>
+                      <span className={cn(
+                        "text-sm font-medium",
+                        log.status === "success" ? "text-emerald-600" :
+                        log.status === "failed" ? "text-red-600" :
+                        "text-amber-600"
+                      )}>
+                        {formatLogStatus(log.status)}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(log.createTime)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">处理模式: </span>
+                      <span>{log.processMode === "pipeline" ? "数据通道" : "分块策略"}</span>
+                    </div>
+                    {log.processMode === "chunk" && log.chunkStrategy && (
+                      <div>
+                        <span className="text-muted-foreground">分块策略: </span>
+                        <span>{log.chunkStrategy}</span>
+                      </div>
+                    )}
+                    {log.processMode === "pipeline" && log.pipelineId && (
+                      <div>
+                        <span className="text-muted-foreground">Pipeline ID: </span>
+                        <span>{log.pipelineId}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-muted-foreground">分块数量: </span>
+                      <span className="font-medium">{log.chunkCount ?? "-"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">文本提取: </span>
+                      <span className="font-medium">{formatDuration(log.extractDuration)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">分块耗时: </span>
+                      <span className="font-medium">{formatDuration(log.chunkDuration)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">向量化: </span>
+                      <span className="font-medium">{formatDuration(log.embeddingDuration)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">总耗时: </span>
+                      <span className="font-medium text-primary">{formatDuration(log.totalDuration)}</span>
+                    </div>
+                  </div>
+
+                  {log.errorMessage && (
+                    <div className="rounded bg-red-50 p-3 text-sm text-red-600">
+                      <div className="font-medium mb-1">错误信息:</div>
+                      <div className="text-xs">{log.errorMessage}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {logData.pages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-sm text-muted-foreground">
+                    共 {logData.total} 条记录
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newPage = Math.max(1, logPageNo - 1);
+                        setLogPageNo(newPage);
+                        loadChunkLogs(String(logTarget?.id), newPage);
+                      }}
+                      disabled={logPageNo <= 1}
+                    >
+                      上一页
+                    </Button>
+                    <span className="text-sm">
+                      {logPageNo} / {logData.pages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newPage = Math.min(logData.pages, logPageNo + 1);
+                        setLogPageNo(newPage);
+                        loadChunkLogs(String(logTarget?.id), newPage);
+                      }}
+                      disabled={logPageNo >= logData.pages}
+                    >
+                      下一页
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">暂无分块日志</div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLogTarget(null)}>
+              关闭
             </Button>
           </DialogFooter>
         </DialogContent>

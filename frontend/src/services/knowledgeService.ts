@@ -55,6 +55,24 @@ export interface KnowledgeChunk {
   updateTime?: string | null;
 }
 
+export interface KnowledgeDocumentChunkLog {
+  id: string;
+  docId: string;
+  status: string;
+  processMode?: string | null;
+  chunkStrategy?: string | null;
+  pipelineId?: string | null;
+  extractDuration?: number | null;
+  chunkDuration?: number | null;
+  embeddingDuration?: number | null;
+  totalDuration?: number | null;
+  chunkCount?: number | null;
+  errorMessage?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  createTime?: string | null;
+}
+
 export interface PageResult<T> {
   records: T[];
   total: number;
@@ -299,4 +317,21 @@ export const batchDisableChunks = async (docId: string, chunkIds?: Array<string 
 
 export const rebuildChunks = async (docId: string): Promise<void> => {
   await api.post(`/knowledge-base/docs/${docId}/chunks/rebuild`);
+};
+
+// 文档分块日志管理
+export const getChunkLogsPage = async (
+  docId: string,
+  pageNo = 1,
+  pageSize = 10
+): Promise<PageResult<KnowledgeDocumentChunkLog>> => {
+  return api.get<PageResult<KnowledgeDocumentChunkLog>, PageResult<KnowledgeDocumentChunkLog>>(
+    `/knowledge-base/docs/${docId}/chunk-logs`,
+    {
+      params: {
+        pageNo,
+        pageSize
+      }
+    }
+  );
 };

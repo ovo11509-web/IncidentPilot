@@ -22,6 +22,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentUploadRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentUpdateRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentVO;
+import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentChunkLogVO;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -87,4 +88,13 @@ public interface KnowledgeDocumentService {
      * @param enabled 是否启用
      */
     void enable(String docId, boolean enabled);
+
+    /**
+     * 查询文档分块日志
+     *
+     * @param docId 文档 ID
+     * @param page  分页参数
+     * @return 分块日志分页结果
+     */
+    IPage<KnowledgeDocumentChunkLogVO> getChunkLogs(String docId, Page<KnowledgeDocumentChunkLogVO> page);
 }

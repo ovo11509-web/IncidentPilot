@@ -30,6 +30,7 @@ import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentUpd
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentUploadRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeChunkVO;
 import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentVO;
+import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeDocumentChunkLogVO;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategyFactory;
@@ -37,8 +38,10 @@ import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
 import com.nageoffer.ai.ragent.knowledge.dao.entity.KnowledgeBaseDO;
 import com.nageoffer.ai.ragent.knowledge.dao.entity.KnowledgeDocumentDO;
+import com.nageoffer.ai.ragent.knowledge.dao.entity.KnowledgeDocumentChunkLogDO;
 import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeBaseMapper;
 import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeDocumentMapper;
+import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeDocumentChunkLogMapper;
 import com.nageoffer.ai.ragent.rag.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.knowledge.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
@@ -72,6 +75,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.util.StringUtils;
 
 import java.io.InputStream;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +102,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final IngestionPipelineService ingestionPipelineService;
     private final IngestionEngine ingestionEngine;
     private final RedissonClient redissonClient;
+    private final KnowledgeDocumentChunkLogMapper chunkLogMapper;
     @Qualifier("knowledgeChunkExecutor")
     private final Executor knowledgeChunkExecutor;
     private final PlatformTransactionManager transactionManager;
@@ -254,22 +259,47 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         String docId = String.valueOf(documentDO.getId());
         String processMode = normalizeProcessMode(documentDO.getProcessMode());
 
+        // 创建分块日志记录
+        KnowledgeDocumentChunkLogDO chunkLog = KnowledgeDocumentChunkLogDO.builder()
+                .docId(documentDO.getId())
+                .status("running")
+                .processMode(processMode)
+                .chunkStrategy(documentDO.getChunkStrategy())
+                .pipelineId(documentDO.getPipelineId())
+                .startTime(new Date())
+                .build();
+        chunkLogMapper.insert(chunkLog);
+
+        long totalStartTime = System.currentTimeMillis();
+        long extractDuration = 0;
+        long chunkDuration = 0;
+        long embeddingDuration = 0;
+
         List<VectorChunk> chunkResults;
 
-        if ("pipeline".equals(processMode)) {
-            // 使用Pipeline模式处理
-            chunkResults = runPipelineProcess(documentDO);
-        } else {
-            // 使用分块策略模式处理（默认）
-            chunkResults = runChunkProcess(documentDO);
-        }
-
-        if (chunkResults == null) {
-            // 处理失败，已在子方法中标记
-            return;
-        }
-
         try {
+            if ("pipeline".equals(processMode)) {
+                // 使用Pipeline模式处理
+                long start = System.currentTimeMillis();
+                chunkResults = runPipelineProcess(documentDO);
+                chunkDuration = System.currentTimeMillis() - start;
+            } else {
+                // 使用分块策略模式处理（默认）
+                long extractStart = System.currentTimeMillis();
+                chunkResults = runChunkProcess(documentDO);
+                long extractEnd = System.currentTimeMillis();
+                extractDuration = extractEnd - extractStart;
+                chunkDuration = extractDuration; // 分块策略模式下，提取和分块合并计算
+            }
+
+            if (chunkResults == null) {
+                // 处理失败
+                updateChunkLog(chunkLog.getId(), "failed", 0, extractDuration, chunkDuration, 0,
+                        System.currentTimeMillis() - totalStartTime, "分块处理失败");
+                return;
+            }
+
+            // 保存分块到数据库并更新向量库
             TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
             txTemplate.executeWithoutResult(status -> {
                 List<KnowledgeChunkCreateRequest> chunks = chunkResults.stream()
@@ -291,13 +321,42 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 docMapper.updateById(update);
             });
 
+            // 向量化
             String kbId = String.valueOf(documentDO.getKbId());
+            long embeddingStart = System.currentTimeMillis();
             vectorStoreService.deleteDocumentVectors(kbId, docId);
             vectorStoreService.indexDocumentChunks(kbId, docId, chunkResults);
+            embeddingDuration = System.currentTimeMillis() - embeddingStart;
+
+            long totalDuration = System.currentTimeMillis() - totalStartTime;
+
+            // 更新日志为成功
+            updateChunkLog(chunkLog.getId(), "success", chunkResults.size(), extractDuration,
+                    chunkDuration, embeddingDuration, totalDuration, null);
+
         } catch (Exception e) {
             log.error("文件分块失败：docId={}", docId, e);
             markChunkFailed(documentDO.getId());
+            long totalDuration = System.currentTimeMillis() - totalStartTime;
+            updateChunkLog(chunkLog.getId(), "failed", 0, extractDuration, chunkDuration,
+                    embeddingDuration, totalDuration, e.getMessage());
         }
+    }
+
+    private void updateChunkLog(Long logId, String status, int chunkCount, long extractDuration,
+                                long chunkDuration, long embeddingDuration, long totalDuration,
+                                String errorMessage) {
+        KnowledgeDocumentChunkLogDO update = new KnowledgeDocumentChunkLogDO();
+        update.setId(logId);
+        update.setStatus(status);
+        update.setChunkCount(chunkCount);
+        update.setExtractDuration(extractDuration);
+        update.setChunkDuration(chunkDuration);
+        update.setEmbeddingDuration(embeddingDuration);
+        update.setTotalDuration(totalDuration);
+        update.setErrorMessage(errorMessage);
+        update.setEndTime(new Date());
+        chunkLogMapper.updateById(update);
     }
 
     /**
@@ -492,6 +551,20 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 vectorStoreService.indexDocumentChunks(String.valueOf(documentDO.getKbId()), docId, vectorChunks);
             }
         }
+    }
+
+    @Override
+    public IPage<KnowledgeDocumentChunkLogVO> getChunkLogs(String docId, Page<KnowledgeDocumentChunkLogVO> page) {
+        Page<KnowledgeDocumentChunkLogDO> mpPage = new Page<>(page.getCurrent(), page.getSize());
+        LambdaQueryWrapper<KnowledgeDocumentChunkLogDO> qw = new LambdaQueryWrapper<KnowledgeDocumentChunkLogDO>()
+                .eq(KnowledgeDocumentChunkLogDO::getDocId, docId)
+                .orderByDesc(KnowledgeDocumentChunkLogDO::getCreateTime);
+
+        IPage<KnowledgeDocumentChunkLogDO> result = chunkLogMapper.selectPage(mpPage, qw);
+
+        Page<KnowledgeDocumentChunkLogVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        voPage.setRecords(result.getRecords().stream().map(each -> BeanUtil.toBean(each, KnowledgeDocumentChunkLogVO.class)).toList());
+        return voPage;
     }
 
     private void patchStatus(KnowledgeDocumentDO doc, DocumentStatus status) {
