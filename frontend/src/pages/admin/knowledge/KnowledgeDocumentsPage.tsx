@@ -147,7 +147,6 @@ export function KnowledgeDocumentsPage() {
   const [detailPipelineName, setDetailPipelineName] = useState<string>("");
   const [logTarget, setLogTarget] = useState<KnowledgeDocument | null>(null);
   const [logData, setLogData] = useState<PageResult<KnowledgeDocumentChunkLog> | null>(null);
-  const [logPageNo, setLogPageNo] = useState(1);
   const [logLoading, setLogLoading] = useState(false);
 
   const documents = pageData?.records || [];
@@ -285,10 +284,10 @@ export function KnowledgeDocumentsPage() {
     }
   };
 
-  const loadChunkLogs = async (docId: string, pageNo = 1) => {
+  const loadChunkLogs = async (docId: string) => {
     setLogLoading(true);
     try {
-      const data = await getChunkLogsPage(docId, pageNo, 10);
+      const data = await getChunkLogsPage(docId, 1, 1);
       setLogData(data);
     } catch (error) {
       toast.error(getErrorMessage(error, "加载分块日志失败"));
@@ -300,8 +299,7 @@ export function KnowledgeDocumentsPage() {
 
   const handleOpenChunkLogs = (doc: KnowledgeDocument) => {
     setLogTarget(doc);
-    setLogPageNo(1);
-    loadChunkLogs(String(doc.id), 1);
+    loadChunkLogs(String(doc.id));
   };
 
   const formatDuration = (ms?: number | null) => {
@@ -747,7 +745,7 @@ export function KnowledgeDocumentsPage() {
             <div className="py-8 text-center text-muted-foreground">加载中...</div>
           ) : logData && logData.records.length > 0 ? (
             <div className="space-y-4">
-              {logData.records.map((log) => (
+              {logData.records.slice(0, 1).map((log) => (
                 <div key={log.id} className="rounded-lg border p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -817,42 +815,6 @@ export function KnowledgeDocumentsPage() {
                 </div>
               ))}
 
-              {logData.pages > 1 && (
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-sm text-muted-foreground">
-                    共 {logData.total} 条记录
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const newPage = Math.max(1, logPageNo - 1);
-                        setLogPageNo(newPage);
-                        loadChunkLogs(String(logTarget?.id), newPage);
-                      }}
-                      disabled={logPageNo <= 1}
-                    >
-                      上一页
-                    </Button>
-                    <span className="text-sm">
-                      {logPageNo} / {logData.pages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const newPage = Math.min(logData.pages, logPageNo + 1);
-                        setLogPageNo(newPage);
-                        loadChunkLogs(String(logTarget?.id), newPage);
-                      }}
-                      disabled={logPageNo >= logData.pages}
-                    >
-                      下一页
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <div className="py-8 text-center text-muted-foreground">暂无分块日志</div>

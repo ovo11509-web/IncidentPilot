@@ -285,11 +285,10 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 chunkDuration = System.currentTimeMillis() - start;
             } else {
                 // 使用分块策略模式处理（默认）
-                long extractStart = System.currentTimeMillis();
-                chunkResults = runChunkProcess(documentDO);
-                long extractEnd = System.currentTimeMillis();
-                extractDuration = extractEnd - extractStart;
-                chunkDuration = extractDuration; // 分块策略模式下，提取和分块合并计算
+                ChunkProcessResult result = runChunkProcess(documentDO);
+                extractDuration = result.getExtractDuration();
+                chunkDuration = result.getChunkDuration();
+                chunkResults = result.getChunks();
             }
 
             if (chunkResults == null) {
@@ -301,8 +300,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
             // 保存分块到数据库并更新向量库
             TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+            List<VectorChunk> finalChunkResults = chunkResults;
             txTemplate.executeWithoutResult(status -> {
-                List<KnowledgeChunkCreateRequest> chunks = chunkResults.stream()
+                List<KnowledgeChunkCreateRequest> chunks = finalChunkResults.stream()
                         .map(result -> {
                             KnowledgeChunkCreateRequest req = new KnowledgeChunkCreateRequest();
                             req.setChunkId(result.getChunkId());
@@ -362,19 +362,57 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     /**
      * 使用分块策略处理文档
      */
-    private List<VectorChunk> runChunkProcess(KnowledgeDocumentDO documentDO) {
+    private ChunkProcessResult runChunkProcess(KnowledgeDocumentDO documentDO) {
         String docId = String.valueOf(documentDO.getId());
         ChunkingMode chunkingMode = resolveChunkingMode(documentDO.getChunkStrategy());
         ChunkingOptions config = buildChunkingOptions(chunkingMode, documentDO);
+        long extractStart = System.currentTimeMillis();
+        long chunkStart = 0;
+        long extractDuration = 0;
+        long chunkDuration = 0;
 
         try (InputStream is = fileStorageService.openStream(documentDO.getFileUrl())) {
             String text = textExtractor.extract(is, documentDO.getDocName());
+            extractDuration = System.currentTimeMillis() - extractStart;
             ChunkingStrategy chunkingStrategy = chunkingStrategyFactory.requireStrategy(chunkingMode);
-            return chunkingStrategy.chunk(text, config);
+            chunkStart = System.currentTimeMillis();
+            List<VectorChunk> chunks = chunkingStrategy.chunk(text, config);
+            chunkDuration = System.currentTimeMillis() - chunkStart;
+            return new ChunkProcessResult(chunks, extractDuration, chunkDuration);
         } catch (Exception e) {
+            if (extractStart > 0 && extractDuration == 0) {
+                extractDuration = System.currentTimeMillis() - extractStart;
+            }
+            if (chunkStart > 0 && chunkDuration == 0) {
+                chunkDuration = System.currentTimeMillis() - chunkStart;
+            }
             log.error("文件分块失败：docId={}", docId, e);
             markChunkFailed(documentDO.getId());
-            return null;
+            return new ChunkProcessResult(null, extractDuration, chunkDuration);
+        }
+    }
+
+    private static class ChunkProcessResult {
+        private final List<VectorChunk> chunks;
+        private final long extractDuration;
+        private final long chunkDuration;
+
+        private ChunkProcessResult(List<VectorChunk> chunks, long extractDuration, long chunkDuration) {
+            this.chunks = chunks;
+            this.extractDuration = extractDuration;
+            this.chunkDuration = chunkDuration;
+        }
+
+        private List<VectorChunk> getChunks() {
+            return chunks;
+        }
+
+        private long getExtractDuration() {
+            return extractDuration;
+        }
+
+        private long getChunkDuration() {
+            return chunkDuration;
         }
     }
 
