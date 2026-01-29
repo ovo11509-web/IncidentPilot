@@ -72,6 +72,11 @@ public class KnowledgeDocumentChunkLogVO {
     private Long embeddingDuration;
 
     /**
+     * 其他耗时（毫秒）
+     */
+    private Long otherDuration;
+
+    /**
      * 总耗时（毫秒）
      */
     private Long totalDuration;

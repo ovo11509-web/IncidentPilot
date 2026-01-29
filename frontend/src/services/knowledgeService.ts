@@ -66,6 +66,7 @@ export interface KnowledgeDocumentChunkLog {
   extractDuration?: number | null;
   chunkDuration?: number | null;
   embeddingDuration?: number | null;
+  otherDuration?: number | null;
   totalDuration?: number | null;
   chunkCount?: number | null;
   errorMessage?: string | null;

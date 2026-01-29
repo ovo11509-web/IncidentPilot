@@ -630,6 +630,14 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             if (each.getPipelineId() != null) {
                 vo.setPipelineName(pipelineNameMap.get(each.getPipelineId()));
             }
+            Long totalDuration = each.getTotalDuration();
+            if (totalDuration != null) {
+                long extract = each.getExtractDuration() == null ? 0 : each.getExtractDuration();
+                long chunk = each.getChunkDuration() == null ? 0 : each.getChunkDuration();
+                long embedding = each.getEmbeddingDuration() == null ? 0 : each.getEmbeddingDuration();
+                long other = totalDuration - extract - chunk - embedding;
+                vo.setOtherDuration(Math.max(0, other));
+            }
             return vo;
         }).toList());
         return voPage;

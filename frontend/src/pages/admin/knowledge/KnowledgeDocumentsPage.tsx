@@ -745,7 +745,10 @@ export function KnowledgeDocumentsPage() {
             <div className="py-8 text-center text-muted-foreground">加载中...</div>
           ) : logData && logData.records.length > 0 ? (
             <div className="space-y-4">
-              {logData.records.slice(0, 1).map((log) => (
+              {logData.records.slice(0, 1).map((log) => {
+                const isPipelineLog = log.processMode?.toLowerCase() === "pipeline";
+                const chunkLabel = isPipelineLog ? "数据通道耗时" : "分块耗时";
+                return (
                 <div key={log.id} className="rounded-lg border p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -788,17 +791,23 @@ export function KnowledgeDocumentsPage() {
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    {!isPipelineLog && (
+                      <div>
+                        <span className="text-muted-foreground">文本提取: </span>
+                        <span className="font-medium">{formatDuration(log.extractDuration)}</span>
+                      </div>
+                    )}
                     <div>
-                      <span className="text-muted-foreground">文本提取: </span>
-                      <span className="font-medium">{formatDuration(log.extractDuration)}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">分块耗时: </span>
+                      <span className="text-muted-foreground">{chunkLabel}: </span>
                       <span className="font-medium">{formatDuration(log.chunkDuration)}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">向量化: </span>
                       <span className="font-medium">{formatDuration(log.embeddingDuration)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">其他耗时: </span>
+                      <span className="font-medium">{formatDuration(log.otherDuration)}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">总耗时: </span>
@@ -813,7 +822,7 @@ export function KnowledgeDocumentsPage() {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
 
             </div>
           ) : (
