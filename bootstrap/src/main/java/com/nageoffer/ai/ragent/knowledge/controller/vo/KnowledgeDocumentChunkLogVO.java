@@ -52,6 +52,11 @@ public class KnowledgeDocumentChunkLogVO {
     private String pipelineId;
 
     /**
+     * Pipeline 名称（仅 pipeline 模式）
+     */
+    private String pipelineName;
+
+    /**
      * 文本提取耗时（毫秒）
      */
     private Long extractDuration;

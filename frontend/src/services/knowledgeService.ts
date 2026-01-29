@@ -62,6 +62,7 @@ export interface KnowledgeDocumentChunkLog {
   processMode?: string | null;
   chunkStrategy?: string | null;
   pipelineId?: string | null;
+  pipelineName?: string | null;
   extractDuration?: number | null;
   chunkDuration?: number | null;
   embeddingDuration?: number | null;

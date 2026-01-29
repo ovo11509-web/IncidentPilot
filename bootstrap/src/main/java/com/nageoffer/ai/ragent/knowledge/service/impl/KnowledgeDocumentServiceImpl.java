@@ -58,6 +58,8 @@ import com.nageoffer.ai.ragent.knowledge.schedule.CronScheduleHelper;
 import com.nageoffer.ai.ragent.ingestion.util.HttpClientHelper;
 import com.nageoffer.ai.ragent.ingestion.service.IngestionPipelineService;
 import com.nageoffer.ai.ragent.ingestion.engine.IngestionEngine;
+import com.nageoffer.ai.ragent.ingestion.dao.entity.IngestionPipelineDO;
+import com.nageoffer.ai.ragent.ingestion.dao.mapper.IngestionPipelineMapper;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.PipelineDefinition;
 import lombok.RequiredArgsConstructor;
@@ -76,9 +78,11 @@ import org.springframework.util.StringUtils;
 
 import java.io.InputStream;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -100,6 +104,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final ObjectMapper objectMapper;
     private final KnowledgeDocumentScheduleService scheduleService;
     private final IngestionPipelineService ingestionPipelineService;
+    private final IngestionPipelineMapper ingestionPipelineMapper;
     private final IngestionEngine ingestionEngine;
     private final RedissonClient redissonClient;
     private final KnowledgeDocumentChunkLogMapper chunkLogMapper;
@@ -600,8 +605,33 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
         IPage<KnowledgeDocumentChunkLogDO> result = chunkLogMapper.selectPage(mpPage, qw);
 
+        List<KnowledgeDocumentChunkLogDO> records = result.getRecords();
+        Map<Long, String> pipelineNameMap = new HashMap<>();
+        if (CollUtil.isNotEmpty(records)) {
+            Set<Long> pipelineIds = new HashSet<>();
+            for (KnowledgeDocumentChunkLogDO record : records) {
+                if (record.getPipelineId() != null) {
+                    pipelineIds.add(record.getPipelineId());
+                }
+            }
+            if (!pipelineIds.isEmpty()) {
+                List<IngestionPipelineDO> pipelines = ingestionPipelineMapper.selectBatchIds(pipelineIds);
+                if (CollUtil.isNotEmpty(pipelines)) {
+                    for (IngestionPipelineDO pipeline : pipelines) {
+                        pipelineNameMap.put(pipeline.getId(), pipeline.getName());
+                    }
+                }
+            }
+        }
+
         Page<KnowledgeDocumentChunkLogVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
-        voPage.setRecords(result.getRecords().stream().map(each -> BeanUtil.toBean(each, KnowledgeDocumentChunkLogVO.class)).toList());
+        voPage.setRecords(records.stream().map(each -> {
+            KnowledgeDocumentChunkLogVO vo = BeanUtil.toBean(each, KnowledgeDocumentChunkLogVO.class);
+            if (each.getPipelineId() != null) {
+                vo.setPipelineName(pipelineNameMap.get(each.getPipelineId()));
+            }
+            return vo;
+        }).toList());
         return voPage;
     }
 

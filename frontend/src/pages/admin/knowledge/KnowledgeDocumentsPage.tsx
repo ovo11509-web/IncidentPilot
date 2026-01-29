@@ -777,8 +777,8 @@ export function KnowledgeDocumentsPage() {
                     )}
                     {log.processMode === "pipeline" && log.pipelineId && (
                       <div>
-                        <span className="text-muted-foreground">Pipeline ID: </span>
-                        <span>{log.pipelineId}</span>
+                        <span className="text-muted-foreground">数据通道: </span>
+                        <span>{log.pipelineName || log.pipelineId}</span>
                       </div>
                     )}
                     <div>
