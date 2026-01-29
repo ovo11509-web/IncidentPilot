@@ -242,7 +242,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 }
 
                 scheduleService.upsertSchedule(documentDO);
-                patchStatus(documentDO, DocumentStatus.RUNNING);
+                patchStatus(documentDO);
                 try {
                     knowledgeChunkExecutor.execute(() -> runChunkTask(documentDO));
                 } catch (RejectedExecutionException e) {
@@ -632,10 +632,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             }
             Long totalDuration = each.getTotalDuration();
             if (totalDuration != null) {
-                long extract = each.getExtractDuration() == null ? 0 : each.getExtractDuration();
-                long chunk = each.getChunkDuration() == null ? 0 : each.getChunkDuration();
-                long embedding = each.getEmbeddingDuration() == null ? 0 : each.getEmbeddingDuration();
-                long other = totalDuration - extract - chunk - embedding;
+                long other = getOther(each, totalDuration);
                 vo.setOtherDuration(Math.max(0, other));
             }
             return vo;
@@ -643,8 +640,19 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         return voPage;
     }
 
-    private void patchStatus(KnowledgeDocumentDO doc, DocumentStatus status) {
-        doc.setStatus(status.getCode());
+    private static long getOther(KnowledgeDocumentChunkLogDO each, Long totalDuration) {
+        String mode = each.getProcessMode();
+        boolean pipelineMode = mode != null && mode.equalsIgnoreCase("pipeline");
+        long extract = each.getExtractDuration() == null ? 0 : each.getExtractDuration();
+        long chunk = each.getChunkDuration() == null ? 0 : each.getChunkDuration();
+        long embedding = each.getEmbeddingDuration() == null ? 0 : each.getEmbeddingDuration();
+        return pipelineMode
+                ? totalDuration - extract - chunk
+                : totalDuration - extract - chunk - embedding;
+    }
+
+    private void patchStatus(KnowledgeDocumentDO doc) {
+        doc.setStatus(DocumentStatus.RUNNING.getCode());
         doc.setUpdatedBy(UserContext.getUsername());
         docMapper.updateById(doc);
     }

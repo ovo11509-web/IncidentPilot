@@ -801,10 +801,12 @@ export function KnowledgeDocumentsPage() {
                       <span className="text-muted-foreground">{chunkLabel}: </span>
                       <span className="font-medium">{formatDuration(log.chunkDuration)}</span>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">向量化: </span>
-                      <span className="font-medium">{formatDuration(log.embeddingDuration)}</span>
-                    </div>
+                    {!isPipelineLog && (
+                      <div>
+                        <span className="text-muted-foreground">向量化: </span>
+                        <span className="font-medium">{formatDuration(log.embeddingDuration)}</span>
+                      </div>
+                    )}
                     <div>
                       <span className="text-muted-foreground">其他耗时: </span>
                       <span className="font-medium">{formatDuration(log.otherDuration)}</span>
