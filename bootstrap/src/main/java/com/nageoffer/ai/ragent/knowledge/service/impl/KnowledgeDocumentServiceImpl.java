@@ -326,12 +326,14 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 docMapper.updateById(update);
             });
 
-            // 向量化
-            String kbId = String.valueOf(documentDO.getKbId());
-            long embeddingStart = System.currentTimeMillis();
-            vectorStoreService.deleteDocumentVectors(kbId, docId);
-            vectorStoreService.indexDocumentChunks(kbId, docId, chunkResults);
-            embeddingDuration = System.currentTimeMillis() - embeddingStart;
+            // 向量化：仅分块模式由知识库服务写入，Pipeline 模式依赖管道自身的 indexer
+            if (!"pipeline".equals(processMode)) {
+                String kbId = String.valueOf(documentDO.getKbId());
+                long embeddingStart = System.currentTimeMillis();
+                vectorStoreService.deleteDocumentVectors(kbId, docId);
+                vectorStoreService.indexDocumentChunks(kbId, docId, chunkResults);
+                embeddingDuration = System.currentTimeMillis() - embeddingStart;
+            }
 
             long totalDuration = System.currentTimeMillis() - totalStartTime;
 
