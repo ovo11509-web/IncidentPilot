@@ -545,14 +545,24 @@ export function KnowledgeDocumentsPage() {
       <AlertDialog open={Boolean(chunkTarget)} onOpenChange={(open) => (!open ? setChunkTarget(null) : null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>开始分块？</AlertDialogTitle>
+            <AlertDialogTitle>{chunkTarget?.chunkCount ? "重新分块？" : "开始分块？"}</AlertDialogTitle>
             <AlertDialogDescription>
-              文档 [{chunkTarget?.docName}] 将开始分块并写入向量库。
+              {chunkTarget?.chunkCount ? (
+                <>
+                  文档 [{chunkTarget?.docName}] 已有 {chunkTarget.chunkCount} 个分块记录。
+                  <br />
+                  <span className="font-medium text-amber-600">重新分块会清空原有 Chunk 记录及向量数据。</span>
+                </>
+              ) : (
+                <>文档 [{chunkTarget?.docName}] 将开始分块并写入向量库。</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChunk}>开始</AlertDialogAction>
+            <AlertDialogAction onClick={handleChunk}>
+              {chunkTarget?.chunkCount ? "确认" : "开始"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
