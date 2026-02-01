@@ -1,12 +1,45 @@
 import * as React from "react";
-import { BookOpen, Bot, Brain, Check, Lightbulb, Send, Square } from "lucide-react";
+import { ArrowUpRight, BookOpen, Bot, Brain, Check, Lightbulb, Send, Square } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { listSampleQuestions } from "@/services/sampleQuestionService";
 import { useChatStore } from "@/stores/chatStore";
+
+type PromptPreset = {
+  id?: string;
+  title: string;
+  description: string;
+  prompt: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+const PRESET_ICONS = [BookOpen, Check, Lightbulb];
+
+const DEFAULT_PRESETS: PromptPreset[] = [
+  {
+    title: "内容总结",
+    description: "提炼 3-5 条关键信息与行动点",
+    prompt: "请帮我总结以下内容，并列出3-5条要点：",
+    icon: BookOpen
+  },
+  {
+    title: "任务拆解",
+    description: "把目标拆成可执行步骤与优先级",
+    prompt: "请把下面需求拆解为步骤，并给出优先级和里程碑：",
+    icon: Check
+  },
+  {
+    title: "灵感扩展",
+    description: "给出多个方案并比较优缺点",
+    prompt: "围绕以下主题给出5-8个方案，并注明优缺点：",
+    icon: Lightbulb
+  }
+];
 
 export function WelcomeScreen() {
   const [value, setValue] = React.useState("");
   const [isFocused, setIsFocused] = React.useState(false);
+  const [promptPresets, setPromptPresets] = React.useState<PromptPreset[]>(DEFAULT_PRESETS);
   const isComposingRef = React.useRef(false);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const { sendMessage, isStreaming, cancelGeneration, deepThinkingEnabled, setDeepThinkingEnabled } =
@@ -30,26 +63,42 @@ export function WelcomeScreen() {
     adjustHeight();
   }, [value, adjustHeight]);
 
-  const promptPresets = [
-    {
-      title: "内容总结",
-      description: "提炼 3-5 条关键信息与行动点",
-      prompt: "请帮我总结以下内容，并列出3-5条要点：",
-      icon: BookOpen
-    },
-    {
-      title: "任务拆解",
-      description: "把目标拆成可执行步骤与优先级",
-      prompt: "请把下面需求拆解为步骤，并给出优先级和里程碑：",
-      icon: Check
-    },
-    {
-      title: "灵感扩展",
-      description: "给出多个方案并比较优缺点",
-      prompt: "围绕以下主题给出5-8个方案，并注明优缺点：",
-      icon: Lightbulb
-    }
-  ];
+  React.useEffect(() => {
+    let active = true;
+
+    const loadPresets = async () => {
+      const data = await listSampleQuestions().catch(() => null);
+      if (!active || !data || data.length === 0) {
+        return;
+      }
+      const mapped = data
+        .filter((item) => item.question && item.question.trim())
+        .slice(0, 3)
+        .map((item, index) => {
+          const question = item.question.trim();
+          const title =
+            item.title?.trim() ||
+            (question.length > 12 ? `${question.slice(0, 12)}...` : question) ||
+            `推荐问法 ${index + 1}`;
+          const description = item.description?.trim() || "直接点选即可开始对话";
+          return {
+            id: item.id,
+            title,
+            description,
+            prompt: question,
+            icon: PRESET_ICONS[index % PRESET_ICONS.length]
+          };
+        });
+      if (mapped.length > 0) {
+        setPromptPresets(mapped);
+      }
+    };
+
+    loadPresets();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const applyPreset = React.useCallback(
     (prompt: string) => {
@@ -231,7 +280,7 @@ export function WelcomeScreen() {
               const Icon = preset.icon;
               return (
                 <button
-                  key={preset.title}
+                  key={preset.id ?? preset.title}
                   type="button"
                   onClick={() => applyPreset(preset.prompt)}
                   disabled={isStreaming}
@@ -249,7 +298,10 @@ export function WelcomeScreen() {
                       <p className="text-xs text-[#6B7280]">{preset.description}</p>
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-[#94A3B8]">点击填充示例提问</p>
+                  <div className="mt-3 flex items-center gap-2 text-xs text-[#94A3B8]">
+                    <span className="min-w-0 flex-1 truncate">推荐问法：{preset.prompt}</span>
+                    <ArrowUpRight className="h-3.5 w-3.5 text-[#CBD5F5] transition-colors group-hover:text-[#3B82F6]" />
+                  </div>
                 </button>
               );
             })}
