@@ -22,6 +22,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
+
 /**
  * 示例问题视图对象
  */
@@ -35,4 +37,6 @@ public class SampleQuestionVO {
     private String title;
     private String description;
     private String question;
+    private Date createTime;
+    private Date updateTime;
 }
