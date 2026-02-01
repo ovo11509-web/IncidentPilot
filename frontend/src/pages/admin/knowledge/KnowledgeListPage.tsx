@@ -184,7 +184,7 @@ export function KnowledgeListPage() {
                     <TableCell className="font-medium">
                       <button
                         type="button"
-                        className="block max-w-[200px] truncate text-slate-900 underline-offset-4 hover:text-slate-700 hover:underline"
+                        className="admin-link max-w-[200px] truncate"
                         onClick={() => navigate(`/admin/knowledge/${kb.id}`)}
                       >
                         {kb.name}

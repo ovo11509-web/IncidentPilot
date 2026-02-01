@@ -232,6 +232,14 @@ body {
     @apply rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600;
   }
 
+  .admin-layout .admin-link {
+    @apply inline-flex items-center gap-1 text-blue-700 font-medium underline-offset-4 transition-colors hover:text-blue-800 hover:underline;
+  }
+
+  .admin-layout .admin-link:focus-visible {
+    @apply outline-none ring-2 ring-blue-200 rounded-sm;
+  }
+
   .admin-layout .ui-card {
     @apply rounded-2xl border border-slate-200/70 bg-white shadow-[0_12px_32px_rgba(15,23,42,0.04)];
   }
@@ -273,7 +281,7 @@ body {
   }
 
   .admin-layout .ui-table-head {
-    @apply h-11 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400;
+    @apply h-11 px-3 text-xs font-medium text-slate-400;
   }
 
   .admin-layout .ui-table-cell {

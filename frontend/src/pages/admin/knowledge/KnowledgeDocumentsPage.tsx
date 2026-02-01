@@ -428,7 +428,7 @@ export function KnowledgeDocumentsPage() {
                         <FolderOpen className="h-4 w-4 text-muted-foreground" />
                         <button
                           type="button"
-                          className="flex-1 truncate text-left text-slate-900 underline-offset-4 hover:text-slate-700 hover:underline"
+                          className="admin-link flex-1 truncate text-left"
                           title={doc.docName || ""}
                           onClick={() => navigate(`/admin/knowledge/${kbId}/docs/${doc.id}`)}
                         >
