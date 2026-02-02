@@ -428,11 +428,11 @@ export function KnowledgeDocumentsPage() {
                         <FolderOpen className="h-4 w-4 text-muted-foreground" />
                         <button
                           type="button"
-                          className="admin-link flex-1 truncate text-left"
+                          className="admin-link flex-1 min-w-0 text-left"
                           title={doc.docName || ""}
                           onClick={() => navigate(`/admin/knowledge/${kbId}/docs/${doc.id}`)}
                         >
-                          {doc.docName || "-"}
+                          <span className="flex-1 min-w-0 truncate">{doc.docName || "-"}</span>
                         </button>
                       </div>
                     </TableCell>
