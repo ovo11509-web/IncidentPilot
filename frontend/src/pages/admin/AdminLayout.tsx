@@ -40,6 +40,7 @@ import {
   type KnowledgeBase,
   type KnowledgeDocumentSearchItem
 } from "@/services/knowledgeService";
+import { Avatar } from "@/components/common/Avatar";
 
 const menuGroups = [
   {
@@ -231,7 +232,8 @@ export function AdminLayout() {
     return items;
   }, [location.pathname, location.search]);
 
-  const userInitial = (user?.username || "管理").slice(0, 1).toUpperCase();
+  const avatarUrl = user?.avatar?.trim();
+  const showAvatar = Boolean(avatarUrl);
   const roleLabel = user?.role === "admin" ? "管理员" : "成员";
   const starLabel = useMemo(() => {
     if (starCount === null) return "--";
@@ -616,9 +618,11 @@ export function AdminLayout() {
                     className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-600 shadow-sm"
                     aria-label="用户菜单"
                   >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-600">
-                      {userInitial}
-                    </span>
+                    <Avatar
+                      name={user?.username || "管理员"}
+                      src={showAvatar ? avatarUrl : undefined}
+                      className="h-8 w-8 border-slate-200 bg-indigo-50 text-xs font-semibold text-indigo-600"
+                    />
                     <span className="hidden sm:inline">{user?.username || "管理员"}</span>
                     <ChevronDown className="h-4 w-4 text-slate-400" />
                   </button>
