@@ -42,6 +42,7 @@ import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
+import com.nageoffer.ai.ragent.infra.token.TokenCounterService;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +70,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
     private final KnowledgeDocumentMapper documentMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final EmbeddingService embeddingService;
+    private final TokenCounterService tokenCounterService;
     private final VectorStoreService vectorStoreService;
 
     @Override
@@ -91,6 +93,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
 
         Page<KnowledgeChunkDO> page = new Page<>(requestParam.getCurrent(), requestParam.getSize());
         IPage<KnowledgeChunkDO> result = chunkMapper.selectPage(page, queryWrapper);
+        fillTokenCountsIfMissing(result.getRecords());
         return result.convert(each -> BeanUtil.toBean(each, KnowledgeChunkVO.class));
     }
 
@@ -122,6 +125,8 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
 
         String contentHash = calculateHash(content);
         int charCount = content.length();
+        String embeddingModel = resolveEmbeddingModel(documentDO.getKbId());
+        Integer tokenCount = resolveTokenCount(content);
 
         KnowledgeChunkDO chunkDO = KnowledgeChunkDO.builder()
                 .id(Long.parseLong(requestParam.getChunkId()))
@@ -131,7 +136,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .content(content)
                 .contentHash(contentHash)
                 .charCount(charCount)
-                .tokenCount(null) // 可选，暂不计算
+                .tokenCount(tokenCount)
                 .enabled(1)
                 .createdBy(UserContext.getUsername())
                 .build();
@@ -140,7 +145,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         log.info("新增 Chunk 成功, kbId={}, docId={}, chunkId={}, chunkIndex={}", documentDO.getKbId(), docId, chunkDO.getId(), chunkIndex);
 
         // 同步写入 Milvus
-        syncChunkToMilvus(String.valueOf(documentDO.getKbId()), docId, chunkDO, resolveEmbeddingModel(documentDO.getKbId()));
+        syncChunkToMilvus(String.valueOf(documentDO.getKbId()), docId, chunkDO, embeddingModel);
 
         return BeanUtil.toBean(chunkDO, KnowledgeChunkVO.class);
     }
@@ -176,6 +181,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         Long docIdLong = Long.parseLong(docId);
         Long kbId = documentDO.getKbId();
         String username = UserContext.getUsername();
+        String embeddingModel = resolveEmbeddingModel(kbId);
         List<KnowledgeChunkDO> chunkDOList = new ArrayList<>(requestParams.size());
 
         for (KnowledgeChunkCreateRequest request : requestParams) {
@@ -200,7 +206,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                     .content(content)
                     .contentHash(calculateHash(content))
                     .charCount(content.length())
-                    .tokenCount(null)
+                    .tokenCount(resolveTokenCount(content))
                     .enabled(1)
                     .createdBy(username)
                     .build();
@@ -212,7 +218,6 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
 
         if (writeVector) {
             String kbIdStr = String.valueOf(documentDO.getKbId());
-            String embeddingModel = resolveEmbeddingModel(documentDO.getKbId());
             List<VectorChunk> vectorChunks = chunkDOList.stream()
                     .map(each -> VectorChunk.builder()
                             .chunkId(String.valueOf(each.getId()))
@@ -247,6 +252,8 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         chunkDO.setContent(newContent);
         chunkDO.setContentHash(calculateHash(newContent));
         chunkDO.setCharCount(newContent.length());
+        String embeddingModel = resolveEmbeddingModel(documentDO.getKbId());
+        chunkDO.setTokenCount(resolveTokenCount(newContent));
         chunkDO.setUpdatedBy(UserContext.getUsername());
 
         chunkMapper.updateById(chunkDO);
@@ -255,7 +262,6 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         log.info("更新 Chunk 成功, kbId={}, docId={}, chunkId={}", kbId, docId, chunkId);
 
         // 同步向量数据库
-        String embeddingModel = resolveEmbeddingModel(documentDO.getKbId());
         vectorStoreService.updateChunk(
                 String.valueOf(chunkDO.getKbId()),
                 docId,
@@ -557,5 +563,32 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         }
         KnowledgeBaseDO kbDO = knowledgeBaseMapper.selectById(kbId);
         return kbDO != null ? kbDO.getEmbeddingModel() : null;
+    }
+
+    private Integer resolveTokenCount(String content) {
+        if (!StringUtils.hasText(content)) {
+            return 0;
+        }
+        return tokenCounterService.countTokens(content);
+    }
+
+    private void fillTokenCountsIfMissing(List<KnowledgeChunkDO> chunks) {
+        if (CollUtil.isEmpty(chunks)) {
+            return;
+        }
+        for (KnowledgeChunkDO chunk : chunks) {
+            if (chunk.getTokenCount() != null) {
+                continue;
+            }
+            Integer tokenCount = resolveTokenCount(chunk.getContent());
+            if (tokenCount == null) {
+                continue;
+            }
+            chunk.setTokenCount(tokenCount);
+            KnowledgeChunkDO update = new KnowledgeChunkDO();
+            update.setId(chunk.getId());
+            update.setTokenCount(tokenCount);
+            chunkMapper.updateById(update);
+        }
     }
 }
