@@ -27,6 +27,7 @@ import com.nageoffer.ai.ragent.rag.core.mcp.MCPService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,8 +41,11 @@ public class DefaultContextFormatter implements ContextFormatter {
 
     @Override
     public String formatKbContext(List<NodeScore> kbIntents, Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {
-        if (CollUtil.isEmpty(kbIntents) || rerankedByIntent == null || rerankedByIntent.isEmpty()) {
+        if (rerankedByIntent == null || rerankedByIntent.isEmpty()) {
             return "";
+        }
+        if (CollUtil.isEmpty(kbIntents)) {
+            return formatChunksWithoutIntent(rerankedByIntent, topK);
         }
 
         return kbIntents.stream()
@@ -64,6 +68,33 @@ public class DefaultContextFormatter implements ContextFormatter {
                 })
                 .filter(StrUtil::isNotBlank)
                 .collect(Collectors.joining("\n\n"));
+    }
+
+    private String formatChunksWithoutIntent(Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {
+        int limit = topK > 0 ? topK : Integer.MAX_VALUE;
+        List<RetrievedChunk> chunks = new ArrayList<>();
+        for (List<RetrievedChunk> list : rerankedByIntent.values()) {
+            if (CollUtil.isEmpty(list)) {
+                continue;
+            }
+            for (RetrievedChunk chunk : list) {
+                chunks.add(chunk);
+                if (chunks.size() >= limit) {
+                    break;
+                }
+            }
+            if (chunks.size() >= limit) {
+                break;
+            }
+        }
+        if (chunks.isEmpty()) {
+            return "";
+        }
+
+        String body = chunks.stream()
+                .map(RetrievedChunk::getText)
+                .collect(Collectors.joining("\n"));
+        return "#### 知识库片段\n````text\n" + body + "\n````";
     }
 
     @Override

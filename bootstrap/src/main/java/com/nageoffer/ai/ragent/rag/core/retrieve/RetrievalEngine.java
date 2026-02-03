@@ -54,22 +54,30 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MIN_SEARCH_TOP_K;
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.RERANK_LIMIT_MULTIPLIER;
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.SEARCH_TOP_K_MULTIPLIER;
 
+/**
+ * 检索引擎
+ * 负责协调多通道检索（知识库）和 MCP（模型控制协议）工具的调用，并对检索结果进行重排序和格式化，最终生成用于 LLM 的上下文
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RetrievalEngine {
 
-    private final RetrieverService retrieverService;
-    private final RerankService rerankService;
     private final ContextFormatter contextFormatter;
     private final MCPService mcpService;
     private final MCPParameterExtractor mcpParameterExtractor;
     private final MCPToolRegistry mcpToolRegistry;
+    private final MultiChannelRetrievalEngine multiChannelRetrievalEngine;
     @Qualifier("ragContextThreadPoolExecutor")
     private final Executor ragContextExecutor;
-    @Qualifier("ragRetrievalThreadPoolExecutor")
-    private final Executor ragRetrievalExecutor;
 
+    /**
+     * 检索方法：根据子问题意图列表执行检索，整合知识库和MCP工具的结果
+     *
+     * @param subIntents 子问题意图列表，包含每个子问题及其相关的意图节点和评分
+     * @param topK       需要返回的最相关结果数量，若 ≤0 则使用默认值
+     * @return RetrievalContext 检索上下文，包含知识库上下文、MCP上下文和分组的检索块
+     */
     public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
         if (CollUtil.isEmpty(subIntents)) {
             return RetrievalContext.builder()
@@ -115,11 +123,10 @@ public class RetrievalEngine {
 
     private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {
         List<NodeScore> kbIntents = filterKbIntents(intent.nodeScores());
-        List<NodeScore> mcpIntents = filterMcpIntents(intent.nodeScores());
+        List<NodeScore> mcpIntents = filterMCPIntents(intent.nodeScores());
 
-        KbResult kbResult = CollUtil.isNotEmpty(kbIntents)
-                ? retrieveAndRerank(intent.subQuestion(), kbIntents, topK)
-                : KbResult.empty();
+        KbResult kbResult = retrieveAndRerank(intent.subQuestion(), kbIntents, topK);
+
         String mcpContext = CollUtil.isNotEmpty(mcpIntents)
                 ? executeMcpAndMerge(intent.subQuestion(), mcpIntents)
                 : "";
@@ -132,7 +139,7 @@ public class RetrievalEngine {
                 .append(context).append("\n\n");
     }
 
-    private List<NodeScore> filterMcpIntents(List<NodeScore> nodeScores) {
+    private List<NodeScore> filterMCPIntents(List<NodeScore> nodeScores) {
         return nodeScores.stream()
                 .filter(ns -> ns.getScore() >= INTENT_MIN_SCORE)
                 .filter(ns -> ns.getNode() != null && ns.getNode().getKind() == IntentKind.MCP)
@@ -167,42 +174,30 @@ public class RetrievalEngine {
     }
 
     private KbResult retrieveAndRerank(String question, List<NodeScore> kbIntents, int topK) {
-        if (CollUtil.isEmpty(kbIntents)) {
+        // 使用多通道检索引擎（即使 kbIntents 为空也执行，因为有全局检索兜底）
+        List<SubQuestionIntent> subIntents = List.of(
+                new SubQuestionIntent(question, kbIntents != null ? kbIntents : List.of())
+        );
+        List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKB(subIntents, topK);
+
+        if (CollUtil.isEmpty(chunks)) {
             return KbResult.empty();
         }
 
-        int searchTopK = Math.max(topK * SEARCH_TOP_K_MULTIPLIER, MIN_SEARCH_TOP_K);
+        // 按意图节点分组（用于格式化上下文）
         Map<String, List<RetrievedChunk>> intentChunks = new ConcurrentHashMap<>();
 
-        List<CompletableFuture<Void>> tasks = kbIntents.stream()
-                .map(ns -> CompletableFuture.supplyAsync(() -> {
-                            IntentNode node = ns.getNode();
-                            return retrieverService.retrieve(
-                                    RetrieveRequest.builder()
-                                            .collectionName(node.getCollectionName())
-                                            .query(question)
-                                            .topK(searchTopK)
-                                            .build()
-                            );
-                        }, ragRetrievalExecutor)
-                        .thenApply(chunks -> {
-                            if (CollUtil.isEmpty(chunks)) {
-                                return List.<RetrievedChunk>of();
-                            }
-                            int rerankLimit = topK * RERANK_LIMIT_MULTIPLIER;
-                            return rerankService.rerank(question, chunks, rerankLimit);
-                        })
-                        .thenAccept(perIntent -> {
-                            if (CollUtil.isNotEmpty(perIntent)) {
-                                intentChunks.put(ns.getNode().getId(), perIntent);
-                            }
-                        }))
-                .toList();
-
-        CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new)).join();
-
-        if (intentChunks.isEmpty()) {
-            return KbResult.empty();
+        // 如果有意图识别结果，按意图节点 ID 分组
+        if (CollUtil.isNotEmpty(kbIntents)) {
+            // 将所有 chunks 按意图节点 ID 分配
+            // 注意：多通道检索返回的 chunks 无法精确对应到某个意图节点
+            // 所以我们将所有 chunks 分配给每个意图节点
+            for (NodeScore ns : kbIntents) {
+                intentChunks.put(ns.getNode().getId(), chunks);
+            }
+        } else {
+            // 如果没有意图识别结果，使用特殊 key
+            intentChunks.put("multi_channel", chunks);
         }
 
         String groupedContext = contextFormatter.formatKbContext(kbIntents, intentChunks, topK);

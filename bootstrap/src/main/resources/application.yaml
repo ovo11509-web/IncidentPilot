@@ -68,6 +68,15 @@ rag:
       batch-size: 20
       min-interval-seconds: 60
 
+  search:
+    channels:
+      vector-global:
+        confidence-threshold: 0.6
+        top-k-multiplier: 3
+      intent-directed:
+        min-intent-score: 0.4
+        top-k-multiplier: 2
+
 ai:
   providers:
     ollama:
