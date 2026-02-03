@@ -59,7 +59,8 @@ public class RAGEnterprisePromptService {
 
     public List<ChatMessage> buildStructuredMessages(PromptContext context,
                                                      List<ChatMessage> history,
-                                                     String question) {
+                                                     String question,
+                                                     List<String> subQuestions) {
         List<ChatMessage> messages = new ArrayList<>();
         String systemPrompt = buildSystemPrompt(context);
         if (StrUtil.isNotBlank(systemPrompt)) {
@@ -74,9 +75,19 @@ public class RAGEnterprisePromptService {
         if (CollUtil.isNotEmpty(history)) {
             messages.addAll(history);
         }
-        if (StrUtil.isNotBlank(question)) {
+
+        // 构建用户消息：如果有多个子问题，明确列出
+        if (CollUtil.isNotEmpty(subQuestions) && subQuestions.size() > 1) {
+            StringBuilder userMessage = new StringBuilder();
+            userMessage.append("请基于上述文档内容，回答以下问题：\n\n");
+            for (int i = 0; i < subQuestions.size(); i++) {
+                userMessage.append(i + 1).append(". ").append(subQuestions.get(i)).append("\n");
+            }
+            messages.add(ChatMessage.user(userMessage.toString().trim()));
+        } else if (StrUtil.isNotBlank(question)) {
             messages.add(ChatMessage.user(question));
         }
+
         return messages;
     }
 

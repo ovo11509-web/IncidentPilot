@@ -48,26 +48,73 @@ public class DefaultContextFormatter implements ContextFormatter {
             return formatChunksWithoutIntent(rerankedByIntent, topK);
         }
 
-        return kbIntents.stream()
-                .map(ns -> {
-                    List<RetrievedChunk> chunks = rerankedByIntent.get(ns.getNode().getId());
-                    if (CollUtil.isEmpty(chunks)) {
-                        return "";
-                    }
-                    String snippet = StrUtil.emptyIfNull(ns.getNode().getPromptSnippet()).trim();
-                    String body = chunks.stream()
-                            .limit(topK)
-                            .map(RetrievedChunk::getText)
-                            .collect(Collectors.joining("\n"));
-                    StringBuilder block = new StringBuilder();
-                    if (StrUtil.isNotBlank(snippet)) {
-                        block.append("#### 意图规则\n").append(snippet).append("\n");
-                    }
-                    block.append("#### 知识库片段\n````text\n").append(body).append("\n````");
-                    return block.toString();
-                })
+        // 多意图场景：合并所有规则和文档
+        if (kbIntents.size() > 1) {
+            return formatMultiIntentContext(kbIntents, rerankedByIntent, topK);
+        }
+
+        // 单意图场景：保持原有逻辑
+        return formatSingleIntentContext(kbIntents.get(0), rerankedByIntent, topK);
+    }
+
+    /**
+     * 格式化单意图上下文
+     */
+    private String formatSingleIntentContext(NodeScore nodeScore, Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {
+        List<RetrievedChunk> chunks = rerankedByIntent.get(nodeScore.getNode().getId());
+        if (CollUtil.isEmpty(chunks)) {
+            return "";
+        }
+        String snippet = StrUtil.emptyIfNull(nodeScore.getNode().getPromptSnippet()).trim();
+        String body = chunks.stream()
+                .limit(topK)
+                .map(RetrievedChunk::getText)
+                .collect(Collectors.joining("\n"));
+        StringBuilder block = new StringBuilder();
+        if (StrUtil.isNotBlank(snippet)) {
+            block.append("#### 回答规则\n").append(snippet).append("\n\n");
+        }
+        block.append("#### 知识库片段\n````text\n").append(body).append("\n````");
+        return block.toString();
+    }
+
+    /**
+     * 格式化多意图上下文
+     */
+    private String formatMultiIntentContext(List<NodeScore> kbIntents, Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {
+        StringBuilder result = new StringBuilder();
+
+        // 1. 合并所有意图的回答规则
+        List<String> snippets = kbIntents.stream()
+                .map(ns -> ns.getNode().getPromptSnippet())
                 .filter(StrUtil::isNotBlank)
-                .collect(Collectors.joining("\n\n"));
+                .map(String::trim)
+                .distinct()
+                .toList();
+
+        if (!snippets.isEmpty()) {
+            result.append("#### 回答规则\n");
+            for (int i = 0; i < snippets.size(); i++) {
+                result.append(i + 1).append(". ").append(snippets.get(i)).append("\n");
+            }
+            result.append("\n");
+        }
+
+        // 2. 合并所有意图的文档片段（去重）
+        List<RetrievedChunk> allChunks = rerankedByIntent.values().stream()
+                .flatMap(List::stream)
+                .distinct()
+                .limit(topK)
+                .toList();
+
+        if (!allChunks.isEmpty()) {
+            String body = allChunks.stream()
+                    .map(RetrievedChunk::getText)
+                    .collect(Collectors.joining("\n"));
+            result.append("#### 知识库片段\n````text\n").append(body).append("\n````");
+        }
+
+        return result.toString();
     }
 
     private String formatChunksWithoutIntent(Map<String, List<RetrievedChunk>> rerankedByIntent, int topK) {

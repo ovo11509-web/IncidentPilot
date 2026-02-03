@@ -164,7 +164,7 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
                                                        IntentGroup intentGroup, List<ChatMessage> history,
                                                        boolean deepThinking, StreamCallback callback) {
         PromptContext promptContext = PromptContext.builder()
-                .question(rewriteResult.joinSubQuestions())
+                .question(rewriteResult.rewrittenQuestion())
                 .mcpContext(ctx.getMcpContext())
                 .kbContext(ctx.getKbContext())
                 .mcpIntents(intentGroup.mcpIntents())
@@ -175,7 +175,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         List<ChatMessage> messages = promptBuilder.buildStructuredMessages(
                 promptContext,
                 history,
-                rewriteResult.joinSubQuestions()
+                rewriteResult.rewrittenQuestion(),
+                rewriteResult.subQuestions()  // 传入子问题列表
         );
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(messages)

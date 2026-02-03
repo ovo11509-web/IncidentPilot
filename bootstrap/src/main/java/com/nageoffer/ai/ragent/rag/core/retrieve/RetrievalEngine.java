@@ -135,7 +135,9 @@ public class RetrievalEngine {
     }
 
     private void appendSection(StringBuilder builder, String question, String context) {
-        builder.append("### 子问题：").append(question).append("\n")
+        builder.append("---\n")
+                .append("**子问题**：").append(question).append("\n\n")
+                .append("**相关文档**：\n")
                 .append(context).append("\n\n");
     }
 
