@@ -19,6 +19,7 @@ package com.nageoffer.ai.ragent.framework.web;
 
 import com.nageoffer.ai.ragent.framework.errorcode.BaseErrorCode;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>该类对 Spring 的 SseEmitter 进行封装，提供了线程安全的事件发送功能，
  * 统一处理连接关闭状态和异常情况。主要用于服务端向客户端推送实时数据流</p>
  */
+@Slf4j
 public class SseEmitterSender {
 
     /**
@@ -75,7 +77,7 @@ public class SseEmitterSender {
             }
             emitter.send(SseEmitter.event().name(eventName).data(data));
         } catch (Exception e) {
-            // 发送失败时，关闭连接并抛出异常
+            // 发送失败时，关闭连接并通知失败
             fail(e);
         }
     }
@@ -99,20 +101,19 @@ public class SseEmitterSender {
      * <p>当发生异常时调用此方法，会执行以下操作：</p>
      * <ol>
      *   <li>关闭 SSE 连接并通知客户端异常信息</li>
-     *   <li>抛出 ServiceException 供上层业务代码感知和处理</li>
+     *   <li>不再抛出异常，避免在流式响应已开始后触发全局异常处理器导致响应冲突</li>
      * </ol>
      *
      * @param throwable 导致失败的异常对象
-     * @throws ServiceException 包装原始异常后抛出，便于统一异常处理
      */
     public void fail(Throwable throwable) {
         closeWithError(throwable);
-        throw new ServiceException("SSE send failed", throwable, BaseErrorCode.SERVICE_ERROR);
+        log.warn("SSE send failed", throwable);
     }
 
     /**
      * 内部方法：以异常方式关闭连接
-     *
+     * <p>
      * 使用 CAS 操作确保连接只被关闭一次
      * 调用 SseEmitter 的 completeWithError 方法，通知客户端连接异常终止
      *
