@@ -85,11 +85,10 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         log.info("打印会话消息参数，会话ID：{}，单次消息ID：{}", conversationId, taskId);
 
         // 使用工厂创建 Callback
-        StreamCallback callback = callbackFactory.createChatEvent(emitter, actualConversationId, taskId);
+        StreamCallback callback = callbackFactory.createChatEventHandler(emitter, actualConversationId, taskId);
 
         String userId = UserContext.getUserId();
-        List<ChatMessage> history = memoryService.load(actualConversationId, userId);
-        memoryService.append(actualConversationId, userId, ChatMessage.user(question));
+        List<ChatMessage> history = memoryService.loadAndAppend(actualConversationId, userId, ChatMessage.user(question));
 
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
         List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult);

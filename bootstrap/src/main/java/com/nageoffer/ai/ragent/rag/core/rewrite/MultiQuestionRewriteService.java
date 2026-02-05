@@ -23,6 +23,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.nageoffer.ai.ragent.infra.util.LLMResponseCleaner;
 import com.nageoffer.ai.ragent.rag.config.RAGConfigProperties;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
@@ -35,7 +36,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.QUERY_REWRITE_AND_SPLIT_PROMPT_PATH;
@@ -73,13 +73,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
 
         String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
 
-        RewriteResult llmResult = callLLMRewriteAndSplit(normalizedQuestion, userQuestion, history);
-        if (llmResult != null) {
-            return llmResult;
-        }
-
-        List<String> subQuestions = ruleBasedSplit(normalizedQuestion);
-        return new RewriteResult(normalizedQuestion, subQuestions);
+        return callLLMRewriteAndSplit(normalizedQuestion, userQuestion, history);
     }
 
     /**
@@ -95,55 +89,60 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
 
         String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
 
-        RewriteResult llmResult = callLLMRewriteAndSplit(normalizedQuestion, userQuestion, List.of());
-        if (llmResult != null) {
-            return llmResult;
-        }
+        return callLLMRewriteAndSplit(normalizedQuestion, userQuestion, List.of());
 
         // 兜底：使用归一化结果 + 规则拆分
-        List<String> subQuestions = ruleBasedSplit(normalizedQuestion);
-        return new RewriteResult(normalizedQuestion, subQuestions);
     }
 
     private RewriteResult callLLMRewriteAndSplit(String normalizedQuestion,
                                                  String originalQuestion,
                                                  List<ChatMessage> history) {
-        String prompt = promptTemplateLoader.load(QUERY_REWRITE_AND_SPLIT_PROMPT_PATH);
-        boolean useHistory = CollUtil.isNotEmpty(history);
-        ChatRequest req = buildRewriteRequest(prompt, normalizedQuestion, history, useHistory);
+        String systemPrompt = promptTemplateLoader.load(QUERY_REWRITE_AND_SPLIT_PROMPT_PATH);
+        ChatRequest req = buildRewriteRequest(systemPrompt, normalizedQuestion, history);
 
         try {
             String raw = llmService.chat(req);
             RewriteResult parsed = parseRewriteAndSplit(raw);
-            return Optional.ofNullable(parsed)
-                    .map(result -> {
-                        log.info("""
-                                RAG用户问题查询改写+拆分：
-                                原始问题：{}
-                                归一化后：{}
-                                改写结果：{}
-                                子问题：{}
-                                """, originalQuestion, normalizedQuestion, result.rewrittenQuestion(), result.subQuestions());
-                        return result;
-                    })
-                    .orElseGet(() -> new RewriteResult(normalizedQuestion, List.of(normalizedQuestion)));
+
+            if (parsed != null) {
+                log.info("""
+                        RAG用户问题查询改写+拆分：
+                        原始问题：{}
+                        归一化后：{}
+                        改写结果：{}
+                        子问题：{}
+                        """, originalQuestion, normalizedQuestion, parsed.rewrittenQuestion(), parsed.subQuestions());
+                return parsed;
+            }
+
+            log.warn("查询改写+拆分解析失败，使用归一化问题兜底 - normalizedQuestion={}", normalizedQuestion);
         } catch (Exception e) {
-            log.warn("查询改写+拆分 LLM 调用失败，question={}，normalizedQuestion={}", originalQuestion, normalizedQuestion, e);
+            log.warn("查询改写+拆分 LLM 调用失败，使用归一化问题兜底 - question={}，normalizedQuestion={}", originalQuestion, normalizedQuestion, e);
         }
+
+        // 统一兜底逻辑
         return new RewriteResult(normalizedQuestion, List.of(normalizedQuestion));
     }
 
     private ChatRequest buildRewriteRequest(String systemPrompt,
                                             String question,
-                                            List<ChatMessage> history,
-                                            boolean useHistory) {
+                                            List<ChatMessage> history) {
         List<ChatMessage> messages = new ArrayList<>();
         if (StrUtil.isNotBlank(systemPrompt)) {
             messages.add(ChatMessage.system(systemPrompt));
         }
-        if (useHistory && CollUtil.isNotEmpty(history)) {
-            messages.addAll(history);
+
+        // 只保留最近 1-2 轮的 User 和 Assistant 消息
+        // 过滤掉 System 摘要，避免 Token 浪费
+        if (CollUtil.isNotEmpty(history)) {
+            List<ChatMessage> recentHistory = history.stream()
+                    .filter(msg -> msg.getRole() == ChatMessage.Role.USER
+                            || msg.getRole() == ChatMessage.Role.ASSISTANT)
+                    .skip(Math.max(0, history.size() - 4))  // 最多保留最近 4 条消息（2 轮对话）
+                    .toList();
+            messages.addAll(recentHistory);
         }
+
         messages.add(ChatMessage.user(question));
 
         return ChatRequest.builder()
@@ -154,9 +153,13 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
                 .build();
     }
 
+
     private RewriteResult parseRewriteAndSplit(String raw) {
         try {
-            JsonElement root = JsonParser.parseString(raw.trim());
+            // 移除可能存在的 Markdown 代码块标记
+            String cleaned = LLMResponseCleaner.stripMarkdownCodeFence(raw);
+
+            JsonElement root = JsonParser.parseString(cleaned);
             if (!root.isJsonObject()) {
                 return null;
             }

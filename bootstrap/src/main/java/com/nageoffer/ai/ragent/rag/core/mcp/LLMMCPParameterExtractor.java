@@ -27,6 +27,7 @@ import com.google.gson.JsonSyntaxException;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.infra.util.LLMResponseCleaner;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -152,7 +153,7 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
             return new HashMap<>();
         }
         // 清理可能的 markdown 代码块
-        String cleaned = cleanMarkdownCode(raw);
+        String cleaned = LLMResponseCleaner.stripMarkdownCodeFence(raw);
         JsonElement element = JsonParser.parseString(cleaned);
         if (!element.isJsonObject()) {
             log.warn("LLM 返回的不是 JSON 对象: {}", raw);
@@ -168,22 +169,6 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
             }
         }
         return result;
-    }
-
-    /**
-     * 清理 Markdown 代码块
-     */
-    private String cleanMarkdownCode(String raw) {
-        String cleaned = raw.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        } else if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3);
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        return cleaned.trim();
     }
 
     /**

@@ -46,9 +46,9 @@ public class StreamCallbackFactory {
      * @param taskId         任务ID
      * @return StreamCallback 实例
      */
-    public StreamCallback createChatEvent(SseEmitter emitter,
-                                          String conversationId,
-                                          String taskId) {
+    public StreamCallback createChatEventHandler(SseEmitter emitter,
+                                                 String conversationId,
+                                                 String taskId) {
         StreamChatHandlerParams params = StreamChatHandlerParams.builder()
                 .emitter(emitter)
                 .conversationId(conversationId)

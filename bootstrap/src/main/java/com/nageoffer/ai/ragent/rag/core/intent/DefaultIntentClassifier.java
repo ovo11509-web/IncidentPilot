@@ -25,6 +25,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.nageoffer.ai.ragent.infra.util.LLMResponseCleaner;
 import com.nageoffer.ai.ragent.rag.dao.entity.IntentNodeDO;
 import com.nageoffer.ai.ragent.rag.dao.mapper.IntentNodeMapper;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
@@ -169,10 +170,14 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
                 .topP(0.3D)
                 .thinking(false)
                 .build();
+
         String raw = llmService.chat(request);
 
         try {
-            JsonElement root = JsonParser.parseString(raw.trim());
+            // 移除可能的 markdown 代码块标记
+            String cleanedRaw = LLMResponseCleaner.stripMarkdownCodeFence(raw);
+
+            JsonElement root = JsonParser.parseString(cleanedRaw);
 
             JsonArray arr;
             if (root.isJsonArray()) {

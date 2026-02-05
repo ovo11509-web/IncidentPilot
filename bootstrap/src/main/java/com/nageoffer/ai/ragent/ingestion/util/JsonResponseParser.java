@@ -22,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import com.nageoffer.ai.ragent.infra.util.LLMResponseCleaner;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -58,26 +59,13 @@ public final class JsonResponseParser {
         if (StrUtil.isBlank(raw)) {
             return null;
         }
-        String cleaned = cleanMarkdownCode(raw);
+        String cleaned = LLMResponseCleaner.stripMarkdownCodeFence(raw);
         String trimmed = extractJsonBody(cleaned);
         try {
             return JsonParser.parseString(trimmed);
         } catch (JsonSyntaxException e) {
             return null;
         }
-    }
-
-    private static String cleanMarkdownCode(String raw) {
-        String cleaned = raw.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        } else if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3);
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        return cleaned.trim();
     }
 
     private static String extractJsonBody(String raw) {
