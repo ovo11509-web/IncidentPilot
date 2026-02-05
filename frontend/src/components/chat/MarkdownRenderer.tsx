@@ -33,8 +33,8 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             return (
               <code
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-[13px] font-mono bg-[#F5F5F5] text-[#666666]",
-                  "dark:bg-[#2D2D2D] dark:text-[#AAAAAA]",
+                  "rounded px-1.5 py-0.5 text-[13px] font-mono bg-[#f6f8fa] text-[#24292f]",
+                  "dark:bg-[#161b22] dark:text-[#c9d1d9]",
                   className
                 )}
                 {...props}
@@ -99,7 +99,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         a({ children, ...props }) {
           return (
             <a
-              className="text-[#3B82F6] font-medium underline-offset-4 hover:underline hover:text-[#2563EB] transition-colors dark:text-[#60A5FA] dark:hover:text-[#3B82F6]"
+              className="text-[#0969da] underline-offset-4 hover:underline dark:text-[#58a6ff]"
               target="_blank"
               rel="noreferrer"
               {...props}
@@ -111,7 +111,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         table({ children, ...props }) {
           return (
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-[#E5E5E5] rounded-lg dark:border-[#3A3A3A]" {...props}>
+              <table className="w-full border-collapse border border-[#d0d7de] rounded-md dark:border-[#30363d]" {...props}>
                 {children}
               </table>
             </div>
@@ -119,21 +119,21 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         },
         thead({ children, ...props }) {
           return (
-            <thead className="bg-[#F8F9FA] dark:bg-[#2A2A2A]" {...props}>
+            <thead className="bg-[#f6f8fa] dark:bg-[#161b22]" {...props}>
               {children}
             </thead>
           );
         },
         th({ children, ...props }) {
           return (
-            <th className="border-b border-[#E5E5E5] border-r border-r-[#E5E5E5] px-3 py-2 text-left text-sm font-semibold text-[#333333] last:border-r-0 dark:border-[#3A3A3A] dark:border-r-[#3A3A3A] dark:text-[#DDDDDD]" {...props}>
+            <th className="border-b border-[#d0d7de] border-r border-r-[#d0d7de] px-3 py-2 text-left text-sm font-semibold text-[#24292f] last:border-r-0 dark:border-[#30363d] dark:border-r-[#30363d] dark:text-[#c9d1d9]" {...props}>
               {children}
             </th>
           );
         },
         td({ children, ...props }) {
           return (
-            <td className="border-b border-[#E5E5E5] border-r border-r-[#E5E5E5] px-3 py-2.5 text-sm text-[#333333] last:border-r-0 dark:border-[#3A3A3A] dark:border-r-[#3A3A3A] dark:text-[#CCCCCC]" {...props}>
+            <td className="border-b border-[#d0d7de] border-r border-r-[#d0d7de] px-3 py-2.5 text-sm text-[#24292f] last:border-r-0 dark:border-[#30363d] dark:border-r-[#30363d] dark:text-[#c9d1d9]" {...props}>
               {children}
             </td>
           );
