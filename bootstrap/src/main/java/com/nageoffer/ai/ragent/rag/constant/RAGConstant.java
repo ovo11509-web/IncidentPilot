@@ -27,6 +27,7 @@ package com.nageoffer.ai.ragent.rag.constant;
  *   <li>查询改写提示词模板</li>
  *   <li>RAG 问答提示词模板</li>
  *   <li>系统对话提示词模板</li>
+ *   <li>......</li>
  * </ul>
  * </p>
  *
@@ -75,6 +76,15 @@ public class RAGConstant {
      * Rerank 限制倍数
      */
     public static final int RERANK_LIMIT_MULTIPLIER = 2;
+
+    /**
+     * 多通道检索占位符键
+     * <p>
+     * 当没有意图识别结果时，使用此键作为 intentChunks Map 的占位符
+     * 实际处理时只使用 Map 的 values，不关心具体的 key 值
+     * </p>
+     */
+    public static final String MULTI_CHANNEL_KEY = "multi_channel";
 
     /**
      * 意图识别提示词模板路径（串行模式）

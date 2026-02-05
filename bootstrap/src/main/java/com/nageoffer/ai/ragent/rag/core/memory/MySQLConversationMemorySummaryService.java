@@ -78,7 +78,8 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
         }
         CompletableFuture.runAsync(() -> doCompressIfNeeded(conversationId, userId), memorySummaryExecutor)
                 .exceptionally(ex -> {
-                    log.error("对话记忆摘要异步任务失败", ex);
+                    log.error("对话记忆摘要异步任务失败 - conversationId: {}, userId: {}",
+                            conversationId, userId, ex);
                     return null;
                 });
     }
@@ -106,7 +107,7 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
         long startTime = System.currentTimeMillis();
         int triggerTurns = memoryProperties.getSummaryStartTurns();
         int maxTurns = memoryProperties.getHistoryKeepTurns();
-        if (triggerTurns <= 0) {
+        if (maxTurns <= 0 || triggerTurns <= 0) {
             return;
         }
 
@@ -118,9 +119,6 @@ public class MySQLConversationMemorySummaryService implements ConversationMemory
         try {
             long total = conversationGroupService.countUserMessages(conversationId, userId);
             if (total < triggerTurns) {
-                return;
-            }
-            if (total <= maxTurns) {
                 return;
             }
 

@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.rag.config;
 
+import com.nageoffer.ai.ragent.rag.config.validation.ValidMemoryConfig;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -24,10 +25,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
 
+/**
+ * 记忆配置属性类
+ * 用于配置 RAG 系统中的对话记忆管理相关参数
+ * 包括历史轮数保留、缓存时间、摘要压缩等功能的配置
+ */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "rag.memory")
 @Validated
+@ValidMemoryConfig
 public class MemoryProperties {
 
     /**
@@ -62,5 +69,7 @@ public class MemoryProperties {
     /**
      * 会话标题最大长度（用于提示词约束）
      */
+    @Min(10)
+    @Max(100)
     private Integer titleMaxLength = 30;
 }

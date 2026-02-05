@@ -50,28 +50,54 @@ public class StreamChatEventHandler implements StreamCallback {
     private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
 
-    public StreamChatEventHandler(SseEmitter emitter,
-                                  String conversationId,
-                                  String taskId,
-                                  AIModelProperties modelProperties,
-                                  ConversationMemoryService memoryService,
-                                  ConversationGroupService conversationGroupService,
-                                  StreamTaskManager taskManager) {
-        this.sender = new SseEmitterSender(emitter);
-        this.conversationId = conversationId;
-        this.taskId = taskId;
-        this.memoryService = memoryService;
-        this.conversationGroupService = conversationGroupService;
-        this.taskManager = taskManager;
-        ConversationDO existingConversation = conversationGroupService.findConversation(conversationId, UserContext.getUserId());
-        this.sendTitleOnComplete = existingConversation == null || StrUtil.isBlank(existingConversation.getTitle());
+    /**
+     * 使用参数对象构造（推荐）
+     *
+     * @param params 构建参数
+     */
+    public StreamChatEventHandler(StreamChatHandlerParams params) {
+        this.sender = new SseEmitterSender(params.getEmitter());
+        this.conversationId = params.getConversationId();
+        this.taskId = params.getTaskId();
+        this.memoryService = params.getMemoryService();
+        this.conversationGroupService = params.getConversationGroupService();
+        this.taskManager = params.getTaskManager();
         this.userId = UserContext.getUserId();
-        this.messageChunkSize = Math.max(1, Optional.ofNullable(modelProperties.getStream())
+
+        // 计算配置
+        this.messageChunkSize = resolveMessageChunkSize(params.getModelProperties());
+        this.sendTitleOnComplete = shouldSendTitle();
+
+        // 初始化（发送初始事件、注册任务）
+        initialize();
+    }
+
+    /**
+     * 初始化：发送元数据事件并注册任务
+     */
+    private void initialize() {
+        sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));
+        taskManager.register(taskId, sender, this::buildCompletionPayloadOnCancel);
+    }
+
+    /**
+     * 解析消息块大小
+     */
+    private int resolveMessageChunkSize(AIModelProperties modelProperties) {
+        return Math.max(1, Optional.ofNullable(modelProperties.getStream())
                 .map(AIModelProperties.Stream::getMessageChunkSize)
                 .orElse(5));
-        sender.sendEvent(SSEEventType.META.value(), new MetaPayload(conversationId, taskId));
-        // 注册时传入取消回调，用于在取消时保存已累积的回复
-        taskManager.register(taskId, sender, this::buildCompletionPayloadOnCancel);
+    }
+
+    /**
+     * 判断是否需要发送标题
+     */
+    private boolean shouldSendTitle() {
+        ConversationDO existingConversation = conversationGroupService.findConversation(
+                conversationId,
+                userId
+        );
+        return existingConversation == null || StrUtil.isBlank(existingConversation.getTitle());
     }
 
     /**

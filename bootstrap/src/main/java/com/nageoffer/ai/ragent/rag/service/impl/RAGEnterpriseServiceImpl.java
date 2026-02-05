@@ -42,7 +42,7 @@ import com.nageoffer.ai.ragent.rag.service.RAGEnterpriseService;
 import com.nageoffer.ai.ragent.rag.core.guidance.GuidanceDecision;
 import com.nageoffer.ai.ragent.rag.core.guidance.IntentGuidanceService;
 import com.nageoffer.ai.ragent.rag.aop.ChatRateLimit;
-import com.nageoffer.ai.ragent.rag.service.handler.StreamChatEventHandler;
+import com.nageoffer.ai.ragent.rag.service.handler.StreamCallbackFactory;
 import com.nageoffer.ai.ragent.rag.service.handler.StreamTaskManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -70,9 +70,8 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
     private final PromptTemplateLoader promptTemplateLoader;
     private final ConversationMemoryService memoryService;
     private final StreamTaskManager taskManager;
-    private final AIModelProperties modelProperties;
-    private final ConversationGroupService conversationGroupService;
     private final IntentGuidanceService guidanceService;
+    private final StreamCallbackFactory callbackFactory;
     @Qualifier("multiQuestionRewriteService")
     private final QueryRewriteService queryRewriteService;
     private final IntentResolver intentResolver;
@@ -84,15 +83,9 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
         log.info("打印会话消息参数，会话ID：{}，单次消息ID：{}", conversationId, taskId);
-        StreamCallback callback = new StreamChatEventHandler(
-                emitter,
-                actualConversationId,
-                taskId,
-                modelProperties,
-                memoryService,
-                conversationGroupService,
-                taskManager
-        );
+
+        // 使用工厂创建 Callback
+        StreamCallback callback = callbackFactory.createChatEvent(emitter, actualConversationId, taskId);
 
         String userId = UserContext.getUserId();
         List<ChatMessage> history = memoryService.load(actualConversationId, userId);
@@ -121,7 +114,6 @@ public class RAGEnterpriseServiceImpl implements RAGEnterpriseService {
             String emptyReply = "未检索到与问题相关的文档内容。";
             callback.onContent(emptyReply);
             callback.onComplete();
-            taskManager.unregister(taskId);
             return;
         }
 

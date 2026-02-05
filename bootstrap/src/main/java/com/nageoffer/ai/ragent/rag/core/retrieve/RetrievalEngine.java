@@ -24,7 +24,6 @@ import com.nageoffer.ai.ragent.rag.dto.RetrievalContext;
 import com.nageoffer.ai.ragent.rag.dto.SubQuestionIntent;
 import com.nageoffer.ai.ragent.rag.enums.IntentKind;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
-import com.nageoffer.ai.ragent.infra.rerank.RerankService;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.core.mcp.MCPParameterExtractor;
@@ -50,9 +49,7 @@ import java.util.concurrent.Executor;
 
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.DEFAULT_TOP_K;
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.INTENT_MIN_SCORE;
-import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MIN_SEARCH_TOP_K;
-import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.RERANK_LIMIT_MULTIPLIER;
-import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.SEARCH_TOP_K_MULTIPLIER;
+import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.MULTI_CHANNEL_KEY;
 
 /**
  * 检索引擎
@@ -199,7 +196,7 @@ public class RetrievalEngine {
             }
         } else {
             // 如果没有意图识别结果，使用特殊 key
-            intentChunks.put("multi_channel", chunks);
+            intentChunks.put(MULTI_CHANNEL_KEY, chunks);
         }
 
         String groupedContext = contextFormatter.formatKbContext(kbIntents, intentChunks, topK);
