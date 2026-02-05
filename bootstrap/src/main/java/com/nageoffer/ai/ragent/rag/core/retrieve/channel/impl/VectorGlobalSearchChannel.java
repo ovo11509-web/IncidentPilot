@@ -77,14 +77,16 @@ public class VectorGlobalSearchChannel implements SearchChannel {
         }
 
         // 条件1：没有识别出任何意图
-        if (CollUtil.isEmpty(context.getIntents())) {
+        List<NodeScore> allScores = context.getIntents().stream()
+                .flatMap(si -> si.nodeScores().stream())
+                .toList();
+        if (CollUtil.isEmpty(allScores)) {
             log.info("未识别出任何意图，启用全局检索");
             return true;
         }
 
         // 条件2：意图置信度都很低
-        double maxScore = context.getIntents().stream()
-                .flatMap(si -> si.nodeScores().stream())
+        double maxScore = allScores.stream()
                 .mapToDouble(NodeScore::getScore)
                 .max()
                 .orElse(0.0);

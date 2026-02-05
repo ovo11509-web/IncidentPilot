@@ -61,12 +61,15 @@ public class MultiChannelRetrievalEngine {
      * @param topK       期望返回的结果数量
      * @return 检索到的 Chunk 列表
      */
-    public List<RetrievedChunk> retrieveKB(List<SubQuestionIntent> subIntents, int topK) {
+    public List<RetrievedChunk> retrieveKnowledgeChannels(List<SubQuestionIntent> subIntents, int topK) {
         // 构建检索上下文
         SearchContext context = buildSearchContext(subIntents, topK);
 
         // 【阶段1：多通道并行检索】
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
+        if (CollUtil.isEmpty(channelResults)) {
+            return List.of();
+        }
 
         // 【阶段2：后置处理器链】
         return executePostProcessors(channelResults, context);
@@ -83,7 +86,6 @@ public class MultiChannelRetrievalEngine {
                 .toList();
 
         if (enabledChannels.isEmpty()) {
-            log.warn("没有启用的检索通道");
             return List.of();
         }
 

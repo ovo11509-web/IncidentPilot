@@ -122,7 +122,7 @@ public class RetrievalEngine {
         List<NodeScore> kbIntents = filterKbIntents(intent.nodeScores());
         List<NodeScore> mcpIntents = filterMCPIntents(intent.nodeScores());
 
-        KbResult kbResult = retrieveAndRerank(intent.subQuestion(), kbIntents, topK);
+        KbResult kbResult = retrieveAndRerank(intent, kbIntents, topK);
 
         String mcpContext = CollUtil.isNotEmpty(mcpIntents)
                 ? executeMcpAndMerge(intent.subQuestion(), mcpIntents)
@@ -172,12 +172,10 @@ public class RetrievalEngine {
         return contextFormatter.formatMcpContext(responses, mcpIntents);
     }
 
-    private KbResult retrieveAndRerank(String question, List<NodeScore> kbIntents, int topK) {
-        // 使用多通道检索引擎（即使 kbIntents 为空也执行，因为有全局检索兜底）
-        List<SubQuestionIntent> subIntents = List.of(
-                new SubQuestionIntent(question, kbIntents != null ? kbIntents : List.of())
-        );
-        List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKB(subIntents, topK);
+    private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
+        // 使用多通道检索引擎（是否启用全局检索由置信度阈值决定）
+        List<SubQuestionIntent> subIntents = List.of(intent);
+        List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK);
 
         if (CollUtil.isEmpty(chunks)) {
             return KbResult.empty();
