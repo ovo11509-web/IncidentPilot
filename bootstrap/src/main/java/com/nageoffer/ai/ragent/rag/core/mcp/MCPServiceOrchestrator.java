@@ -91,7 +91,9 @@ public class MCPServiceOrchestrator implements MCPService {
             return List.of();
         }
 
-        log.info("MCP 工具批量执行开始, 共 {} 个工具", requests.size());
+        if (requests.size() > 1) {
+            log.info("MCP 工具批量执行开始, 共 {} 个工具", requests.size());
+        }
 
         // 并行执行所有请求
         List<CompletableFuture<MCPResponse>> futures = requests.stream()

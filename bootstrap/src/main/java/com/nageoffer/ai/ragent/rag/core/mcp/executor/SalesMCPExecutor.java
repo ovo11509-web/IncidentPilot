@@ -147,9 +147,6 @@ public class SalesMCPExecutor implements MCPToolExecutor {
         if (queryType == null || queryType.isBlank()) queryType = "summary";
         if (limit == null || limit <= 0) limit = 10;
 
-        log.info("销售数据查询开始, 地区: {}, 时间段: {}, 产品: {}, 销售人员: {}, 查询类型: {}",
-                region, period, product, salesPerson, queryType);
-
         // 生成或获取模拟数据
         List<SalesRecord> allData = getOrGenerateData(period);
 
@@ -319,7 +316,7 @@ public class SalesMCPExecutor implements MCPToolExecutor {
         } else {
             double total = byWeek.values().stream().mapToDouble(d -> d).sum();
             byWeek.entrySet().stream()
-                    .sorted(Comparator.comparing(Map.Entry::getKey))
+                    .sorted(Map.Entry.comparingByKey())
                     .forEach(e -> {
                         int bars = (int) (e.getValue() / total * 20);
                         sb.append(String.format("%s: ¥%.2f 万 %s\n",

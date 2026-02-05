@@ -96,7 +96,8 @@ public class LLMMCPParameterExtractor implements MCPParameterExtractor {
             // 填充默认值
             fillDefaults(extracted, tool);
 
-            log.info("MCP 参数提取完成, toolId: {}, 参数: {}", tool.getToolId(), extracted);
+            log.info("MCP 参数提取完成, toolId: {}, 使用自定义提示词: {}, 参数: {}",
+                    tool.getToolId(), StrUtil.isNotBlank(customPromptTemplate), extracted);
 
             return extracted;
         } catch (JsonSyntaxException e) {

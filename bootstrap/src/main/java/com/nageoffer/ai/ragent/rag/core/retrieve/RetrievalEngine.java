@@ -222,8 +222,6 @@ public class RetrievalEngine {
 
         String customParamPrompt = intentNode.getParamPromptTemplate();
         Map<String, Object> params = mcpParameterExtractor.extractParameters(question, tool, customParamPrompt);
-        log.info("MCP 参数提取 - toolId: {}, 使用自定义提示词: {}, params: {}",
-                toolId, StrUtil.isNotBlank(customParamPrompt), params);
 
         return MCPRequest.builder()
                 .toolId(toolId)
