@@ -45,9 +45,9 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           }
 
           return (
-            <div className="my-3 overflow-hidden rounded-lg border border-[#E5E5E5] bg-white shadow-sm dark:border-[#3A3A3A] dark:bg-[#1E1E1E]">
-              <div className="flex items-center justify-between border-b border-[#E5E5E5] bg-gradient-to-r from-[#F8F9FA] to-[#F5F5F5] px-3 py-1.5 dark:border-[#3A3A3A] dark:from-[#2A2A2A] dark:to-[#252525]">
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#666666] dark:text-[#AAAAAA]">
+            <div className="my-3 overflow-hidden rounded-md border border-[#d0d7de] bg-[#f6f8fa] dark:border-[#30363d] dark:bg-[#161b22]">
+              <div className="flex items-center justify-between border-b border-[#d0d7de] bg-[#f6f8fa] px-3 py-1.5 dark:border-[#30363d] dark:bg-[#161b22]">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#57606a] dark:text-[#8b949e]">
                   {language}
                 </span>
                 <CopyButton value={value} />
@@ -189,12 +189,12 @@ function CopyButton({ value }: { value: string }) {
       size="icon"
       onClick={handleCopy}
       aria-label="复制代码"
-      className="h-7 w-7 hover:bg-[#E5E5E5] dark:hover:bg-[#3A3A3A] transition-colors"
+      className="h-7 w-7 hover:bg-[#eaeef2] dark:hover:bg-[#30363d] transition-colors"
     >
       {copied ? (
         <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
       ) : (
-        <Copy className="h-3.5 w-3.5 text-[#666666] dark:text-[#AAAAAA]" />
+        <Copy className="h-3.5 w-3.5 text-[#57606a] dark:text-[#8b949e]" />
       )}
     </Button>
   );
