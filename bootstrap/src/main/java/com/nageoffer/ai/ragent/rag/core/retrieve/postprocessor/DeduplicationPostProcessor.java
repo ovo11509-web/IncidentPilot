@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.rag.core.retrieve.postprocessor.impl;
+package com.nageoffer.ai.ragent.rag.core.retrieve.postprocessor;
 
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
 import com.nageoffer.ai.ragent.rag.core.retrieve.channel.SearchChannelResult;
 import com.nageoffer.ai.ragent.rag.core.retrieve.channel.SearchChannelType;
 import com.nageoffer.ai.ragent.rag.core.retrieve.channel.SearchContext;
-import com.nageoffer.ai.ragent.rag.core.retrieve.postprocessor.SearchResultPostProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
