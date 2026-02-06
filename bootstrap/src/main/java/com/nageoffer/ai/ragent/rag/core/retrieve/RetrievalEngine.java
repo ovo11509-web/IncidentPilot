@@ -87,7 +87,10 @@ public class RetrievalEngine {
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
         List<CompletableFuture<SubQuestionContext>> tasks = subIntents.stream()
                 .map(si -> CompletableFuture.supplyAsync(
-                        () -> buildSubQuestionContext(si, finalTopK),
+                        () -> buildSubQuestionContext(
+                                si,
+                                resolveSubQuestionTopK(si, finalTopK)
+                        ),
                         ragContextExecutor
                 ))
                 .toList();
@@ -129,6 +132,22 @@ public class RetrievalEngine {
                 : "";
 
         return new SubQuestionContext(intent.subQuestion(), kbResult.groupedContext(), mcpContext, kbResult.intentChunks());
+    }
+
+    /**
+     * 子问题实际 TopK 计算规则：
+     * 1. 命中 KB 意图节点且配置了节点级 topK：取最大值（多意图保守放大）
+     * 2. 没有任何可用节点级 topK：回退到全局 topK
+     */
+    private int resolveSubQuestionTopK(SubQuestionIntent intent, int fallbackTopK) {
+        return filterKbIntents(intent.nodeScores()).stream()
+                .map(NodeScore::getNode)
+                .filter(Objects::nonNull)
+                .map(IntentNode::getTopK)
+                .filter(Objects::nonNull)
+                .filter(topK -> topK > 0)
+                .max(Integer::compareTo)
+                .orElse(fallbackTopK);
     }
 
     private void appendSection(StringBuilder builder, String question, String context) {

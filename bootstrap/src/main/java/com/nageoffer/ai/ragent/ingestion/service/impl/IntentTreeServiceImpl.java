@@ -133,6 +133,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
                 .examples(
                         requestParam.getExamples() == null ? null : GSON.toJson(requestParam.getExamples())
                 )
+                .topK(normalizeTopK(requestParam.getTopK()))
                 .kind(
                         requestParam.getKind() == null ? 0 : requestParam.getKind()
                 )
@@ -183,6 +184,9 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
         if (req.getCollectionName() != null) {
             node.setCollectionName(req.getCollectionName());
         }
+        if (req.getTopK() != null) {
+            node.setTopK(normalizeTopK(req.getTopK()));
+        }
         if (req.getKind() != null) {
             node.setKind(req.getKind());
         }
@@ -229,6 +233,7 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
                     .parentCode(node.getParentId())
                     .description(node.getDescription())
                     .examples(node.getExamples())
+                    .topK(normalizeTopK(node.getTopK()))
                     .kind(mapKind(node.getKind()))
                     .mcpToolId(node.getMcpToolId())
                     .sortOrder(sort++)
@@ -290,5 +295,20 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
                         .eq(IntentNodeDO::getIntentCode, intentCode)
                         .eq(IntentNodeDO::getDeleted, 0)
         ) > 0;
+    }
+
+    /**
+     * 规范化节点级 TopK：
+     * - null 表示未配置，回退全局默认
+     * - 仅允许正整数
+     */
+    private Integer normalizeTopK(Integer topK) {
+        if (topK == null) {
+            return null;
+        }
+        if (topK <= 0) {
+            throw new ClientException("节点级 TopK 必须大于 0");
+        }
+        return topK;
     }
 }

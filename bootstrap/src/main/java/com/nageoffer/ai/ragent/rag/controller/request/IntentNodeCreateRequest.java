@@ -41,6 +41,7 @@ public class IntentNodeCreateRequest {
     private String description;
     private List<String> examples;
     private String mcpToolId;
+    private Integer topK;
     private Integer kind;
     private Integer sortOrder;
     private Integer enabled;

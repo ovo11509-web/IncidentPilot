@@ -38,6 +38,7 @@ public class IntentNodeTreeVO {
     private String description;
     private String examples;
     private String collectionName;
+    private Integer topK;
     private Integer kind;
     private Integer sortOrder;
     private Integer enabled;

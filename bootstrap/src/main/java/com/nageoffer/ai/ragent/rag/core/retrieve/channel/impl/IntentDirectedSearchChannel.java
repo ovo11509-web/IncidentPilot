@@ -108,7 +108,8 @@ public class IntentDirectedSearchChannel implements SearchChannel {
             List<RetrievedChunk> allChunks = retrieveByIntents(
                     context.getMainQuestion(),
                     kbIntents,
-                    context.getTopK() * topKMultiplier
+                    context.getTopK(),
+                    topKMultiplier
             );
 
             // 计算置信度（基于意图分数）
@@ -165,13 +166,15 @@ public class IntentDirectedSearchChannel implements SearchChannel {
      */
     private List<RetrievedChunk> retrieveByIntents(String question,
                                                    List<NodeScore> kbIntents,
-                                                   int topK) {
+                                                   int fallbackTopK,
+                                                   int topKMultiplier) {
         // 创建带意图信息的 Future 列表
         record IntentFuture(NodeScore nodeScore, CompletableFuture<List<RetrievedChunk>> future) {
         }
 
         List<IntentFuture> intentFutures = kbIntents.stream()
                 .map(ns -> {
+                    int intentTopK = resolveIntentTopK(ns, fallbackTopK, topKMultiplier);
                     CompletableFuture<List<RetrievedChunk>> future = CompletableFuture.supplyAsync(() -> {
                         IntentNode node = ns.getNode();
                         try {
@@ -179,7 +182,7 @@ public class IntentDirectedSearchChannel implements SearchChannel {
                                     RetrieveRequest.builder()
                                             .collectionName(node.getCollectionName())
                                             .query(question)
-                                            .topK(topK)
+                                            .topK(intentTopK)
                                             .build()
                             );
                         } catch (Exception e) {
@@ -218,5 +221,32 @@ public class IntentDirectedSearchChannel implements SearchChannel {
                 kbIntents.size(), successCount, failureCount, allChunks.size());
 
         return allChunks;
+    }
+
+    /**
+     * 计算单个意图节点检索 TopK：
+     * - 优先节点级 topK（>0）
+     * - 否则回退全局 topK
+     * - 最后叠加通道倍率
+     * <p>
+     * 边界保护：确保最终结果至少为 1（防止配置异常导致检索失败）
+     */
+    private int resolveIntentTopK(NodeScore nodeScore, int fallbackTopK, int topKMultiplier) {
+        // 1. 确定基础 TopK
+        int baseTopK = fallbackTopK;
+        if (nodeScore != null && nodeScore.getNode() != null) {
+            Integer nodeTopK = nodeScore.getNode().getTopK();
+            if (nodeTopK != null && nodeTopK > 0) {
+                baseTopK = nodeTopK;
+            }
+        }
+
+        // 2. 应用通道倍率（防御性编程：倍率异常时保底为 1）
+        if (topKMultiplier <= 0) {
+            log.warn("意图定向通道倍率配置异常: {}, 使用基础 TopK: {}", topKMultiplier, baseTopK);
+            return baseTopK;
+        }
+
+        return baseTopK * topKMultiplier;
     }
 }

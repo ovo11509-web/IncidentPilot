@@ -86,6 +86,12 @@ public class IntentNodeDO {
     private String mcpToolId;
 
     /**
+     * 节点级检索 TopK（可选）
+     * 为空时使用全局默认 TopK
+     */
+    private Integer topK;
+
+    /**
      * 类型：0=KB(RAG)，1=SYSTEM，2=MCP
      */
     private Integer kind;

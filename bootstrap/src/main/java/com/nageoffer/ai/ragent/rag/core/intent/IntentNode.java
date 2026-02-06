@@ -103,6 +103,12 @@ public class IntentNode {
     private String mcpToolId;
 
     /**
+     * 节点级检索 TopK（可选）
+     * 未配置时回退到全局 TopK
+     */
+    private Integer topK;
+
+    /**
      * 短规则片段（可选）
      */
     private String promptSnippet;
@@ -148,5 +154,3 @@ public class IntentNode {
         return kind == IntentKind.SYSTEM;
     }
 }
-
-

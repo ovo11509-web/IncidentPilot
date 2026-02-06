@@ -82,6 +82,7 @@ const formSchema = z.object({
   collectionName: z.string().optional(),
   description: z.string().optional(),
   examplesText: z.string().optional(),
+  topK: z.number().int().positive("TopK 必须大于 0").optional(),
   sortOrder: z.number().int().optional(),
   enabled: z.boolean(),
   promptSnippet: z.string().optional(),
@@ -391,6 +392,10 @@ export function IntentTreePage() {
                         <span className="text-muted-foreground">Collection</span>
                         <span>{selectedNode.collectionName || "-"}</span>
                       </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">节点 TopK</span>
+                        <span>{selectedNode.topK ?? "默认（全局）"}</span>
+                      </div>
                     </div>
 
                     <div>
@@ -492,6 +497,7 @@ function IntentNodeDialog({
         collectionName: node.collectionName || "",
         description: node.description || "",
         examplesText: parseExamples(node.examples).join("\n"),
+        topK: node.topK ?? undefined,
         sortOrder: node.sortOrder ?? 0,
         enabled: node.enabled !== 0,
         promptSnippet: node.promptSnippet || "",
@@ -515,6 +521,7 @@ function IntentNodeDialog({
       collectionName: "",
       description: "",
       examplesText: "",
+      topK: undefined,
       sortOrder: 0,
       enabled: true,
       promptSnippet: "",
@@ -537,7 +544,8 @@ function IntentNodeDialog({
   const parentOptions = useMemo(() => {
     const filtered =
         mode === "edit" && node ? treeOptions.filter((item) => item.value !== node.intentCode) : treeOptions;
-    return [{ label: "ROOT", value: ROOT_PARENT, node: null, depth: 0 }].concat(filtered);
+    const rootOption: TreeOption = { label: "ROOT", value: ROOT_PARENT, node: null, depth: 0 };
+    return [rootOption, ...filtered];
   }, [mode, node, treeOptions]);
 
   const handleSubmit = async (values: FormValues) => {
@@ -578,6 +586,7 @@ function IntentNodeDialog({
           description: values.description?.trim() || undefined,
           examples: examples.length > 0 ? examples : undefined,
           kind: values.kind,
+          topK: values.topK ?? undefined,
           sortOrder: values.sortOrder ?? 0,
           enabled: values.enabled ? 1 : 0,
           mcpToolId: values.kind === 2 ? values.mcpToolId?.trim() || undefined : undefined,
@@ -596,6 +605,7 @@ function IntentNodeDialog({
           collectionName: values.kind === 0 ? values.collectionName?.trim() || undefined : undefined,
           mcpToolId: values.kind === 2 ? values.mcpToolId?.trim() || undefined : undefined,
           kind: values.kind,
+          topK: values.topK ?? undefined,
           sortOrder: values.sortOrder ?? 0,
           enabled: values.enabled ? 1 : 0,
           promptSnippet: values.promptSnippet?.trim() || undefined,
@@ -902,6 +912,29 @@ function IntentNodeDialog({
                   高级设置
                 </summary>
                 <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <FormField
+                      control={form.control}
+                      name="topK"
+                      render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>节点 TopK（可选）</FormLabel>
+                            <FormControl>
+                              <Input
+                                  type="number"
+                                  min={1}
+                                  placeholder="留空则使用全局 TopK"
+                                  value={field.value ?? ""}
+                                  onChange={(event) => {
+                                    const nextValue = event.target.value;
+                                    field.onChange(nextValue === "" ? undefined : Number(nextValue));
+                                  }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+
                   <FormField
                       control={form.control}
                       name="sortOrder"
