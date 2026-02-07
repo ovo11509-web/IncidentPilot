@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { getRagTraceRuns, type PageResult, type RagTraceRun } from "@/services/ragTraceService";
 import { getErrorMessage } from "@/utils/error";
 import { FilterBar } from "@/pages/admin/traces/components/FilterBar";
-import { PageHeader } from "@/pages/admin/traces/components/PageHeader";
 import { RunsTable } from "@/pages/admin/traces/components/RunsTable";
 import { StatCard, type StatCardTone } from "@/pages/admin/traces/components/StatCard";
 import {
@@ -163,12 +162,14 @@ export function RagTracePage() {
   return (
     <div className="admin-page trace-page trace-list-page">
       <div className="trace-list-shell">
-        <PageHeader
-          tag="RAG Observability"
-          title="链路追踪"
-          description="独立列表页聚焦运行检索，点击任意运行记录进入详情页分析慢节点与失败节点"
-          kpis={[]}
-        />
+        <div className="admin-page-header">
+          <div>
+            <h1 className="admin-page-title">链路追踪</h1>
+            <p className="admin-page-subtitle">
+              独立列表页聚焦运行检索，点击任意运行记录进入详情页分析慢节点与失败节点
+            </p>
+          </div>
+        </div>
 
         <section className="trace-list-stat-grid">
           {statCards.map((stat) => (
