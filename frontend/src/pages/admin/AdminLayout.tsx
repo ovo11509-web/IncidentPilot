@@ -42,7 +42,28 @@ import {
 } from "@/services/knowledgeService";
 import { Avatar } from "@/components/common/Avatar";
 
-const menuGroups = [
+type MenuChild = {
+  path: string;
+  label: string;
+  icon: any;
+  search?: string;
+};
+
+type MenuItem = {
+  id?: string;
+  path: string;
+  label: string;
+  icon: any;
+  search?: string;
+  children?: MenuChild[];
+};
+
+type MenuGroup = {
+  title: string;
+  items: MenuItem[];
+};
+
+const menuGroups: MenuGroup[] = [
   {
     title: "导航",
     items: [
@@ -52,9 +73,22 @@ const menuGroups = [
         icon: Database
       },
       {
+        id: "intent",
         path: "/admin/intent-tree",
-        label: "意图树配置",
-        icon: GitBranch
+        label: "意图管理",
+        icon: GitBranch,
+        children: [
+          {
+            path: "/admin/intent-tree",
+            label: "意图树配置",
+            icon: GitBranch
+          },
+          {
+            path: "/admin/intent-list",
+            label: "意图列表",
+            icon: ClipboardList
+          }
+        ]
       },
       {
         id: "ingestion",
@@ -103,6 +137,7 @@ const menuGroups = [
 const breadcrumbMap: Record<string, string> = {
   knowledge: "知识库管理",
   "intent-tree": "意图树配置",
+  "intent-list": "意图列表",
   ingestion: "数据通道",
   "sample-questions": "示例问题",
   settings: "系统设置",
@@ -122,7 +157,7 @@ export function AdminLayout() {
     confirmPassword: ""
   });
   const [starCount, setStarCount] = useState<number | null>(null);
-  const [openGroups, setOpenGroups] = useState({ ingestion: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ ingestion: true, intent: true });
   const [kbQuery, setKbQuery] = useState("");
   const [kbOptions, setKbOptions] = useState<KnowledgeBase[]>([]);
   const [docOptions, setDocOptions] = useState<KnowledgeDocumentSearchItem[]>([]);
@@ -205,10 +240,20 @@ export function AdminLayout() {
     if (segments[0] !== "admin") return items;
     const section = segments[1];
     if (section) {
-      items.push({
-        label: breadcrumbMap[section] || section,
-        to: `/admin/${section}`
-      });
+      if (section === "intent-tree" || section === "intent-list") {
+        items.push({
+          label: "意图管理",
+          to: "/admin/intent-tree"
+        });
+        items.push({
+          label: breadcrumbMap[section] || section
+        });
+      } else {
+        items.push({
+          label: breadcrumbMap[section] || section,
+          to: `/admin/${section}`
+        });
+      }
     }
 
     if (section === "ingestion") {
@@ -243,12 +288,16 @@ export function AdminLayout() {
     return `${text}k`;
   }, [starCount]);
   const isIngestionActive = location.pathname.startsWith("/admin/ingestion");
+  const isIntentActive =
+    location.pathname.startsWith("/admin/intent-tree") || location.pathname.startsWith("/admin/intent-list");
 
   useEffect(() => {
     setOpenGroups((prev) => ({
-      ingestion: prev.ingestion || isIngestionActive
+      ...prev,
+      ingestion: prev.ingestion || isIngestionActive,
+      intent: prev.intent || isIntentActive
     }));
-  }, [isIngestionActive]);
+  }, [isIngestionActive, isIntentActive]);
 
   const handlePasswordSubmit = async () => {
     if (!passwordForm.currentPassword || !passwordForm.newPassword) {
@@ -397,7 +446,7 @@ export function AdminLayout() {
                   }
 
                   const isGroupActive = item.children.some((child) => isLeafActive(child.path, child.search));
-                  const groupId = item.id as "ingestion";
+                  const groupId = item.id as string;
                   const isOpen = openGroups[groupId];
 
                   if (collapsed) {

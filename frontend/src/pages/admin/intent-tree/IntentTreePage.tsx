@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
+import { useSearchParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -159,6 +160,7 @@ const resolveKindBadge = (value?: number | null) => {
 };
 
 export function IntentTreePage() {
+  const [searchParams] = useSearchParams();
   const [tree, setTree] = useState<IntentNodeTree[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -169,6 +171,7 @@ export function IntentTreePage() {
   const [editingNode, setEditingNode] = useState<IntentNodeTree | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<IntentNodeTree | null>(null);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const focusIntentCode = searchParams.get("intentCode")?.trim() || null;
 
   const selectedNode = useMemo(() => findNodeByCode(tree, selectedCode), [tree, selectedCode]);
   const treeOptions = useMemo(() => buildTreeOptions(tree), [tree]);
@@ -179,6 +182,9 @@ export function IntentTreePage() {
       const data = await getIntentTree();
       setTree(data || []);
       setSelectedCode((prev) => {
+        if (focusIntentCode && findNodeByCode(data || [], focusIntentCode)) {
+          return focusIntentCode;
+        }
         if (prev && findNodeByCode(data || [], prev)) {
           return prev;
         }
@@ -205,6 +211,13 @@ export function IntentTreePage() {
     loadTree();
     loadKnowledgeBases();
   }, []);
+
+  useEffect(() => {
+    if (!focusIntentCode) return;
+    if (findNodeByCode(tree, focusIntentCode)) {
+      setSelectedCode(focusIntentCode);
+    }
+  }, [focusIntentCode, tree]);
 
   const handleRefresh = () => {
     loadTree();

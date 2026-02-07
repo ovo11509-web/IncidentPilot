@@ -70,3 +70,15 @@ export async function updateIntentNode(id: number | string, payload: IntentNodeU
 export async function deleteIntentNode(id: number | string) {
   await api.delete(`/intent-tree/${id}`);
 }
+
+export async function batchEnableIntentNodes(ids: number[]) {
+  await api.post("/intent-tree/batch/enable", { ids });
+}
+
+export async function batchDisableIntentNodes(ids: number[]) {
+  await api.post("/intent-tree/batch/disable", { ids });
+}
+
+export async function batchDeleteIntentNodes(ids: number[]) {
+  await api.post("/intent-tree/batch/delete", { ids });
+}

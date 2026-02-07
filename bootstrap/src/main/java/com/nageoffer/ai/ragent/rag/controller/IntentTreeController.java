@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.rag.controller;
 
+import com.nageoffer.ai.ragent.rag.controller.request.IntentNodeBatchRequest;
 import com.nageoffer.ai.ragent.rag.controller.request.IntentNodeCreateRequest;
 import com.nageoffer.ai.ragent.rag.controller.vo.IntentNodeTreeVO;
 import com.nageoffer.ai.ragent.rag.controller.request.IntentNodeUpdateRequest;
@@ -74,5 +75,29 @@ public class IntentTreeController {
     @DeleteMapping("/intent-tree/{id}")
     public void deleteNode(@PathVariable String id) {
         intentTreeService.deleteNode(id);
+    }
+
+    /**
+     * 批量启用节点
+     */
+    @PostMapping("/intent-tree/batch/enable")
+    public void batchEnable(@RequestBody IntentNodeBatchRequest requestParam) {
+        intentTreeService.batchEnableNodes(requestParam.getIds());
+    }
+
+    /**
+     * 批量停用节点
+     */
+    @PostMapping("/intent-tree/batch/disable")
+    public void batchDisable(@RequestBody IntentNodeBatchRequest requestParam) {
+        intentTreeService.batchDisableNodes(requestParam.getIds());
+    }
+
+    /**
+     * 批量删除节点
+     */
+    @PostMapping("/intent-tree/batch/delete")
+    public void batchDelete(@RequestBody IntentNodeBatchRequest requestParam) {
+        intentTreeService.batchDeleteNodes(requestParam.getIds());
     }
 }
