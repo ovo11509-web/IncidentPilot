@@ -184,7 +184,7 @@ ragent/
 ├── mcp-server     # MCP 扩展模块（当前偏预留/扩展位）
 ├── frontend       # React + Vite 管理台与聊天前端
 ├── docs           # 架构说明与示例文档
-└── resources      # 基础设施资源（如 Milvus compose）
+└── resources      # 基础设施资源（Milvus compose / database SQL 等）
 ```
 
 ### 2. 运行时拓扑（Runtime Topology）
@@ -277,7 +277,27 @@ export BAILIAN_API_KEY=xxx
 export SILICONFLOW_API_KEY=xxx
 ```
 
-### 4. 启动后端（Spring Boot）
+### 4. 初始化数据库（`resources/database`）
+
+仓库已内置数据库脚本：
+
+- `resources/database/schema_table.sql`：建库建表脚本
+- `resources/database/init_data.sql`：初始化数据（含默认管理员）
+
+推荐导入顺序：
+
+```bash
+mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS ragent DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci;"
+mysql -uroot -p ragent < resources/database/schema_table.sql
+mysql -uroot -p ragent < resources/database/init_data.sql
+```
+
+说明：
+
+- `schema_table.sql` 文件中包含 `CREATE DATABASE IF NOT EXISTS ragent`，这里额外执行一次是为了确保后续 `mysql ... ragent < ...` 不会因库不存在而失败
+- `init_data.sql` 当前包含默认管理员账号 `admin / admin`（仅用于本地开发）
+
+### 5. 启动后端（Spring Boot）
 
 ```bash
 ./mvnw -pl bootstrap spring-boot:run
@@ -290,7 +310,7 @@ export SILICONFLOW_API_KEY=xxx
 java -jar bootstrap/target/bootstrap-*.jar
 ```
 
-### 5. 启动前端（React + Vite）
+### 6. 启动前端（React + Vite）
 
 ```bash
 cd frontend
@@ -498,7 +518,8 @@ curl -X POST 'http://localhost:8080/api/ragent/rag/v3/stop' \
 
 ## 开发建议与注意事项
 
-- 当前仓库未内置建表 SQL，请按实体建表或导入已有库结构。
+- 已提供数据库脚本：`resources/database/schema_table.sql` 与 `resources/database/init_data.sql`。
+- `init_data.sql` 中的默认账号密码仅适合本地开发，请在非本地环境替换或禁用。
 - `mcp-server` 模块当前更偏扩展位，不是主运行链路入口。
 - 默认配置更偏本地开发，请在生产环境替换数据库密码、对象存储密钥、模型 API Key。
 - 向量维度需与 Embedding 模型配置保持一致（当前默认示例是 `4096`）。
