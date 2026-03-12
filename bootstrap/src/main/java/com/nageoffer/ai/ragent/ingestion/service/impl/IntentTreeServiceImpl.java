@@ -199,6 +199,15 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
         if (req.getEnabled() != null) {
             node.setEnabled(req.getEnabled());
         }
+        if (req.getPromptSnippet() != null) {
+            node.setPromptSnippet(req.getPromptSnippet());
+        }
+        if (req.getPromptTemplate() != null) {
+            node.setPromptTemplate(req.getPromptTemplate());
+        }
+        if (req.getParamPromptTemplate() != null) {
+            node.setParamPromptTemplate(req.getParamPromptTemplate());
+        }
         node.setUpdateBy(UserContext.getUsername());
         this.updateById(node);
 
