@@ -25,6 +25,16 @@
 
 **欢迎顺手点个 Star 支持一下呀 ⭐** 你的每一个 Star，都是我持续打磨这个项目的动力 💪
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=nageoffer%2Fragent&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=nageoffer/ragent&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=nageoffer/ragent&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=nageoffer/ragent&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ## 目录
 
 - [项目说明](#项目说明)
