@@ -53,7 +53,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.nageoffer.ai.ragent.rag.enums.IntentLevel.DOMAIN;
 
 @Service
 @RequiredArgsConstructor
@@ -114,10 +113,10 @@ public class IntentTreeServiceImpl extends ServiceImpl<IntentNodeMapper, IntentN
             throw new ClientException("意图标识已存在: " + requestParam.getIntentCode());
         }
 
-        if (Objects.equals(requestParam.getLevel(), DOMAIN.getCode())
+        if (Objects.equals(requestParam.getLevel(), IntentLevel.TOPIC.getCode())
                 && Objects.equals(requestParam.getKind(), IntentKind.KB.getCode())
                 && StrUtil.isBlank(requestParam.getKbId())) {
-            throw new ClientException("Domain类型的RAG检索意图识别时，必须指定目标知识库");
+            throw new ClientException("TOPIC级别的RAG检索节点必须指定目标知识库");
         }
 
         IntentNodeDO node = IntentNodeDO.builder()
