@@ -103,7 +103,12 @@ public class RedisStreamConsumerBootstrap implements SmartLifecycle {
                     .toArray(CompletableFuture[]::new);
 
             CompletableFuture.allOf(startupTasks).join();
-            log.info("Redis Stream 消费者异步启动完成，已注册: {}, 总数: {}", containers.size(), consumerDefinitions.size());
+            String topics = consumerDefinitions.stream()
+                    .map(MQConsumerDefinition::getTopic)
+                    .distinct()
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            log.info("Redis Stream 消费者启动完成，已注册 {} 个消费者，topics: [{}]", containers.size(), topics);
         } catch (Exception e) {
             log.error("Redis Stream 消费者异步启动异常", e);
         } finally {
@@ -172,7 +177,7 @@ public class RedisStreamConsumerBootstrap implements SmartLifecycle {
             }
 
             containers.add(container);
-            log.info("Redis Stream 消费者注册成功，bean: {}, topic: {}, consumerGroup: {}, consumerName: {}",
+            log.debug("Redis Stream 消费者注册成功，bean: {}, topic: {}, consumerGroup: {}, consumerName: {}",
                     definition.beanName(), topic, consumerGroup, consumerName);
         } catch (Exception e) {
             if (container != null) {
@@ -272,7 +277,7 @@ public class RedisStreamConsumerBootstrap implements SmartLifecycle {
     private void createConsumerGroupIfAbsent(String topic, String consumerGroup) {
         try {
             stringRedisTemplate.opsForStream().createGroup(topic, consumerGroup);
-            log.info("创建 consumer group 成功，topic: {}, group: {}", topic, consumerGroup);
+            log.debug("创建 consumer group 成功，topic: {}, group: {}", topic, consumerGroup);
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("BUSYGROUP")) {
                 log.debug("Consumer group 已存在，topic: {}, group: {}", topic, consumerGroup);
