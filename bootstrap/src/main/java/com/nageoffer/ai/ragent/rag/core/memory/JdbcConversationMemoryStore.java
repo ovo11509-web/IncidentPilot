@@ -36,15 +36,15 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class MySQLConversationMemoryStore implements ConversationMemoryStore {
+public class JdbcConversationMemoryStore implements ConversationMemoryStore {
 
     private final ConversationService conversationService;
     private final ConversationMessageService conversationMessageService;
     private final MemoryProperties memoryProperties;
 
-    public MySQLConversationMemoryStore(ConversationService conversationService,
-                                        ConversationMessageService conversationMessageService,
-                                        MemoryProperties memoryProperties) {
+    public JdbcConversationMemoryStore(ConversationService conversationService,
+                                       ConversationMessageService conversationMessageService,
+                                       MemoryProperties memoryProperties) {
         this.conversationService = conversationService;
         this.conversationMessageService = conversationMessageService;
         this.memoryProperties = memoryProperties;
@@ -95,7 +95,7 @@ public class MySQLConversationMemoryStore implements ConversationMemoryStore {
 
     @Override
     public void refreshCache(String conversationId, String userId) {
-        // MySQL 直读模式，无需刷新缓存
+        // JDBC 直读模式，无需刷新缓存
     }
 
     private ChatMessage toChatMessage(ConversationMessageVO record) {

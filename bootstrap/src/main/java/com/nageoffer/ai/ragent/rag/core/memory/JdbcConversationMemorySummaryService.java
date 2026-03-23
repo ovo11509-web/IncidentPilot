@@ -52,7 +52,7 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.CONVERSATION_SUMM
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class MySQLConversationMemorySummaryService implements ConversationMemorySummaryService {
+public class JdbcConversationMemorySummaryService implements ConversationMemorySummaryService {
 
     private static final String SUMMARY_PREFIX = "对话摘要：";
     private static final String SUMMARY_LOCK_PREFIX = "ragent:memory:summary:lock:";
