@@ -20,6 +20,7 @@ package com.nageoffer.ai.ragent.knowledge.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.lang.Assert;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -69,11 +70,13 @@ import com.nageoffer.ai.ragent.ingestion.dao.entity.IngestionPipelineDO;
 import com.nageoffer.ai.ragent.ingestion.dao.mapper.IngestionPipelineMapper;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.PipelineDefinition;
+import com.nageoffer.ai.ragent.knowledge.config.RagSemaphoreProperties;
 import com.nageoffer.ai.ragent.knowledge.mq.KnowledgeDocumentChunkProducer;
 import com.nageoffer.ai.ragent.knowledge.mq.event.KnowledgeDocumentChunkEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.redisson.api.RPermitExpirableSemaphore;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -91,7 +94,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -108,6 +111,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final EmbeddingService embeddingService;
     private final HttpClientHelper httpClientHelper;
     private final ObjectMapper objectMapper;
+    private final RedissonClient redissonClient;
+    private final RagSemaphoreProperties semaphoreProperties;
     private final KnowledgeDocumentScheduleService scheduleService;
     private final IngestionPipelineService ingestionPipelineService;
     private final IngestionPipelineMapper ingestionPipelineMapper;
@@ -115,7 +120,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeDocumentChunkLogMapper chunkLogMapper;
     private final PlatformTransactionManager transactionManager;
     private final KnowledgeDocumentChunkProducer chunkProducer;
-
 
     @Value("${kb.chunk.semantic.targetChars:1400}")
     private int targetChars;
@@ -129,7 +133,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private long scheduleMinIntervalSeconds;
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest request, MultipartFile file) {
         KnowledgeBaseDO kbDO = kbMapper.selectById(kbId);
         Assert.notNull(kbDO, () -> new ClientException("知识库不存在"));
@@ -164,54 +167,63 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             }
         }
 
-        StoredFileDTO stored = resolveStoredFile(kbDO.getCollectionName(), sourceType, sourceLocation, file);
+        RagSemaphoreProperties.PermitExpirableConfig semaphoreConfig = semaphoreProperties.getDocumentUpload();
+        RPermitExpirableSemaphore semaphore = redissonClient.getPermitExpirableSemaphore(
+                semaphoreConfig.getName()
+        );
+        String permitId = acquireUploadPermit(semaphore, semaphoreConfig);
+        try {
+            StoredFileDTO stored = resolveStoredFile(kbDO.getCollectionName(), sourceType, sourceLocation, file);
 
-        ProcessMode processMode = ProcessMode.normalize(request == null ? null : request.getProcessMode());
-        ChunkingMode chunkingMode = null;
-        String chunkConfig = null;
-        String pipelineId = null;
+            ProcessMode processMode = ProcessMode.normalize(request == null ? null : request.getProcessMode());
+            ChunkingMode chunkingMode = null;
+            String chunkConfig = null;
+            String pipelineId = null;
 
-        if (ProcessMode.CHUNK == processMode) {
-            // 分块模式：解析分块策略和配置
-            chunkingMode = resolveChunkingMode(request == null ? null : request.getChunkStrategy());
-            chunkConfig = buildChunkConfigJson(chunkingMode, request);
-        } else if (ProcessMode.PIPELINE == processMode) {
-            // Pipeline模式：验证Pipeline ID
-            if (request == null || !StringUtils.hasText(request.getPipelineId())) {
-                throw new ClientException("使用Pipeline模式时，必须指定Pipeline ID");
+            if (ProcessMode.CHUNK == processMode) {
+                // 分块模式：解析分块策略和配置
+                chunkingMode = resolveChunkingMode(request == null ? null : request.getChunkStrategy());
+                chunkConfig = buildChunkConfigJson(chunkingMode, request);
+            } else if (ProcessMode.PIPELINE == processMode) {
+                // Pipeline模式：验证Pipeline ID
+                if (request == null || !StringUtils.hasText(request.getPipelineId())) {
+                    throw new ClientException("使用Pipeline模式时，必须指定Pipeline ID");
+                }
+                pipelineId = request.getPipelineId();
+                // 验证Pipeline是否存在
+                try {
+                    ingestionPipelineService.get(request.getPipelineId());
+                } catch (Exception e) {
+                    throw new ClientException("指定的Pipeline不存在: " + request.getPipelineId());
+                }
             }
-            pipelineId = request.getPipelineId();
-            // 验证Pipeline是否存在
-            try {
-                ingestionPipelineService.get(request.getPipelineId());
-            } catch (Exception e) {
-                throw new ClientException("指定的Pipeline不存在: " + request.getPipelineId());
-            }
+
+            KnowledgeDocumentDO documentDO = KnowledgeDocumentDO.builder()
+                    .kbId(kbId)
+                    .docName(stored.getOriginalFilename())
+                    .enabled(1)
+                    .chunkCount(0)
+                    .fileUrl(stored.getUrl())
+                    .fileType(stored.getDetectedType())
+                    .fileSize(stored.getSize())
+                    .status(DocumentStatus.PENDING.getCode())
+                    .sourceType(sourceType.getValue())
+                    .sourceLocation(SourceType.URL == sourceType ? sourceLocation : null)
+                    .scheduleEnabled(scheduleEnabled ? 1 : 0)
+                    .scheduleCron(scheduleEnabled ? scheduleCron : null)
+                    .processMode(processMode.getValue())
+                    .chunkStrategy(chunkingMode != null ? chunkingMode.getValue() : null)
+                    .chunkConfig(chunkConfig)
+                    .pipelineId(pipelineId)
+                    .createdBy(UserContext.getUsername())
+                    .updatedBy(UserContext.getUsername())
+                    .build();
+            docMapper.insert(documentDO);
+
+            return BeanUtil.toBean(documentDO, KnowledgeDocumentVO.class);
+        } finally {
+            releaseUploadPermit(semaphore, permitId);
         }
-
-        KnowledgeDocumentDO documentDO = KnowledgeDocumentDO.builder()
-                .kbId(kbId)
-                .docName(stored.getOriginalFilename())
-                .enabled(1)
-                .chunkCount(0)
-                .fileUrl(stored.getUrl())
-                .fileType(stored.getDetectedType())
-                .fileSize(stored.getSize())
-                .status(DocumentStatus.PENDING.getCode())
-                .sourceType(sourceType.getValue())
-                .sourceLocation(SourceType.URL == sourceType ? sourceLocation : null)
-                .scheduleEnabled(scheduleEnabled ? 1 : 0)
-                .scheduleCron(scheduleEnabled ? scheduleCron : null)
-                .processMode(processMode.getValue())
-                .chunkStrategy(chunkingMode != null ? chunkingMode.getValue() : null)
-                .chunkConfig(chunkConfig)
-                .pipelineId(pipelineId)
-                .createdBy(UserContext.getUsername())
-                .updatedBy(UserContext.getUsername())
-                .build();
-        docMapper.insert(documentDO);
-
-        return BeanUtil.toBean(documentDO, KnowledgeDocumentVO.class);
     }
 
     @Override
@@ -648,10 +660,31 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         return embeddingService.embed(content, embeddingModel);
     }
 
-    private void patchStatus(KnowledgeDocumentDO doc) {
-        doc.setStatus(DocumentStatus.RUNNING.getCode());
-        doc.setUpdatedBy(UserContext.getUsername());
-        docMapper.updateById(doc);
+    private String acquireUploadPermit(RPermitExpirableSemaphore semaphore,
+                                       RagSemaphoreProperties.PermitExpirableConfig semaphoreConfig) {
+        try {
+            String permitId = semaphore.tryAcquire(
+                    semaphoreConfig.getMaxWaitSeconds(),
+                    semaphoreConfig.getLeaseSeconds(),
+                    TimeUnit.SECONDS
+            );
+            if (StrUtil.isBlank(permitId)) {
+                throw new ClientException("当前上传文件人数过多，请稍后再试");
+            }
+            return permitId;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new ServiceException("获取上传并发许可失败");
+        }
+    }
+
+    private void releaseUploadPermit(RPermitExpirableSemaphore semaphore, String permitId) {
+        if (StrUtil.isNotBlank(permitId)) {
+            boolean released = semaphore.tryRelease(permitId);
+            if (!released) {
+                log.warn("upload permit already expired or released, permitId={}", permitId);
+            }
+        }
     }
 
     private SourceType normalizeSourceType(String sourceType, MultipartFile file) {
