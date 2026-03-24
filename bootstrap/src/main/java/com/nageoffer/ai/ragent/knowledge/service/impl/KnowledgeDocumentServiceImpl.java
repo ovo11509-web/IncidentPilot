@@ -78,6 +78,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RPermitExpirableSemaphore;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.unit.DataSize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -86,7 +87,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
@@ -131,6 +135,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private int overlapChars;
     @Value("${rag.knowledge.schedule.min-interval-seconds:60}")
     private long scheduleMinIntervalSeconds;
+    @Value("${spring.servlet.multipart.max-file-size:50MB}")
+    private DataSize maxUploadFileSize;
 
     @Override
     public KnowledgeDocumentVO upload(String kbId, KnowledgeDocumentUploadRequest request, MultipartFile file) {
@@ -704,9 +710,87 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             return fileStorageService.upload(bucketName, file);
         }
 
-        HttpClientHelper.HttpFetchResponse response = httpClientHelper.get(sourceLocation, Map.of());
-        String fileName = StringUtils.hasText(response.fileName()) ? response.fileName() : "remote-file";
-        return fileStorageService.upload(bucketName, response.body(), fileName, response.contentType());
+        return resolveRemoteStoredFile(bucketName, sourceLocation);
+    }
+
+    private StoredFileDTO resolveRemoteStoredFile(String bucketName, String sourceLocation) {
+        long maxBytes = maxUploadFileSize.toBytes();
+        HttpClientHelper.HttpHeadResponse headResponse = null;
+        try {
+            headResponse = httpClientHelper.head(sourceLocation, Map.of());
+        } catch (Exception e) {
+            log.debug("HEAD 获取失败，改为直接流式下载: {}", sourceLocation, e);
+        }
+        Long headContentLength = headResponse == null ? null : headResponse.contentLength();
+        if (maxBytes > 0 && headContentLength != null && headContentLength > maxBytes) {
+            throw new ClientException("远程文件大小超过限制: " + maxBytes + " bytes");
+        }
+
+        try (HttpClientHelper.HttpFetchStream response = httpClientHelper.openStream(sourceLocation, Map.of(), maxBytes)) {
+            Long contentLength = response.contentLength() != null ? response.contentLength() : headContentLength;
+            String fileName = resolveRemoteFileName(response.fileName(), headResponse == null ? null : headResponse.fileName());
+            String contentType = StringUtils.hasText(response.contentType())
+                    ? response.contentType()
+                    : (headResponse == null ? null : headResponse.contentType());
+            if (contentLength != null) {
+                if (contentLength == 0) {
+                    throw new ClientException("远程文件内容为空");
+                }
+                return fileStorageService.upload(bucketName, response.bodyStream(), contentLength, fileName, contentType);
+            }
+            return uploadRemoteStreamWithTempFile(bucketName, response.bodyStream(), fileName, contentType, maxBytes);
+        }
+    }
+
+    private StoredFileDTO uploadRemoteStreamWithTempFile(String bucketName, InputStream remoteStream, String fileName,
+                                                         String contentType, long maxBytes) {
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile("knowledge-upload-", ".tmp");
+            long size = copyToTempFile(remoteStream, tempFile, maxBytes);
+            if (size == 0) {
+                throw new ClientException("远程文件内容为空");
+            }
+            try (InputStream tempInputStream = Files.newInputStream(tempFile)) {
+                return fileStorageService.upload(bucketName, tempInputStream, size, fileName, contentType);
+            }
+        } catch (IOException e) {
+            throw new ServiceException("远程文件上传失败: " + e.getMessage());
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException e) {
+                    log.warn("删除远程上传临时文件失败: {}", tempFile, e);
+                }
+            }
+        }
+    }
+
+    private long copyToTempFile(InputStream inputStream, Path tempFile, long maxBytes) throws IOException {
+        long total = 0;
+        try (var outputStream = Files.newOutputStream(tempFile)) {
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = inputStream.read(buffer)) != -1) {
+                total += len;
+                if (maxBytes > 0 && total > maxBytes) {
+                    throw new ClientException("远程文件大小超过限制: " + maxBytes + " bytes");
+                }
+                outputStream.write(buffer, 0, len);
+            }
+            return total;
+        }
+    }
+
+    private String resolveRemoteFileName(String responseFileName, String headFileName) {
+        if (StringUtils.hasText(responseFileName)) {
+            return responseFileName;
+        }
+        if (StringUtils.hasText(headFileName)) {
+            return headFileName;
+        }
+        return "remote-file";
     }
 
     private ChunkingMode resolveChunkingMode(String mode) {

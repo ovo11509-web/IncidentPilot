@@ -61,10 +61,19 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
     }
 
     @Override
+    public StoredFileDTO upload(String bucketName, InputStream content, long size, String originalFilename, String contentType) {
+        Assert.notBlank(bucketName, "bucketName 不能为空");
+        Assert.notNull(content, "上传内容不能为空");
+        Assert.isTrue(size >= 0, "上传内容大小不能小于 0");
+        String detected = detectContentType(originalFilename, contentType);
+        return uploadInternal(bucketName, content, size, originalFilename, detected);
+    }
+
+    @Override
     public StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType) {
         Assert.notBlank(bucketName, "bucketName 不能为空");
         Assert.notNull(content, "上传内容不能为空");
-        String detected = contentType;
+        String detected = detectContentType(originalFilename, contentType);
         if (detected == null || detected.isBlank()) {
             detected = TIKA.detect(content, originalFilename);
         }
@@ -152,6 +161,16 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
             return "";
         }
         return filename.substring(idx + 1).trim();
+    }
+
+    private String detectContentType(String originalFilename, String contentType) {
+        if (contentType != null && !contentType.isBlank()) {
+            return contentType;
+        }
+        if (originalFilename != null && !originalFilename.isBlank()) {
+            return TIKA.detect(originalFilename);
+        }
+        return null;
     }
 
 }

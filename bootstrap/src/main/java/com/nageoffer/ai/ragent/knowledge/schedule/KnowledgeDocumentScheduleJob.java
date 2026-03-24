@@ -47,6 +47,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
+import org.springframework.util.unit.DataSize;
 
 import java.net.InetAddress;
 import java.security.MessageDigest;
@@ -96,8 +97,8 @@ public class KnowledgeDocumentScheduleJob {
     private long lockSeconds;
     @Value("${rag.knowledge.schedule.batch-size:20}")
     private int batchSize;
-    @Value("${rag.knowledge.schedule.max-file-size-bytes:104857600}")
-    private long maxFileSizeBytes;
+    @Value("${spring.servlet.multipart.max-file-size:50MB}")
+    private DataSize maxFileSize;
 
     private final String instanceId = resolveInstanceId();
 
@@ -262,6 +263,7 @@ public class KnowledgeDocumentScheduleJob {
     }
 
     private RemoteFetchResult fetchRemoteIfChanged(KnowledgeDocumentDO document, KnowledgeDocumentScheduleDO schedule) {
+        long maxFileSizeBytes = maxFileSize.toBytes();
         String url = document.getSourceLocation();
         if (!StringUtils.hasText(url)) {
             throw new ClientException("文档来源地址为空");
