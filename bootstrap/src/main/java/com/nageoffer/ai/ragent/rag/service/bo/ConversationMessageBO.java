@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.rag.service.bo;
 
+import com.nageoffer.ai.ragent.framework.convention.GroundingChunk;
 import com.nageoffer.ai.ragent.framework.convention.SourceRef;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -68,4 +69,9 @@ public class ConversationMessageBO {
      * 回答来源，文档级来源列表（仅 assistant 消息可能有）
      */
     private List<SourceRef> sources;
+
+    /**
+     * 推荐问题 grounding 片段（仅 assistant 消息可能有，供推荐追问生成 grounding）
+     */
+    private List<GroundingChunk> retrievedChunks;
 }
