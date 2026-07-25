@@ -1,4 +1,4 @@
--- v1.1.0-004 业务数据变更审计日志升级
+-- v1.1.0 260709 业务数据变更审计日志升级
 -- 新增业务数据变更审计日志表
 
 CREATE TABLE IF NOT EXISTS t_biz_change_log (

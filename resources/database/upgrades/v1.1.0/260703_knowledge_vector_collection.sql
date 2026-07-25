@@ -1,4 +1,4 @@
--- v1.1.0-003 知识向量 Collection 字段升级
+-- v1.1.0 260703 知识向量 Collection 字段升级
 -- t_knowledge_vector 表：新增知识库 Collection 字段
 
 ALTER TABLE t_knowledge_vector

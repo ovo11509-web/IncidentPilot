@@ -1,4 +1,4 @@
--- v1.1.0-007 意图多 Collection 绑定升级
+-- v1.1.0 260725 意图多 Collection 绑定升级
 -- 一个知识库意图支持关联多个 Collection；旧的单 Collection 配置自动迁移为单元素数组
 
 ALTER TABLE t_intent_node
