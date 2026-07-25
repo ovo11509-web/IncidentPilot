@@ -1,4 +1,4 @@
--- ragent v1.6 -> v1.7 升级脚本
+-- v1.1.0-007 意图多 Collection 绑定升级
 -- 一个知识库意图支持关联多个 Collection；旧的单 Collection 配置自动迁移为单元素数组
 
 ALTER TABLE t_intent_node
@@ -10,4 +10,5 @@ WHERE collection_name IS NOT NULL
   AND btrim(collection_name) <> ''
   AND collection_names = '[]'::jsonb;
 
-COMMENT ON COLUMN t_intent_node.collection_names IS '关联的Collection名称列表；同一意图共享一个TopK总预算';
+COMMENT ON COLUMN t_intent_node.collection_name IS '兼容旧版本，后续删除';
+COMMENT ON COLUMN t_intent_node.collection_names IS '知识库Collection集合';
