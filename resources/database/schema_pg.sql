@@ -656,8 +656,8 @@ COMMENT ON COLUMN t_intent_node.level IS '层级 0：DOMAIN 1：CATEGORY 2：TOP
 COMMENT ON COLUMN t_intent_node.parent_code IS '父节点标识';
 COMMENT ON COLUMN t_intent_node.description IS '语义描述';
 COMMENT ON COLUMN t_intent_node.examples IS '示例问题';
-COMMENT ON COLUMN t_intent_node.collection_name IS '关联的Collection名称';
-COMMENT ON COLUMN t_intent_node.collection_names IS '关联的Collection名称列表；同一意图共享一个TopK总预算';
+COMMENT ON COLUMN t_intent_node.collection_name IS '兼容旧版本，后续删除';
+COMMENT ON COLUMN t_intent_node.collection_names IS '知识库Collection集合';
 COMMENT ON COLUMN t_intent_node.top_k IS '知识库检索TopK';
 COMMENT ON COLUMN t_intent_node.mcp_tool_id IS 'MCP工具ID';
 COMMENT ON COLUMN t_intent_node.kind IS '类型 0：RAG知识库类 1：SYSTEM系统交互类';
