@@ -291,6 +291,13 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
             node.setParentId(each.getParentCode());
             node.setMcpToolId(each.getMcpToolId());
             node.setParamPromptTemplate(each.getParamPromptTemplate());
+            if (CollUtil.isEmpty(each.getCollectionNames())) {
+                node.setCollectionNames(
+                        each.getCollectionName() == null || each.getCollectionName().isBlank()
+                                ? List.of()
+                                : List.of(each.getCollectionName())
+                );
+            }
             // 确保 children 不为 null（避免后面 add NPE）
             if (node.getChildren() == null) {
                 node.setChildren(new ArrayList<>());
