@@ -64,7 +64,7 @@ public final class IdempotentSubmitAspect {
                     })
             .create();
 
-    @Value("${app.eval.enabled:false}")
+    @Value("${ragent.eval.enabled:false}")
     private boolean evalEnabled;
 
     /**
