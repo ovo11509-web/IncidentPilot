@@ -47,6 +47,8 @@ Docker Compose 默认把首个 Compose 文件所在目录作为项目目录，�
 | Neo4j Browser | 浏览器打开 http://localhost:7474 （账号密码见 `.env` 的 `NEO4J_USERNAME` / `NEO4J_PASSWORD`） |
 | 写入连通 | `curl -X POST http://localhost:9621/documents/text -H 'Content-Type: application/json' -d '{"text":"张三是某公司CEO，公司总部在杭州。","file_source":"smoke_test"}'`，稍候在 Neo4j Browser 执行 `MATCH (n) RETURN n LIMIT 25` 可见抽取出的实体与关系 |
 
+> 清空图数据：`curl -X DELETE http://localhost:9621/documents`
+
 ## 对接后端
 
 栈就绪后，在后端 `application.yaml` 打开图谱通道并重启：
