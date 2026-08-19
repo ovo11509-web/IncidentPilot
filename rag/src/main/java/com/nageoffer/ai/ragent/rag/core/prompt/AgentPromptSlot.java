@@ -53,6 +53,11 @@ public enum AgentPromptSlot {
             "WorkFlow 模式不经过 ReAct 架构",
             Set.of()),
 
+    KNOWLEDGE_TOOL_DESCRIPTION("知识库工具描述", Group.AGENT,
+            Set.of(OrchestrationMode.AGENT),
+            "WorkFlow 模式不注册原生知识库工具",
+            Set.of()),
+
     /**
      * 两种架构共用：WorkFlow 下由主链路合成，Agent 下由 RAG Tool 内部合成
      */
