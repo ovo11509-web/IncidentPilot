@@ -20,11 +20,14 @@ package com.nageoffer.ai.ragent.rag.service;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.rag.core.guidance.GuidanceDecision;
+import com.nageoffer.ai.ragent.rag.core.guidance.IntentGuidanceService;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentResolver;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScoreFilters;
 import com.nageoffer.ai.ragent.rag.core.prompt.PromptContext;
 import com.nageoffer.ai.ragent.rag.core.prompt.RAGPromptService;
 import com.nageoffer.ai.ragent.rag.core.retrieval.RetrievalEngine;
+import com.nageoffer.ai.ragent.rag.core.retrieval.channel.RetrievalScopeResolver;
 import com.nageoffer.ai.ragent.rag.core.rewrite.QueryRewriteService;
 import com.nageoffer.ai.ragent.rag.core.rewrite.RewriteResult;
 import com.nageoffer.ai.ragent.rag.core.source.CitationContextEnricher;
@@ -39,7 +42,7 @@ import java.util.List;
 
 /**
  * 知识检索门面：Agent 模式下 rag 对外的唯一检索窄口
- * 改写 -> 意图解析（内置 KB-only 过滤）-> 多通道检索 -> KB_ANSWER 合成，返回可直接引用的答案文本
+ * 改写 -> 意图解析（内置 KB-only 过滤）-> 歧义引导 -> 多通道检索 -> KB_ANSWER 合成，返回可直接引用的答案文本
  * 引用/来源装配定死不走，与 rag.citation.enabled 无关
  * 近期轮次只喂给改写做指代消解，合成阶段不带历史：工具结论只依据本次证据
  */
@@ -52,6 +55,7 @@ public class KnowledgeSearchFacade {
 
     private final QueryRewriteService queryRewriteService;
     private final IntentResolver intentResolver;
+    private final IntentGuidanceService guidanceService;
     private final RetrievalEngine retrievalEngine;
     private final CitationContextEnricher citationContextEnricher;
     private final RAGPromptService promptService;
@@ -65,6 +69,14 @@ public class KnowledgeSearchFacade {
     public String search(String query, List<ChatMessage> recentHistory) {
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(query, recentHistory);
         List<SubQuestionIntent> subIntents = filterKbOnly(intentResolver.resolve(rewriteResult));
+
+        GuidanceDecision guidance = guidanceService.detectAmbiguity(
+                rewriteResult.rewrittenQuestion(), subIntents);
+        if (guidance.isPrompt()) {
+            log.info("Agent 知识库检索命中歧义引导，跳过检索与答案合成, question={}",
+                    rewriteResult.rewrittenQuestion());
+            return guidance.getPrompt();
+        }
 
         RetrievalContext retrievalCtx = retrievalEngine.retrieve(subIntents);
         if (!retrievalCtx.hasKb()) {
@@ -93,9 +105,9 @@ public class KnowledgeSearchFacade {
     }
 
     /**
-     * 只保留 KB 意图：SYSTEM/MCP 类问题由主 Agent 的原生工具路由承担，防止双层打架
+     * 只保留 KB 意图：MCP 走原生工具，SYSTEM 由主 Agent 人设直接承担
      * <p>
-     * 剩零意图的子问题照样往下走，不在此拦截：作用域判定只有 {@link com.nageoffer.ai.ragent.rag.core.retrieval.channel.RetrievalScopeResolver}
+     * 剩零意图的子问题照样往下走，不在此拦截：作用域判定只有 {@link RetrievalScopeResolver}
      * 一份，零意图在那里回落全局检索。拦在这里等于把工具调用否决两次——主 Agent 已判过一次「该查知识库」
      */
     private List<SubQuestionIntent> filterKbOnly(List<SubQuestionIntent> subIntents) {

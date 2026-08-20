@@ -20,6 +20,8 @@ package com.nageoffer.ai.ragent.rag.service;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.infra.chat.LLMService;
 import com.nageoffer.ai.ragent.rag.config.RAGConfigProperties;
+import com.nageoffer.ai.ragent.rag.core.guidance.GuidanceDecision;
+import com.nageoffer.ai.ragent.rag.core.guidance.IntentGuidanceService;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentResolver;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
@@ -45,6 +47,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +65,7 @@ class KnowledgeSearchFacadeTest {
 
     private final QueryRewriteService queryRewriteService = mock(QueryRewriteService.class);
     private final IntentResolver intentResolver = mock(IntentResolver.class);
+    private final IntentGuidanceService guidanceService = mock(IntentGuidanceService.class);
     private final RetrievalEngine retrievalEngine = mock(RetrievalEngine.class);
     private final RAGPromptService promptService = mock(RAGPromptService.class);
     private final LLMService llmService = mock(LLMService.class);
@@ -142,10 +146,40 @@ class KnowledgeSearchFacadeTest {
                 "零意图子问题不得在门面被丢弃");
     }
 
+    @Test
+    void returnsGuidanceWithoutRetrievalOrAnswerSynthesisWhenQuestionIsAmbiguous() {
+        KnowledgeSearchFacade facade = facade(false);
+        NodeScore oaSecurity = NodeScore.builder()
+                .node(IntentNode.builder().id("oa-security").name("数据安全").build())
+                .score(0.62D)
+                .build();
+        NodeScore insuranceSecurity = NodeScore.builder()
+                .node(IntentNode.builder().id("insurance-security").name("数据安全").build())
+                .score(0.60D)
+                .build();
+        List<SubQuestionIntent> subIntents = List.of(
+                new SubQuestionIntent(QUESTION, List.of(oaSecurity, insuranceSecurity)));
+        String prompt = "关于数据安全，请选择 OA 系统或保险系统";
+        when(queryRewriteService.rewriteWithSplit(anyString(), anyList()))
+                .thenReturn(new RewriteResult(QUESTION, List.of(QUESTION)));
+        when(intentResolver.resolve(any(RewriteResult.class))).thenReturn(subIntents);
+        when(guidanceService.detectAmbiguity(QUESTION, subIntents))
+                .thenReturn(GuidanceDecision.prompt(prompt));
+
+        String result = facade.search(QUESTION, List.of());
+
+        assertEquals(prompt, result);
+        verify(retrievalEngine, never()).retrieve(anyList());
+        verify(promptService, never()).buildStructuredMessages(
+                any(PromptContext.class), anyList(), anyString(), anyList(), anyBoolean());
+        verify(llmService, never()).chat(any());
+    }
+
     private KnowledgeSearchFacade facade(boolean citationEnabled) {
         RAGConfigProperties properties = new RAGConfigProperties();
         properties.setCitationEnabled(citationEnabled);
-        return new KnowledgeSearchFacade(queryRewriteService, intentResolver, retrievalEngine,
+        when(guidanceService.detectAmbiguity(anyString(), anyList())).thenReturn(GuidanceDecision.none());
+        return new KnowledgeSearchFacade(queryRewriteService, intentResolver, guidanceService, retrievalEngine,
                 new CitationContextEnricher(properties), promptService, llmService);
     }
 
