@@ -199,6 +199,7 @@ ai:
       endpoints:
         chat: /compatible-mode/v1/chat/completions
         rerank: /api/v1/services/rerank/text-rerank/text-rerank
+        embedding: /compatible-mode/v1/embeddings
     aihubmix:
       url: https://aihubmix.com
       api-key: ${AIHUBMIX_API_KEY:}
@@ -260,8 +261,8 @@ ai:
     default-model: qwen-emb-8b
     candidates:
       - id: qwen-emb-8b
-        provider: siliconflow
-        model: Qwen/Qwen3-Embedding-8B
+        provider: bailian
+        model: text-embedding-v4
         dimension: ${rag.default.dimension}
         priority: 1
       - id: qwen-emb-local
