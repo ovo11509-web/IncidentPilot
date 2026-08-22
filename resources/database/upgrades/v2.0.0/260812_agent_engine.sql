@@ -127,7 +127,7 @@ VALUES ('2001523723396309017', '2001523723396309001', 'AGENT_MAIN', $prompt$# �
 - 跟随用户提问所用的语言，默认简体中文；你自己撰写的部分先给结论再展开，保持简洁
 $prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0) ON CONFLICT DO NOTHING;
 
--- 4. 内置智能体补原生知识库工具描述（可重复执行）
+-- 4. 内置智能体补知识库工具声明（可重复执行）
 -- 内置智能体是所有空槽位的回落终点，故此处不写死具体知识范围；某个智能体的库有明确主题时，在控制台该智能体的本槽位追加一行「本知识库覆盖范围：...」
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309018', '2001523723396309001', 'KNOWLEDGE_TOOL_DESCRIPTION', $prompt$检索本助手配置的知识库，返回一份已基于命中资料合成的完整答案。

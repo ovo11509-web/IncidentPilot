@@ -81,7 +81,7 @@ public class AgentToolCatalog {
 
     /**
      * 意图树已配置且 MCP 注册表当前可用的工具数，meta 探活据此报告 MCP 配置状态
-     * 不走整份解析：探活不该被知识库工具描述缺失连坐
+     * 不走整份解析：探活不该被知识库工具声明缺失连坐
      */
     public int mcpToolCount() {
         return resolveMcpToolBindings(new ArrayList<>()).size();

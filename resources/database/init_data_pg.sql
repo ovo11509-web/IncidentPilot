@@ -11,7 +11,7 @@ VALUES (2001523723396308993, 'admin', 'admin', 'admin', 'https://static.deepseek
 INSERT INTO t_agent_profile (id, name, description, avatar, builtin, active, create_time, update_time, deleted)
 VALUES ('2001523723396309001', '默认助手', '系统默认人设，其他智能体没自定义的提示词都沿用这里的内容', 'orbit-indigo', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- 闲聊 / 关于助手
+-- 闲聊应答
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309011', '2001523723396309001', 'SYSTEM_CHAT', $prompt$# 角色定义
 你是企业内部知识助手 Ragent AI。当前系统已经集成人事、行政、IT 支持、业务系统说明和中间件环境等知识库。
@@ -90,7 +90,7 @@ IT 支持：VPN、企业邮箱、打印机连接、常见网络/账号问题等
 现在，请根据上述规则处理用户消息。
 $prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- Agent 原生知识库工具描述
+-- 知识库工具声明（Agent 原生工具）
 -- 内置智能体是所有空槽位的回落终点，故此处不写死具体知识范围；某个智能体的库有明确主题时，在控制台该智能体的本槽位追加一行「本知识库覆盖范围：...」
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309018', '2001523723396309001', 'KNOWLEDGE_TOOL_DESCRIPTION', $prompt$检索本助手配置的知识库，返回一份已基于命中资料合成的完整答案。
@@ -103,7 +103,7 @@ VALUES ('2001523723396309018', '2001523723396309001', 'KNOWLEDGE_TOOL_DESCRIPTIO
 
 返回值：面向用户的成品答案，可能含 Markdown 图片、链接与 HTML 表格；未检索到相关内容时会明确说明这一点。$prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- MCP 问答
+-- MCP 数据应答
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309012', '2001523723396309001', 'MCP_ANSWER', $prompt$# 角色与目标
 
@@ -371,7 +371,7 @@ VALUES ('2001523723396309012', '2001523723396309001', 'MCP_ANSWER', $prompt$# �
 - 默认不输出原始技术字段名，除非字段无法可靠转译或用户明确要求。
 $prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- 混合问答
+-- 混合来源应答
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309013', '2001523723396309001', 'MIXED_ANSWER', $prompt$# 角色与目标
 
@@ -631,7 +631,7 @@ VALUES ('2001523723396309013', '2001523723396309001', 'MIXED_ANSWER', $prompt$# 
 </table>
 $prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- 知识库问答（WorkFlow 与 Agent 模式均生效）
+-- 知识库应答（WorkFlow 与 Agent 模式均生效）
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309014', '2001523723396309001', 'KB_ANSWER', $prompt$# 角色与目标
 
@@ -859,7 +859,7 @@ VALUES ('2001523723396309014', '2001523723396309001', 'KB_ANSWER', $prompt$# 角
 </table>
 $prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- 会话压缩
+-- 历史对话摘要
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309015', '2001523723396309001', 'CONVERSATION_SUMMARY', $prompt$# 角色
 你是会话记忆摘要器，负责将多轮对话浓缩为**话题导向的摘要**，用于帮助问答助手理解上下文。
@@ -952,7 +952,7 @@ VALUES ('2001523723396309015', '2001523723396309001', 'CONVERSATION_SUMMARY', $p
 用户咨询了校园招聘流程（已解答）、社会招聘流程（已解答）、两者对比差异（已解答）。关键词：校招, 社招, 招聘流程
 $prompt$, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
--- 推荐问题
+-- 追问推荐
 INSERT INTO t_agent_prompt (id, agent_id, slot_key, content, create_time, update_time, deleted)
 VALUES ('2001523723396309016', '2001523723396309001', 'RECOMMENDED_QUESTIONS', $prompt$# 角色
 你是推荐追问生成器，负责在一轮问答结束后，猜测用户可能想接着问的问题。
