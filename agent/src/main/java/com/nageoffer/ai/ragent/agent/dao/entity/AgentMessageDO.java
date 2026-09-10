@@ -81,6 +81,12 @@ public class AgentMessageDO {
      */
     private String messageStatus;
 
+    /**
+     * 本轮 run 的服务端耗时，assistant 才有，旧数据为 null
+     * 替代 user/assistant createTime 差值：那个差值含排队且量不到确认续跑
+     */
+    private Long durationMs;
+
     @TableField(fill = FieldFill.INSERT)
     private Date createTime;
 

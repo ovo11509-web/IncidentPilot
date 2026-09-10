@@ -19,6 +19,7 @@ package com.nageoffer.ai.ragent.agent.tool;
 
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.agent.service.AgentConversationService;
+import com.nageoffer.ai.ragent.agent.trace.AgentToolBodyTracer;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.rag.service.KnowledgeSearchFacade;
 import io.agentscope.core.agent.RuntimeContext;
@@ -86,8 +87,8 @@ public class KnowledgeSearchTool implements AgentTool {
 
     @Override
     public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
-        return Mono.fromCallable(() -> execute(param))
-                .subscribeOn(Schedulers.boundedElastic());
+        return AgentToolBodyTracer.trace(this, param, () -> Mono.fromCallable(() -> execute(param))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     private ToolResultBlock execute(ToolCallParam param) {

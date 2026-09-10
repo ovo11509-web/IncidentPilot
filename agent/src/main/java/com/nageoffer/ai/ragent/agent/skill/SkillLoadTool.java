@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.agent.skill;
 
 import cn.hutool.core.util.StrUtil;
+import com.nageoffer.ai.ragent.agent.trace.AgentToolBodyTracer;
 import com.nageoffer.ai.ragent.rag.core.skill.AgentSkill;
 import com.nageoffer.ai.ragent.rag.core.skill.AgentSkillRegistry;
 import io.agentscope.core.message.ContentBlock;
@@ -102,8 +103,8 @@ public class SkillLoadTool implements AgentTool {
 
     @Override
     public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
-        return Mono.fromCallable(() -> execute(param))
-                .subscribeOn(Schedulers.boundedElastic());
+        return AgentToolBodyTracer.trace(this, param, () -> Mono.fromCallable(() -> execute(param))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     /**

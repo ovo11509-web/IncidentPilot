@@ -1,10 +1,10 @@
 import * as React from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
-import { AgentTurnItem, type AgentTurn } from "@/components/agent/AgentTurn";
+import { AgentTurnItem } from "@/components/agent/AgentTurn";
 import { AgentWelcomeScreen } from "@/components/agent/AgentWelcomeScreen";
 import { cn } from "@/lib/utils";
-import type { AgentMessage } from "@/types/agent";
+import type { AgentMessage, AgentTurn } from "@/types/agent";
 
 interface AgentMessageListProps {
   messages: AgentMessage[];

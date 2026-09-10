@@ -475,6 +475,7 @@ CREATE TABLE t_agent_message (
     blocks              JSONB,
     reply_to_message_id VARCHAR(20),
     message_status      VARCHAR(32) NOT NULL DEFAULT 'NORMAL',
+    duration_ms         BIGINT,
     create_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted             SMALLINT    DEFAULT 0
@@ -1006,6 +1007,7 @@ COMMENT ON COLUMN t_agent_message.thinking_content IS '思考内容';
 COMMENT ON COLUMN t_agent_message.blocks IS '运行轨迹块（reasoning/answer/tool 有序序列），回放还原时间线';
 COMMENT ON COLUMN t_agent_message.reply_to_message_id IS '回复的用户消息ID';
 COMMENT ON COLUMN t_agent_message.message_status IS '消息终态 NORMAL：正常 INTERRUPTED：用户中断';
+COMMENT ON COLUMN t_agent_message.duration_ms IS '本轮 run 的服务端耗时（毫秒），仅 assistant 有值';
 COMMENT ON COLUMN t_agent_message.create_time IS '创建时间';
 COMMENT ON COLUMN t_agent_message.update_time IS '更新时间';
 COMMENT ON COLUMN t_agent_message.deleted IS '是否删除 0：正常 1：删除';

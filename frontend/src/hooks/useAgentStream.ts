@@ -4,6 +4,7 @@ import type {
   AgentHintPayload,
   AgentMessageDelta,
   AgentMetaPayload,
+  AgentTextBlockSeal,
   AgentToolProgress
 } from "@/types/agent";
 
@@ -11,6 +12,7 @@ export interface AgentStreamHandlers {
   onMeta?: (payload: AgentMetaPayload) => void;
   onMessage?: (payload: AgentMessageDelta) => void;
   onThinking?: (payload: AgentMessageDelta) => void;
+  onBlock?: (payload: AgentTextBlockSeal) => void;
   onTool?: (payload: AgentToolProgress) => void;
   onHint?: (payload: AgentHintPayload) => void;
   onConfirm?: (payload: AgentConfirmPayload) => void;
@@ -75,6 +77,9 @@ async function readSseStream(
           }
           handlers.onMessage?.(messagePayload);
         }
+        break;
+      case "block":
+        handlers.onBlock?.(payload as AgentTextBlockSeal);
         break;
       case "tool":
         handlers.onTool?.(payload as AgentToolProgress);

@@ -17,8 +17,11 @@
 
 package com.nageoffer.ai.ragent.agent.service.handler;
 
+import com.nageoffer.ai.ragent.agent.tool.AgentToolExecutionFacts;
+import com.nageoffer.ai.ragent.agent.trace.AgentRunTracer;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.framework.web.StreamTaskManager;
+import io.agentscope.core.agent.RuntimeContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.Disposable;
@@ -93,10 +96,23 @@ public class AgentRunHandle {
     @Getter
     private volatile boolean cancelledExit;
 
-    public AgentRunHandle(String taskId, SseEmitterSender sender, StreamTaskManager taskManager) {
+    /**
+     * 中断时刻的落点，未完 span 对齐终点用
+     */
+    private final AgentToolExecutionFacts facts;
+
+    /**
+     * 中断跑在 HTTP 线程上够不着响应式链，从这里取根 span
+     */
+    private final RuntimeContext runtimeContext;
+
+    public AgentRunHandle(String taskId, SseEmitterSender sender, StreamTaskManager taskManager,
+                          AgentToolExecutionFacts facts, RuntimeContext runtimeContext) {
         this.taskId = taskId;
         this.sender = sender;
         this.taskManager = taskManager;
+        this.facts = facts;
+        this.runtimeContext = runtimeContext;
     }
 
     /**
@@ -141,6 +157,9 @@ public class AgentRunHandle {
         if (interrupt != null) {
             boolean graceful = false;
             try {
+                // 必须在 interrupt 前定格，否则框架收尾后根 span 已 end，写属性是空操作
+                facts.markInterrupted();
+                AgentRunTracer.markInterrupted(runtimeContext);
                 interrupt.run();
                 graceful = awaitUpstreamTermination();
             } catch (Exception e) {
@@ -148,6 +167,11 @@ public class AgentRunHandle {
                 log.error("打断动作执行异常，转为强制断流, taskId: {}", taskId, e);
             }
             forcedDisposal = !graceful;
+            if (forcedDisposal) {
+                // dispose 后没有线程能再读 span，必须在掐链前定格
+                facts.markCancelled();
+                AgentRunTracer.markAborted(runtimeContext);
+            }
         }
         // 框架已自行收尾时这里是空操作，强制断流才真正掐链
         Disposable current = disposable;

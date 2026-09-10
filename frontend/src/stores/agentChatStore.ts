@@ -12,6 +12,7 @@ import type {
   AgentMetaPayload,
   AgentRawFrame,
   AgentSession,
+  AgentTextBlockSeal,
   AgentToolProgress
 } from "@/types/agent";
 import {
@@ -24,6 +25,13 @@ import {
 } from "@/services/agentService";
 import { buildQuery } from "@/utils/helpers";
 import { createAgentStreamResponse } from "@/hooks/useAgentStream";
+import {
+  applyTextBlockSeal,
+  applyToolFrame,
+  replayBlock,
+  settleToolBlocks,
+  toHms
+} from "@/lib/agentTimeline";
 import { storage } from "@/utils/storage";
 
 interface AgentChatState {
@@ -77,18 +85,6 @@ function nowHms() {
   return format(new Date(), "HH:mm:ss");
 }
 
-function toHms(value?: string) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "" : format(parsed, "HH:mm:ss");
-}
-
-// 块时刻两种历史形态都要认：新数据是 yyyy-MM-ddTHH:mm:ss 老数据只有 HH:mm:ss
-function toBlockHms(value?: string) {
-  if (!value) return "";
-  return /^\d{2}:\d{2}:\d{2}$/.test(value) ? value : toHms(value);
-}
-
 function upsertSession(sessions: AgentSession[], next: AgentSession) {
   const index = sessions.findIndex((session) => session.id === next.id);
   const updated = [...sessions];
@@ -104,37 +100,19 @@ function upsertSession(sessions: AgentSession[], next: AgentSession) {
   });
 }
 
-// 封口敞开的文本块 思考块闭合即自动折叠 封口时落实测耗时
+// 封口敞开的文本块 思考块闭合即自动折叠
 function sealOpenBlock(blocks: AgentBlockUI[], openBlockId: number | null) {
   if (openBlockId == null) return blocks;
-  return blocks.map((block) => {
-    if (block.id !== openBlockId) return block;
-    const sealed =
-      block.startMs != null && block.durationMs == null
-        ? { ...block, durationMs: Date.now() - block.startMs }
-        : block;
-    return sealed.kind === "reasoning" ? { ...sealed, open: false } : sealed;
-  });
+  return blocks.map((block) =>
+    block.id === openBlockId && block.kind === "reasoning" ? { ...block, open: false } : block
+  );
 }
 
-// 收尾：残留 running 工具置为给定终态 敞开思考块折叠 未封口块补实测耗时
-function settleBlocks(blocks: AgentBlockUI[] | undefined, toolStatus: "done" | "interrupted" | "awaiting") {
-  if (!blocks) return blocks;
-  return blocks.map((block) => {
-    let next = block;
-    const parked = next.kind === "tool" && next.status === "running" && toolStatus === "awaiting";
-    // 没执行就没有执行耗时 挂个秒数会被读成它跑了这么久（后端落库也不带耗时 刷新前后才是同一句话）
-    if (!parked && next.startMs != null && next.durationMs == null) {
-      next = { ...next, durationMs: Date.now() - next.startMs };
-    }
-    if (next.kind === "tool" && next.status === "running") {
-      next = { ...next, status: toolStatus };
-    }
-    if (next.kind === "reasoning" && next.open) {
-      next = { ...next, open: false };
-    }
-    return next;
-  });
+// 收尾：工具块落定 + 思考块折叠
+function settleBlocks(blocks: AgentBlockUI[] | undefined, toolStatus: "interrupted" | "awaiting") {
+  return settleToolBlocks(blocks, toolStatus)?.map((block) =>
+    block.kind === "reasoning" && block.open ? { ...block, open: false } : block
+  );
 }
 
 // 一次流跑完要归零的全部流态 少归零一个字段 下一次提问就会被当成上一次的续播
@@ -170,15 +148,6 @@ function streamStartPatch(assistantId: string) {
   } as const;
 }
 
-// 回放轮次总耗时：assistant 落库时刻减去前一条 user 的落库时刻
-function replayElapsed(userTime?: string, assistantTime?: string): number | undefined {
-  if (!userTime || !assistantTime) return undefined;
-  const start = new Date(userTime).getTime();
-  const end = new Date(assistantTime).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return undefined;
-  return end - start;
-}
-
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 export const useAgentChatStore = create<AgentChatState>((set, get) => {
@@ -199,9 +168,8 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
           const created: AgentBlockUI = {
             id: nextBlockId(),
             kind,
+            // 占位时刻 服务端封口时校正
             at: nowHms(),
-            // 中断提示是一句话不是一段生成 挂个耗时刷新后又没有 前后就不是同一条了
-            startMs: kind === "error" ? undefined : Date.now(),
             text: delta,
             // 流式思考块自动展开实时滚字
             open: kind === "reasoning" ? true : undefined
@@ -243,17 +211,10 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
   };
 
   /**
-   * 首问与确认续跑共用的一次连接：事件处理全在这里 两边只负责把助手消息先摆好
-   * startedMs 是本段的计时起点 续跑那段从点确认起算 不与挂起前那段合并
-   * 返回是否收到过 meta —— 调用方据此判断这一轮后端到底受理没有
+   * 首问与确认续跑共用，返回是否收到过 meta（后端是否受理）
    */
-  const runStream = async (params: {
-    url: string;
-    body?: unknown;
-    assistantId: string;
-    startedMs: number;
-  }) => {
-    const { url, body, assistantId, startedMs } = params;
+  const runStream = async (params: { url: string; body?: unknown; assistantId: string }) => {
+    const { url, body, assistantId } = params;
     const token = storage.getToken();
     // meta 是后端受理这一轮的第一帧：收到它才算请求确实送达，没收到就不知道断在哪一侧
     let delivered = false;
@@ -303,8 +264,21 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
         if (get().streamingMessageId !== assistantId) return;
         appendText("reasoning", payload.delta);
       },
+      // 文本封口帧 服务端下发起止
+      onBlock: (payload: AgentTextBlockSeal) => {
+        if (!payload || typeof payload !== "object" || !payload.kind) return;
+        if (get().streamingMessageId !== assistantId) return;
+        set((state) => ({
+          messages: state.messages.map((message) => {
+            if (message.id !== state.streamingMessageId) return message;
+            if (message.status === "cancelled" || message.status === "error") return message;
+            return { ...message, blocks: applyTextBlockSeal(message.blocks ?? [], payload) };
+          })
+        }));
+      },
+      // 工具帧 按帧照抄状态与耗时
       onTool: (payload: AgentToolProgress) => {
-        if (!payload || typeof payload !== "object" || !payload.name) return;
+        if (!payload || typeof payload !== "object" || !payload.name || !payload.status) return;
         if (get().streamingMessageId !== assistantId) return;
         set((state) => ({
           // 任何工具事件都封口当前文本块 与后端分段规则保持一致
@@ -312,51 +286,11 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
           messages: state.messages.map((message) => {
             if (message.id !== state.streamingMessageId) return message;
             if (message.status === "cancelled" || message.status === "error") return message;
-            const blocks = sealOpenBlock([...(message.blocks ?? [])], state.streamOpenBlockId);
-            if (payload.status === "start") {
-              blocks.push({
-                id: nextBlockId(),
-                kind: "tool",
-                at: nowHms(),
-                startMs: Date.now(),
-                name: payload.name,
-                displayName: payload.displayName || payload.name,
-                toolCallId: payload.toolCallId ?? undefined,
-                status: "running"
-              });
-              return { ...message, blocks };
-            }
-            // 有 toolCallId 就按它配对 同名工具并发两次时按名字猜会配错块
-            // 端点不回 id 才回落名字 后进先出闭合最近未完成的同名调用
-            for (let i = blocks.length - 1; i >= 0; i -= 1) {
-              const block = blocks[i];
-              if (block.kind !== "tool" || block.status !== "running") continue;
-              const hit = payload.toolCallId
-                ? block.toolCallId === payload.toolCallId
-                : block.name === payload.name;
-              if (!hit) continue;
-              blocks[i] = {
-                ...block,
-                // ok 缺省视为成功 兼容旧后端事件
-                status: payload.ok === false ? "failed" : "done",
-                durationMs: block.startMs != null ? Date.now() - block.startMs : undefined,
-                result: payload.result ?? undefined
-              };
-              return { ...message, blocks };
-            }
-            // 确认后续跑的工具是上一轮开的头 这一轮只有结束事件 不就地补一行 页面上就看不到它执行过
-            // 不带耗时：这一轮没经手它的开始时刻 与后端落库同口径
-            blocks.push({
-              id: nextBlockId(),
-              kind: "tool",
-              at: nowHms(),
-              name: payload.name,
-              displayName: payload.displayName || payload.name,
-              toolCallId: payload.toolCallId ?? undefined,
-              status: payload.ok === false ? "failed" : "done",
-              result: payload.result ?? undefined
-            });
-            return { ...message, blocks };
+            const sealed = sealOpenBlock([...(message.blocks ?? [])], state.streamOpenBlockId);
+            return {
+              ...message,
+              blocks: applyToolFrame(sealed, payload, { allocId: nextBlockId, fallbackAt: nowHms() })
+            };
           })
         }));
       },
@@ -402,7 +336,7 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
               id: payload.messageId ? String(payload.messageId) : message.id,
               status: "done" as const,
               blocks,
-              elapsedMs: Date.now() - startedMs,
+              elapsedMs: payload.durationMs ?? undefined,
               messageStatus: "AWAITING_CONFIRM" as const
             };
           })
@@ -436,13 +370,9 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
                   ...message,
                   id: payload.messageId ? String(payload.messageId) : message.id,
                   status: "done",
-                  // 后端把这一轮标成中断 说明开着的工具没等到结果 替它宣布完成就是编一个它没给过的结论
-                  // 也不能说"未执行"：那比"已中断"更强 而且与后端落库相反 会诱导用户再提交一次
-                  blocks: settleBlocks(
-                    message.blocks,
-                    payload.messageStatus === "INTERRUPTED" ? "interrupted" : "done"
-                  ),
-                  elapsedMs: Date.now() - startedMs,
+                  // 未到终态的工具按中断落定 与后端 settledBlocks 同规则
+                  blocks: settleBlocks(message.blocks, "interrupted"),
+                  elapsedMs: payload.durationMs ?? undefined,
                   messageStatus: payload.messageStatus ?? "NORMAL"
                 }
               : message
@@ -483,7 +413,7 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
               content: message.content + suffix,
               blocks,
               status: "cancelled" as const,
-              elapsedMs: Date.now() - startedMs,
+              elapsedMs: payload?.durationMs ?? undefined,
               messageStatus: payload?.messageStatus ?? "INTERRUPTED"
             };
           }),
@@ -597,26 +527,13 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
         if (get().currentSessionId !== sessionId) {
           return;
         }
-        // 轮次总耗时按相邻 user→assistant 配对补齐 配对即消费防跨轮误配
-        let prevUserTime: string | undefined;
         const mapped: AgentMessage[] = data.map((item) => {
           const isAssistant = item.role === "assistant";
           let blocks: AgentBlockUI[] | undefined;
           if (isAssistant) {
             if (Array.isArray(item.blocks) && item.blocks.length > 0) {
-              blocks = item.blocks.map((block) => ({
-                id: nextBlockId(),
-                kind: block.kind,
-                at: toBlockHms(block.at),
-                text: block.text ?? undefined,
-                name: block.name ?? undefined,
-                displayName: block.displayName ?? undefined,
-                status: block.status ?? (block.kind === "tool" ? "done" : undefined),
-                result: block.result ?? undefined,
-                toolCallId: block.toolCallId ?? undefined,
-                calls: block.calls ?? undefined,
-                open: false
-              }));
+              // 与流式同一组字段
+              blocks = item.blocks.map((block) => replayBlock(block, nextBlockId()));
             } else {
               // 旧数据无块结构 由持久化字段合成
               const at = toHms(item.createTime);
@@ -635,8 +552,6 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
               }
             }
           }
-          const elapsedMs = isAssistant ? replayElapsed(prevUserTime, item.createTime) : undefined;
-          prevUserTime = isAssistant ? undefined : item.createTime;
           return {
             id: String(item.id),
             role: isAssistant ? ("assistant" as const) : ("user" as const),
@@ -644,7 +559,8 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
             thinking: item.thinkingContent || undefined,
             blocks,
             createdAt: item.createTime,
-            elapsedMs,
+            // 服务端耗时 旧数据为空则不显示
+            elapsedMs: item.durationMs ?? undefined,
             status: "done" as const,
             messageStatus: item.messageStatus ?? "NORMAL"
           };
@@ -767,8 +683,6 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
         return;
       }
       const inputFocusKey = Date.now();
-      // 轮次计时起点 收尾时实测总耗时
-      const startedMs = Date.now();
 
       const userMessage: AgentMessage = {
         id: `user-${Date.now()}`,
@@ -792,7 +706,7 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
       });
       const url = `${API_BASE_URL}/agent/v1/chat${query}`;
 
-      await runStream({ url, assistantId, startedMs });
+      await runStream({ url, assistantId });
     },
     confirmPendingTool: async (messageId, blockId, approved) => {
       const conversationId = get().currentSessionId;
@@ -801,7 +715,6 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
       // 直接落成已同意，断网时页面会替后端说一句它没说过的话，而工具到底跑没跑用户无从得知
       setConfirmStatus(messageId, blockId, "submitting");
 
-      const startedMs = Date.now();
       const assistantId = `assistant-${Date.now()}`;
       set((state) => ({
         messages: [...state.messages, newAssistantMessage(assistantId)],
@@ -811,8 +724,7 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => {
       const delivered = await runStream({
         url: `${API_BASE_URL}/agent/v1/chat/confirm`,
         body: { conversationId, messageId, approved },
-        assistantId,
-        startedMs
+        assistantId
       });
 
       if (delivered) {

@@ -1,30 +1,24 @@
 import * as React from "react";
-import { format } from "date-fns";
 
 import { AgentMarkdownRenderer } from "@/components/agent/AgentMarkdownRenderer";
+import {
+  buildTimelineRows,
+  formatDuration,
+  type TraceChannel,
+  type TraceRow
+} from "@/lib/agentTimeline";
 import { useAgentChatStore } from "@/stores/agentChatStore";
-import type { AgentBlockUI, AgentConfirmCall, AgentMessage } from "@/types/agent";
+import type { AgentBlockUI, AgentConfirmCall, AgentTurn } from "@/types/agent";
 
-export interface AgentTurn {
-  id: string;
-  index: number;
-  user?: AgentMessage;
-  /**
-   * 一问可对多答：停在确认卡片上的那条与用户裁决后的续答都属同一轮 按先后拼进同一张卡
-   */
-  assistants: AgentMessage[];
-}
-
-type Channel = "user" | "reasoning" | "tool" | "answer" | "hint" | "confirm" | "error";
-
-const GLYPH: Record<Channel, string> = {
+const GLYPH: Record<TraceChannel, string> = {
   user: "▷",
   reasoning: "○",
   tool: "●",
   answer: "▮",
   hint: "·",
   confirm: "◈",
-  error: "✕"
+  error: "✕",
+  batch: "≡"
 };
 
 /**
@@ -53,151 +47,49 @@ const CONFIRM_STATE: Partial<Record<string, { label: string; cls: string; lead: 
 };
 
 /**
- * 确认卡逐项结果的芯片 与工具行同一套口径
- * 不收 awaiting：同意后逐项依次开跑，还没轮到的那项也停在 awaiting，标「未执行」会读成已经了结
+ * 工具行七态芯片 denied 走静字不走红——用户自己按的取消不是出错
  */
-const ITEM_STATE: Partial<Record<string, { label: string; cls: string }>> = {
+const TOOL_STATE: Partial<Record<string, { label: string; cls: string }>> = {
+  pending: { label: "待执行", cls: "agent-status-idle" },
+  running: { label: "运行中", cls: "agent-status-run" },
+  awaiting: { label: "待确认", cls: "agent-status-idle" },
   done: { label: "完成", cls: "agent-status-ok" },
   failed: { label: "失败", cls: "agent-status-err" },
-  interrupted: { label: "已中断", cls: "agent-status-err" },
-  running: { label: "运行中", cls: "agent-status-run" }
+  denied: { label: "已拒绝", cls: "agent-status-idle" },
+  interrupted: { label: "已中断", cls: "agent-status-err" }
 };
 
-const NAME: Record<Channel, string> = {
+// awaiting 再分：卡里点名的在等授权 同批其余的只是随批等着
+const BATCH_WAITING = { label: "随批等待", cls: "agent-status-idle" };
+
+// 确认卡逐项芯片 不收 pending / awaiting：还没轮到的标出来会读成已了结
+const ITEM_STATE: Partial<Record<string, { label: string; cls: string }>> = {
+  running: TOOL_STATE.running,
+  done: TOOL_STATE.done,
+  failed: TOOL_STATE.failed,
+  denied: TOOL_STATE.denied,
+  interrupted: TOOL_STATE.interrupted
+};
+
+// 耗时 tooltip 三个通道量的东西不同
+const DURATION_HINT: Partial<Record<TraceChannel, string>> = {
+  batch: "服务端计时 · 工具体时间包络",
+  tool: "服务端计时 · 本次执行耗时",
+  reasoning: "服务端计时 · 这段文字流了多久",
+  answer: "服务端计时 · 这段文字流了多久",
+  error: "服务端计时 · 这段文字流了多久"
+};
+
+const NAME: Record<TraceChannel, string> = {
   user: "you",
   reasoning: "reasoning",
   tool: "tool",
   answer: "answer",
   hint: "hint",
   confirm: "confirm",
-  error: "error"
+  error: "error",
+  batch: "batch"
 };
-
-interface TraceRow {
-  key: string;
-  channel: Channel;
-  ts: string;
-  text?: string;
-  block?: AgentBlockUI;
-  // 块归属的助手消息 一轮多答时展开态与确认动作都要认准这条
-  messageId?: string;
-  // 确认卡各项的执行结局 与 block.calls 同序 认不到为 undefined
-  outcomes?: (AgentBlockUI | undefined)[];
-  // 连续同名同结果的工具行折叠计数
-  count: number;
-  streaming?: boolean;
-}
-
-function toHms(value?: string) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "" : format(parsed, "HH:mm:ss");
-}
-
-/** 耗时刻度：10s 内留一位小数 1m 起转 m/s 复合 */
-function fmtDur(ms?: number): string {
-  if (ms == null || !Number.isFinite(ms) || ms < 0) return "";
-  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
-  const secs = Math.round(ms / 1000);
-  if (secs < 60) return `${secs}s`;
-  return `${Math.floor(secs / 60)}m${String(secs % 60).padStart(2, "0")}s`;
-}
-
-/**
- * 确认卡按 toolCallId 认领本轮的工具块 逐项结局由卡片自己显示
- * 一轮可跨多条助手消息：待确认那条只有开了头的块 结果块在续跑那条 后者自然覆盖前者
- */
-function claimByConfirm(turn: AgentTurn) {
-  const blocks = turn.assistants.flatMap((assistant) => assistant.blocks ?? []);
-  const claimed = new Map<string, AgentBlockUI | undefined>();
-  for (const block of blocks) {
-    if (block.kind !== "confirm") continue;
-    for (const call of block.calls ?? []) claimed.set(call.toolCallId, undefined);
-  }
-  for (const block of blocks) {
-    if (block.kind === "tool" && block.toolCallId && claimed.has(block.toolCallId)) {
-      claimed.set(block.toolCallId, block);
-    }
-  }
-  return claimed;
-}
-
-/**
- * 一轮的轨迹行：用户行 + 助手时间线块 依消息态补 等待/错误 合成行
- * 连续、同名、同结果的工具块折叠成一条 ×N（同错刷屏收成一行）
- */
-function buildRows(turn: AgentTurn): TraceRow[] {
-  const rows: TraceRow[] = [];
-  const claimed = claimByConfirm(turn);
-  if (turn.user) {
-    rows.push({
-      key: `u-${turn.user.id}`,
-      channel: "user",
-      ts: toHms(turn.user.createdAt),
-      text: turn.user.content,
-      count: 1
-    });
-  }
-  for (const assistant of turn.assistants) {
-    const blocks = assistant.blocks ?? [];
-    const isStreaming = assistant.status === "streaming";
-
-    blocks.forEach((block, i) => {
-      // 确认前那些「未执行」已并进卡里 再单独成行就是同一件事说两遍
-      if (block.kind === "tool" && block.status === "awaiting"
-        && block.toolCallId && claimed.has(block.toolCallId)) {
-        return;
-      }
-      const channel: Channel = block.kind;
-      const last = rows[rows.length - 1];
-      if (
-        channel === "tool" &&
-        last?.channel === "tool" &&
-        last.block?.name === block.name &&
-        last.block?.result === block.result &&
-        last.block?.status === block.status
-      ) {
-        last.count += 1;
-        return;
-      }
-      rows.push({
-        key: `b-${block.id}`,
-        channel,
-        ts: block.at,
-        text: block.text,
-        block,
-        messageId: assistant.id,
-        outcomes: channel === "confirm"
-          ? (block.calls ?? []).map((call) => claimed.get(call.toolCallId))
-          : undefined,
-        count: 1,
-        // 最后一个块在流式中即活动轨迹 节点呼吸
-        streaming: isStreaming && i === blocks.length - 1
-      });
-    });
-
-    if (isStreaming && blocks.length === 0) {
-      rows.push({
-        key: `wait-${assistant.id}`,
-        channel: "hint",
-        ts: "",
-        text: "等待响应…",
-        count: 1,
-        streaming: true
-      });
-    }
-    if (assistant.status === "error") {
-      rows.push({
-        key: `err-${assistant.id}`,
-        channel: "error",
-        ts: "",
-        text: "生成失败，请稍后重试",
-        count: 1
-      });
-    }
-  }
-  return rows;
-}
 
 interface AgentTurnItemProps {
   turn: AgentTurn;
@@ -207,13 +99,13 @@ interface AgentTurnItemProps {
 
 /** 一轮用户↔助手收进一张卡：轮次头 + 各通道轨迹行 示波器时间轴在卡内贯穿 */
 export function AgentTurnItem({ turn, note }: AgentTurnItemProps) {
-  const rows = buildRows(turn);
+  const rows = buildTimelineRows(turn);
   const headTs = rows[0]?.ts || "";
   const streaming = turn.assistants.some((assistant) => assistant.status === "streaming");
   // 流式中不显示总耗时 收尾实测或回放差值就绪后才亮
   // 一问多答按段累加：确认前那段与续跑那段合起来才是这一轮从提问到收尾的真实耗时
   const totalMs = turn.assistants.reduce((sum, assistant) => sum + (assistant.elapsedMs ?? 0), 0);
-  const elapsed = streaming ? "" : fmtDur(totalMs || undefined);
+  const elapsed = streaming ? "" : formatDuration(totalMs || undefined);
 
   return (
     <section className="agent-turn">
@@ -233,12 +125,17 @@ export function AgentTurnItem({ turn, note }: AgentTurnItemProps) {
 }
 
 function TraceRowItem({ row, showTs }: { row: TraceRow; showTs: boolean }) {
+  const toolState =
+    row.channel === "tool"
+      ? row.batchWaiting
+        ? BATCH_WAITING
+        : TOOL_STATE[row.block?.status ?? ""]
+      : undefined;
   const failed = row.channel === "tool" && row.block?.status === "failed";
-  const interrupted = row.channel === "tool" && row.block?.status === "interrupted";
   const running = row.channel === "tool" && row.block?.status === "running";
-  // 等用户裁决的工具：没跑完也没被打断 只是还没执行
-  const awaiting = row.channel === "tool" && row.block?.status === "awaiting";
   const confirmState = row.channel === "confirm" ? CONFIRM_STATE[row.block?.status ?? ""] : undefined;
+  // 文本通道耗时标「生成」 工具通道不标
+  const textual = row.channel === "reasoning" || row.channel === "answer" || row.channel === "error";
 
   return (
     <div
@@ -262,17 +159,26 @@ function TraceRowItem({ row, showTs }: { row: TraceRow; showTs: boolean }) {
           row.block.displayName !== row.block.name ? (
             <span className="text-[color:var(--agent-muted)]">{row.block.displayName}</span>
           ) : null}
-          {failed ? <span className="agent-status-err">失败</span> : null}
-          {interrupted ? <span className="agent-status-err">已中断</span> : null}
-          {awaiting ? <span className="agent-status-idle">未执行</span> : null}
-          {row.channel === "tool" && row.block?.status === "done" ? (
-            <span className="agent-status-ok">完成</span>
+          {row.channel === "batch" ? (
+            <span
+              className="agent-batch-note"
+              title={
+                row.parallel
+                  ? "各工具体的执行区间有重叠 · 行序是模型声明的先后，不是执行先后"
+                  : undefined
+              }
+            >
+              同批 {row.batchSize} 个工具{row.parallel ? " · 并行" : ""}
+            </span>
           ) : null}
-          {running ? <span className="agent-status-run">运行中</span> : null}
-          {row.block?.durationMs != null ? (
-            <span className="agent-row-dur">· {fmtDur(row.block.durationMs)}</span>
+          {toolState ? <span className={toolState.cls}>{toolState.label}</span> : null}
+          {/* 耗时 */}
+          {row.durationMs != null ? (
+            <span className="agent-row-dur" title={DURATION_HINT[row.channel] ?? DURATION_HINT.tool}>
+              {textual ? " · 生成 " : " · "}
+              {formatDuration(row.durationMs)}
+            </span>
           ) : null}
-          {row.count > 1 ? <span className="agent-row-count">×{row.count}</span> : null}
           {showTs ? <span className="agent-row-ts">{row.ts}</span> : null}
         </div>
         <RowBody row={row} />
@@ -282,6 +188,10 @@ function TraceRowItem({ row, showTs }: { row: TraceRow; showTs: boolean }) {
 }
 
 function RowBody({ row }: { row: TraceRow }) {
+  // 批头只是一行交代 底下各工具行自己有正文
+  if (row.channel === "batch") {
+    return null;
+  }
   if (row.channel === "tool" && row.block) {
     return <ToolCallBox block={row.block} messageId={row.messageId} />;
   }
@@ -505,8 +415,12 @@ function ToolCallBox({ block, messageId }: { block: AgentBlockUI; messageId?: st
     );
   }
 
-  // 还没执行就没有返回可看 展开一个「（空返回）」只会让人以为它跑过且没结果
-  if (block.status === "awaiting") {
+  // 没到过执行就没有返回可看
+  if (block.status === "pending" || block.status === "awaiting" || block.status === "denied") {
+    return null;
+  }
+  // 中断且无结果也不展开
+  if (block.status === "interrupted" && !raw) {
     return null;
   }
 

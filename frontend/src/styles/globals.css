@@ -4466,8 +4466,13 @@ textarea {
   margin-left: auto;
 }
 
-/* 行级实测耗时：流式期间记录 回放行不显示 */
+/* 行级耗时 弱化 */
 .agent-app .agent-row-dur {
+  color: var(--agent-muted);
+}
+
+/* 批头归属标注 分量低于工具名 */
+.agent-app .agent-batch-note {
   color: var(--agent-muted);
 }
 
@@ -4526,6 +4531,16 @@ textarea {
 .agent-app .agent-row[data-channel="hint"] .agent-node,
 .agent-app .agent-row[data-channel="hint"] .agent-channel {
   color: var(--agent-faint);
+}
+
+/* 批头 收掉内容区留白 */
+.agent-app .agent-row[data-channel="batch"] .agent-node,
+.agent-app .agent-row[data-channel="batch"] .agent-channel {
+  color: var(--agent-faint);
+}
+
+.agent-app .agent-row[data-channel="batch"] .agent-row-content {
+  padding-bottom: 2px;
 }
 
 .agent-app .agent-row[data-channel="hint"] .agent-row-text {

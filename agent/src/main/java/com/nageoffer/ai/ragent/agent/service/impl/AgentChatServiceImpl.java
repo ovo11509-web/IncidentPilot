@@ -34,6 +34,8 @@ import com.nageoffer.ai.ragent.agent.service.AgentConversationService;
 import com.nageoffer.ai.ragent.agent.service.handler.AgentRunGate;
 import com.nageoffer.ai.ragent.agent.service.handler.AgentRunHandle;
 import com.nageoffer.ai.ragent.agent.service.handler.AgentStreamEventBridge;
+import com.nageoffer.ai.ragent.agent.tool.AgentToolExecutionFacts;
+import com.nageoffer.ai.ragent.agent.trace.AgentTraceContextKeys;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
@@ -57,6 +59,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -77,6 +80,10 @@ public class AgentChatServiceImpl implements AgentChatService {
     private final AgentRunGate runGate;
     private final AgentMemoryProperties memoryProperties;
     private final AgentMemoryPipeline memoryPipeline;
+    /**
+     * 服务端时刻来源，事实源与桥共用
+     */
+    private final Clock clock = Clock.systemDefaultZone();
 
     @Override
     public void streamChat(String question, String conversationId, SseEmitter emitter) {
@@ -173,6 +180,7 @@ public class AgentChatServiceImpl implements AgentChatService {
                 .taskId(taskId)
                 .title(settlement.title())
                 .replyToMessageId(settlement.replyToMessageId())
+                .confirmMessageId(messageId)
                 .releaseGate(releaseGate)
                 .build());
     }
@@ -222,7 +230,11 @@ public class AgentChatServiceImpl implements AgentChatService {
         @SuppressWarnings("resource")
         ReActAgent agent = activeAgent.agent();
 
-        AgentRunHandle runHandle = new AgentRunHandle(taskId, scope.sender(), taskManager);
+        // 事实源：桥、上下文与句柄共用，ID 与时刻只在这里产生
+        AgentToolExecutionFacts facts = new AgentToolExecutionFacts(taskId, clock);
+        // 上下文传到底，中断时句柄从这里取根 span
+        RuntimeContext runtimeContext = buildRuntimeContext(scope, facts);
+        AgentRunHandle runHandle = new AgentRunHandle(taskId, scope.sender(), taskManager, facts, runtimeContext);
         runHandle.onRelease(scope.releaseGate());
         // 流结束后驱逐内存缓存，下一轮从 PG 重新加载
         runHandle.onRelease(() -> {
@@ -245,6 +257,8 @@ public class AgentChatServiceImpl implements AgentChatService {
                 .userId(userId)
                 .title(scope.title())
                 .replyToMessageId(scope.replyToMessageId())
+                .clock(clock)
+                .facts(facts)
                 .build());
         taskManager.register(taskId, userId, bridge::finishCancelledStream);
         // 预埋取消标记会让 register 当场跑完收尾，此时不再启动 Agent
@@ -252,10 +266,7 @@ public class AgentChatServiceImpl implements AgentChatService {
             return;
         }
 
-        Flux<AgentEvent> events = agent.streamEvents(input, RuntimeContext.builder()
-                        .userId(userId)
-                        .sessionId(conversationId)
-                        .build())
+        Flux<AgentEvent> events = agent.streamEvents(input, runtimeContext)
                 // 让 runHandle 知道框架流已结束，取消时不必再强行断流
                 .doFinally(signal -> runHandle.markUpstreamTerminated());
         Disposable disposable = events.subscribe(bridge::onEvent, bridge::onError, bridge::onComplete);
@@ -267,6 +278,21 @@ public class AgentChatServiceImpl implements AgentChatService {
         if (runHandle.isCancelledExit()) {
             disposable.dispose();
         }
+    }
+
+    /**
+     * 事实源在构建时就位，中间件从上下文取它；其余 key 建完再 put——底层 ConcurrentHashMap 不接受 null
+     */
+    private static RuntimeContext buildRuntimeContext(RunScope scope, AgentToolExecutionFacts facts) {
+        RuntimeContext runtimeContext = RuntimeContext.builder()
+                .userId(scope.userId())
+                .sessionId(scope.conversationId())
+                .put(AgentToolExecutionFacts.RUNTIME_CONTEXT_KEY, facts)
+                .build();
+        runtimeContext.put(AgentTraceContextKeys.TASK_ID, scope.taskId());
+        runtimeContext.put(AgentTraceContextKeys.REPLY_TO_MESSAGE_ID, scope.replyToMessageId());
+        runtimeContext.put(AgentTraceContextKeys.CONFIRM_MESSAGE_ID, scope.confirmMessageId());
+        return runtimeContext;
     }
 
     /**
@@ -285,7 +311,8 @@ public class AgentChatServiceImpl implements AgentChatService {
      */
     @Builder
     private record RunScope(SseEmitterSender sender, SseEmitter emitter, String userId, String conversationId,
-                            String taskId, String title, String replyToMessageId, Runnable releaseGate) {
+                            String taskId, String title, String replyToMessageId, String confirmMessageId,
+                            Runnable releaseGate) {
     }
 
     /**

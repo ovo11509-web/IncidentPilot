@@ -8,17 +8,22 @@ export type AgentPersistedMessageStatus = "NORMAL" | "INTERRUPTED" | "AWAITING_C
 // hint 为流式过程中的运行提示 只存在于前端时间线 后端不落库
 export type AgentBlockKind = "reasoning" | "answer" | "tool" | "hint" | "confirm" | "error";
 
-// 块状态 前四个属于工具块 后五个属于确认卡片
-export type AgentBlockStatus =
+/**
+ * 工具块状态 与后端同名同值 前端照抄不推断
+ */
+export type AgentToolStatus =
+  | "pending"
+  | "running"
+  | "awaiting"
   | "done"
   | "failed"
-  | "interrupted"
-  | "awaiting"
-  | "pending"
-  | "submitting"
-  | "approved"
   | "denied"
-  | "expired";
+  | "interrupted";
+
+// 确认卡状态 submitting / expired 只存在于前端
+export type AgentConfirmStatus = "pending" | "submitting" | "approved" | "denied" | "expired";
+
+export type AgentBlockStatus = AgentToolStatus | AgentConfirmStatus;
 
 // 结构化后的一项入参 name 用来比对差异 label 只管展示
 export interface AgentConfirmField {
@@ -43,7 +48,14 @@ export interface AgentSession {
   turns?: number;
 }
 
-// 后端回放的时间线块
+/**
+ * 耗时口径：tool 逐条 / batch 整批共享（老数据），缺省即 batch
+ */
+export type AgentDurationSource = "tool" | "batch";
+
+/**
+ * 后端回放的时间线块 batchId 起五个字段是服务端计时 老数据为空即不显示耗时
+ */
 export interface AgentBlock {
   kind: AgentBlockKind;
   at: string;
@@ -54,6 +66,12 @@ export interface AgentBlock {
   result?: string | null;
   toolCallId?: string | null;
   calls?: AgentConfirmCall[] | null;
+  batchId?: string | null;
+  callIndex?: number | null;
+  startedAt?: number | null;
+  endedAt?: number | null;
+  durationMs?: number | null;
+  durationSource?: AgentDurationSource | null;
 }
 
 // 前端时间线块 id 为客户端自增 open 为折叠面板展开态
@@ -64,15 +82,21 @@ export interface AgentBlockUI {
   text?: string;
   name?: string;
   displayName?: string;
-  status?: AgentBlockStatus | "running";
+  status?: AgentBlockStatus;
   result?: string;
   // 确认卡靠它认领本轮的工具块 老会话的块没有 认不到就退回旧形态
   toolCallId?: string;
   calls?: AgentConfirmCall[];
   open?: boolean;
-  // 流式实测耗时 仅本次连接内可得 回放块无此二字段 行级不显示耗时
-  startMs?: number;
+  batchId?: string;
+  // 组内序号（0 基）同名并行靠它区分
+  callIndex?: number;
+  // 服务端计时 前端只投影 缺了不显示
+  startedAt?: number;
+  endedAt?: number;
   durationMs?: number;
+  // 耗时口径 工具块用 文本块留空
+  durationSource?: AgentDurationSource;
 }
 
 export interface AgentMessage {
@@ -84,8 +108,19 @@ export interface AgentMessage {
   status?: AgentMessageUiStatus;
   messageStatus?: AgentPersistedMessageStatus;
   createdAt?: string;
-  // 轮次总耗时 流式收尾实测 回放由相邻 user/assistant createTime 差值补齐
+  // 服务端耗时 直播与回放同源
   elapsedMs?: number;
+}
+
+/**
+ * 一轮对话的视图模型
+ * 一问可对多答：停在确认卡片上的那条与用户裁决后的续答都属同一轮 按先后拼进同一张卡
+ */
+export interface AgentTurn {
+  id: string;
+  index: number;
+  user?: AgentMessage;
+  assistants: AgentMessage[];
 }
 
 export interface AgentMetaPayload {
@@ -98,13 +133,35 @@ export interface AgentMessageDelta {
   delta: string;
 }
 
+/**
+ * SSE tool 帧 一次调用收到 pending / running / 终态三帧 按 NON_NULL 序列化
+ */
 export interface AgentToolProgress {
   toolCallId?: string | null;
   name: string;
   displayName: string;
-  status: "start" | "end";
+  status: AgentToolStatus;
   result?: string | null;
+  // 只在终态有值
   ok?: boolean | null;
+  at?: string | null;
+  batchId?: string | null;
+  callIndex?: number | null;
+  startedAt?: number | null;
+  endedAt?: number | null;
+  durationMs?: number | null;
+  durationSource?: AgentDurationSource | null;
+}
+
+/**
+ * SSE block 帧 文本封口后服务端下发起止 不带正文
+ */
+export interface AgentTextBlockSeal {
+  kind: AgentBlockKind;
+  at?: string | null;
+  startedAt?: number | null;
+  endedAt?: number | null;
+  durationMs?: number | null;
 }
 
 export interface AgentHintPayload {
@@ -117,12 +174,16 @@ export interface AgentConfirmPayload {
   messageId?: string | null;
   title?: string | null;
   calls: AgentConfirmCall[];
+  // 挂起也是本段 run 的收口
+  durationMs?: number | null;
 }
 
 export interface AgentCompletionPayload {
   messageId?: string | null;
   title?: string | null;
   messageStatus?: AgentPersistedMessageStatus;
+  // 服务端耗时 与落库同源
+  durationMs?: number | null;
 }
 
 // 引擎探活身份 /agent/v1/meta

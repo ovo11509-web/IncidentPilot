@@ -151,7 +151,8 @@ public class AgentConversationServiceImpl implements AgentConversationService {
 
     @Override
     public String addAssistantMessage(String conversationId, String userId, String content, String thinkingContent,
-                                      List<AgentBlock> blocks, String replyToMessageId, AgentMessageStatus status) {
+                                      List<AgentBlock> blocks, String replyToMessageId, AgentMessageStatus status,
+                                      Long durationMs) {
         AgentMessageDO message = AgentMessageDO.builder()
                 .conversationId(conversationId)
                 .userId(userId)
@@ -161,6 +162,7 @@ public class AgentConversationServiceImpl implements AgentConversationService {
                 .blocks(blocks)
                 .replyToMessageId(replyToMessageId)
                 .messageStatus(status.name())
+                .durationMs(durationMs)
                 .build();
         messageMapper.insert(message);
         return message.getId();
@@ -299,6 +301,7 @@ public class AgentConversationServiceImpl implements AgentConversationService {
                         .thinkingContent(item.getThinkingContent())
                         .blocks(item.getBlocks())
                         .messageStatus(item.getMessageStatus())
+                        .durationMs(item.getDurationMs())
                         .createTime(item.getCreateTime())
                         .build())
                 .toList();

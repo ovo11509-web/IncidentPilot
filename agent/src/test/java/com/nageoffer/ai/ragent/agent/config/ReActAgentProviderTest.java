@@ -25,6 +25,7 @@ import com.nageoffer.ai.ragent.agent.memory.AgentUserMemoryMiddleware;
 import com.nageoffer.ai.ragent.agent.service.AgentConversationService;
 import com.nageoffer.ai.ragent.agent.skill.AgentSkillMaskingMiddleware;
 import com.nageoffer.ai.ragent.agent.state.PgAgentStateStore;
+import com.nageoffer.ai.ragent.agent.tool.AgentToolBatchMiddleware;
 import com.nageoffer.ai.ragent.agent.tool.AgentToolCatalog;
 import com.nageoffer.ai.ragent.agent.tool.KnowledgeSearchTool;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
@@ -36,12 +37,14 @@ import com.nageoffer.ai.ragent.rag.core.prompt.AgentPromptSlot;
 import com.nageoffer.ai.ragent.rag.core.skill.AgentSkillRegistry;
 import com.nageoffer.ai.ragent.rag.enums.IntentKind;
 import com.nageoffer.ai.ragent.rag.service.KnowledgeSearchFacade;
+import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
 import java.util.Map;
@@ -93,7 +96,18 @@ class ReActAgentProviderTest {
                 mock(AgentUserMemoryMiddleware.class),
                 mock(AgentContextCompactionMiddleware.class),
                 mock(AgentConfirmDenialMiddleware.class),
-                mock(AgentSkillMaskingMiddleware.class));
+                mock(AgentSkillMaskingMiddleware.class),
+                new AgentToolBatchMiddleware(),
+                absent(),
+                absent());
+    }
+
+    /**
+     * 追踪关闭时中间件不在容器里，mock ifAvailable 即空操作
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> ObjectProvider<T> absent() {
+        return mock(ObjectProvider.class);
     }
 
     @Test
@@ -146,6 +160,32 @@ class ReActAgentProviderTest {
         assertThat(active.catalog().displayNameOf(KnowledgeSearchTool.TOOL_NAME))
                 .isEqualTo(KnowledgeSearchTool.DISPLAY_NAME);
         assertThat(active.catalog().displayNameOf("unknown_query")).isEqualTo("unknown_query");
+    }
+
+    /**
+     * 重试会让同一 toolCallId 产生多个 span，事实源 CAS 只保首次起止，节点数对不上
+     */
+    @Test
+    void shouldKeepToolRetriesOffSoOneCallStaysOneObservation() {
+        var active = provider.getAgent();
+
+        ExecutionConfig config = active.agent().getToolExecutionConfig();
+        Integer maxAttempts = config == null ? null : config.getMaxAttempts();
+        assertThat(maxAttempts == null ? 1 : maxAttempts).isLessThanOrEqualTo(1);
+        // 盯着框架默认值，升级时如果变了这里会红
+        assertThat(ExecutionConfig.TOOL_DEFAULTS.getMaxAttempts()).isEqualTo(1);
+    }
+
+    /**
+     * 重试加在整条流之上，半程失败即重订阅，已吐出的 chunk 不回滚：正文会重复一遍
+     * 闸门只有这一处——调用级这个值会盖住模型 defaultOptions，改那边等于没改
+     */
+    @Test
+    void shouldKeepModelRetriesOffSoHalfStreamFailureIsNotReplayed() {
+        var active = provider.getAgent();
+
+        // 框架语义是「最大尝试次数、含首次」，1 即不重试，它也校验了必须大于 0
+        assertThat(active.agent().getModelConfig().maxRetries()).isEqualTo(1);
     }
 
     private IntentNode mcpNode(String id, String name, String toolId) {

@@ -36,12 +36,18 @@ import java.util.List;
 public class AgentBlock {
 
     /**
+     * durationSource 值：耗时量的是这条工具自己的执行体
+     */
+    public static final String DURATION_SOURCE_TOOL = "tool";
+
+    /**
      * reasoning / answer / tool / confirm / error
      */
     private String kind;
 
     /**
-     * 产生时刻 yyyy-MM-dd'T'HH:mm:ss，历史数据是 HH:mm:ss，前端两种都认
+     * 块产生时刻 yyyy-MM-dd'T'HH:mm:ss（历史 HH:mm:ss，前端两种都认）
+     * 工具块是模型开始吐参数的时刻，不是执行起点，量耗时看 startedAt
      */
     private String at;
 
@@ -61,7 +67,7 @@ public class AgentBlock {
     private String displayName;
 
     /**
-     * tool 终态 done / interrupted，confirm 终态 pending / approved / denied
+     * tool 状态 pending / running / awaiting / done / failed / denied / interrupted，confirm 终态 pending / approved / denied
      */
     private String status;
 
@@ -74,6 +80,37 @@ public class AgentBlock {
      * 供应商侧的 tool_call id，与上下文里 tool_use / tool_result 同源；端点不回时留空
      */
     private String toolCallId;
+
+    /**
+     * 同批工具共享的批次号，未执行的块没有批
+     */
+    private String batchId;
+
+    /**
+     * 组内序号（0 基），同名并行调用靠它区分先后
+     */
+    private Integer callIndex;
+
+    /**
+     * 起点 epoch millis（服务端时刻）
+     * 工具块：进入工具体，不含模型吐参数阶段；文本块：首个增量到达
+     */
+    private Long startedAt;
+
+    /**
+     * 终点 epoch millis（服务端时刻），断在半路留空
+     */
+    private Long endedAt;
+
+    /**
+     * 耗时，两端齐了才有
+     */
+    private Long durationMs;
+
+    /**
+     * 耗时口径 tool / batch，缺省即 batch（老数据整批共享）；文本块留空
+     */
+    private String durationSource;
 
     /**
      * confirm 块待用户裁决的工具调用，整卡一次决策，不逐条勾选

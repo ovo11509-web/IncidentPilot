@@ -45,7 +45,8 @@ public interface AgentConversationService {
      * 保存助手消息
      */
     String addAssistantMessage(String conversationId, String userId, String content, String thinkingContent,
-                               List<AgentBlock> blocks, String replyToMessageId, AgentMessageStatus status);
+                               List<AgentBlock> blocks, String replyToMessageId, AgentMessageStatus status,
+                               Long durationMs);
 
     /**
      * 结算挂起的确认卡片：卡片状态改 approved/denied，消息状态改回 NORMAL

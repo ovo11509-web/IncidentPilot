@@ -22,6 +22,7 @@ import com.nageoffer.ai.ragent.agent.enums.AgentMemoryTriggerType;
 import com.nageoffer.ai.ragent.agent.memory.AgentMemoryOutcome;
 import com.nageoffer.ai.ragent.agent.memory.AgentMemoryPipeline;
 import com.nageoffer.ai.ragent.agent.memory.AgentUserMemoryMiddleware;
+import com.nageoffer.ai.ragent.agent.trace.AgentToolBodyTracer;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
@@ -74,8 +75,8 @@ public class MemoryFlushTool implements AgentTool {
 
     @Override
     public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
-        return Mono.fromCallable(() -> execute(param))
-                .subscribeOn(Schedulers.boundedElastic());
+        return AgentToolBodyTracer.trace(this, param, () -> Mono.fromCallable(() -> execute(param))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     private ToolResultBlock execute(ToolCallParam param) {

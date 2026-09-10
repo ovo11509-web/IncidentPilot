@@ -21,6 +21,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.agent.skill.AgentSkillMaskingMiddleware;
 import com.nageoffer.ai.ragent.agent.tool.AgentToolCatalog.McpToolBinding;
+import com.nageoffer.ai.ragent.agent.trace.AgentToolBodyTracer;
 import com.nageoffer.ai.ragent.rag.core.mcp.McpToolExecutor;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.TextBlock;
@@ -97,13 +98,25 @@ public class McpToolBridge extends ToolBase {
         String maskedBy = maskedBySkill(param);
         if (maskedBy != null) {
             log.info("技能未加载, 拒绝直接调用, toolId: {}, skillCode: {}", getName(), maskedBy);
+            markMasked(param, maskedBy);
             return Mono.just(buildResult(toolCallId(param), """
                     这个工具属于技能 %s，手册还没加载，本次调用没有执行。
                     请先调用 load_skill 取 skill_code 为 %s 的手册，按手册里的步骤办。"""
                     .formatted(maskedBy, maskedBy), true));
         }
-        return Mono.fromCallable(() -> execute(param))
-                .subscribeOn(Schedulers.boundedElastic());
+        return AgentToolBodyTracer.trace(this, param, () -> Mono.fromCallable(() -> execute(param))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    /**
+     * 只记原因不记起止，必须在 trace helper 之前调用
+     */
+    private static void markMasked(ToolCallParam param, String maskedBy) {
+        AgentToolExecutionFacts facts = AgentToolExecutionFacts
+                .from(param == null ? null : param.getRuntimeContext());
+        if (facts != null) {
+            facts.markShortCircuit(toolCallId(param), AgentToolExecutionFacts.SHORT_CIRCUIT_MASKED, maskedBy);
+        }
     }
 
     /**

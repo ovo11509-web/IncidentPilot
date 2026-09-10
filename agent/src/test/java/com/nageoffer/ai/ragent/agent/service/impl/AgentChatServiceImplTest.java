@@ -19,6 +19,7 @@ package com.nageoffer.ai.ragent.agent.service.impl;
 
 import com.nageoffer.ai.ragent.agent.config.ReActAgentProvider;
 import com.nageoffer.ai.ragent.agent.config.ReActAgentProvider.ActiveAgent;
+import com.nageoffer.ai.ragent.agent.dto.AgentConfirmSettlement;
 import com.nageoffer.ai.ragent.agent.enums.AgentMemoryTriggerType;
 import com.nageoffer.ai.ragent.agent.memory.AgentMemoryOutcome;
 import com.nageoffer.ai.ragent.agent.memory.AgentMemoryPipeline;
@@ -26,6 +27,7 @@ import com.nageoffer.ai.ragent.agent.memory.AgentMemoryProperties;
 import com.nageoffer.ai.ragent.agent.service.AgentConversationService;
 import com.nageoffer.ai.ragent.agent.service.handler.AgentRunGate;
 import com.nageoffer.ai.ragent.agent.tool.AgentToolCatalog.ResolvedCatalog;
+import com.nageoffer.ai.ragent.agent.trace.AgentTraceContextKeys;
 import com.nageoffer.ai.ragent.framework.context.LoginUser;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
@@ -33,7 +35,11 @@ import com.nageoffer.ai.ragent.framework.web.StreamTaskManager;
 import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.message.AssistantMessage;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.state.AgentState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +51,7 @@ import reactor.core.publisher.Sinks;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -170,6 +177,67 @@ class AgentChatServiceImplTest {
         service.streamChat("问题", CONVERSATION_ID, new SseEmitter());
 
         verifyNoInteractions(memoryPipeline);
+    }
+
+    /**
+     * 业务 ID 随上下文进框架，供链路追踪反查
+     */
+    @Test
+    void shouldCarryBusinessIdsIntoRuntimeContext() {
+        when(agent.streamEvents(any(Msg.class), any(RuntimeContext.class))).thenReturn(Flux.empty());
+        ArgumentCaptor<RuntimeContext> runtimeContext = ArgumentCaptor.forClass(RuntimeContext.class);
+        ArgumentCaptor<String> taskId = ArgumentCaptor.forClass(String.class);
+
+        service.streamChat("问题", CONVERSATION_ID, new SseEmitter());
+        verify(agent).streamEvents(any(Msg.class), runtimeContext.capture());
+        verify(taskManager).register(taskId.capture(), anyString(), any());
+
+        RuntimeContext captured = runtimeContext.getValue();
+        assertThat(captured.getUserId()).isEqualTo(USER_ID);
+        assertThat(captured.getSessionId()).isEqualTo(CONVERSATION_ID);
+        // 与 SSE META 给前端的任务号一致
+        assertThat(contextId(captured, AgentTraceContextKeys.TASK_ID)).isEqualTo(taskId.getValue());
+        assertThat(contextId(captured, AgentTraceContextKeys.REPLY_TO_MESSAGE_ID)).isEqualTo("m-3003");
+        // 首问无确认消息号，null 不能炸
+        assertThat(contextId(captured, AgentTraceContextKeys.CONFIRM_MESSAGE_ID)).isNull();
+    }
+
+    /**
+     * 续跑补上确认消息号，答复挂回原提问
+     */
+    @Test
+    void shouldCarryConfirmMessageIdWhenResumingAfterApproval() {
+        ToolUseBlock asking = ToolUseBlock.builder()
+                .id("call-1")
+                .name("submit_leave")
+                .input(Map.of("days", 1))
+                .state(ToolCallState.ASKING)
+                .build();
+        AgentState state = AgentState.builder()
+                .userId(USER_ID)
+                .sessionId(CONVERSATION_ID)
+                .addMessage(AssistantMessage.builder().content(asking).build())
+                .build();
+        when(agent.getAgentState(USER_ID, CONVERSATION_ID)).thenReturn(state);
+        when(conversationService.settlePendingConfirm(CONVERSATION_ID, USER_ID, "m-4004", true))
+                .thenReturn(new AgentConfirmSettlement("会话标题", "m-3003"));
+        when(agent.streamEvents(any(Msg.class), any(RuntimeContext.class))).thenReturn(Flux.empty());
+        ArgumentCaptor<RuntimeContext> runtimeContext = ArgumentCaptor.forClass(RuntimeContext.class);
+
+        service.confirmPendingTool(CONVERSATION_ID, "m-4004", true, new SseEmitter());
+        verify(agent).streamEvents(any(Msg.class), runtimeContext.capture());
+
+        RuntimeContext captured = runtimeContext.getValue();
+        assertThat(contextId(captured, AgentTraceContextKeys.CONFIRM_MESSAGE_ID)).isEqualTo("m-4004");
+        assertThat(contextId(captured, AgentTraceContextKeys.REPLY_TO_MESSAGE_ID)).isEqualTo("m-3003");
+    }
+
+    /**
+     * 泛型 get 落地成 String，避免 assertThat 重载歧义
+     */
+    private static String contextId(RuntimeContext ctx, String key) {
+        String value = ctx.get(key);
+        return value;
     }
 
     @Test

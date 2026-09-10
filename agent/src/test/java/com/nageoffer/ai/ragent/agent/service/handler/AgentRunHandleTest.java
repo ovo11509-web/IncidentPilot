@@ -17,13 +17,27 @@
 
 package com.nageoffer.ai.ragent.agent.service.handler;
 
+import com.nageoffer.ai.ragent.agent.tool.AgentToolExecutionFacts;
+import com.nageoffer.ai.ragent.agent.trace.AgentRunTracer;
+import com.nageoffer.ai.ragent.agent.trace.CollectingSpanExporter;
+import com.nageoffer.ai.ragent.agent.trace.RagentAttributes;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.framework.web.StreamTaskManager;
+import io.agentscope.core.agent.RuntimeContext;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.data.SpanData;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import reactor.core.Disposable;
 
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,13 +56,28 @@ class AgentRunHandleTest {
 
     private SseEmitterSender sender;
     private StreamTaskManager taskManager;
+    private AgentToolExecutionFacts facts;
+    private RuntimeContext runtimeContext;
     private AgentRunHandle handle;
+    private List<SpanData> exported;
+    private SdkTracerProvider tracerProvider;
 
     @BeforeEach
     void setUp() {
         sender = mock(SseEmitterSender.class);
         taskManager = mock(StreamTaskManager.class);
-        handle = new AgentRunHandle(TASK_ID, sender, taskManager);
+        facts = new AgentToolExecutionFacts(TASK_ID, Clock.systemDefaultZone());
+        runtimeContext = RuntimeContext.builder().userId("u-1001").sessionId("c-2002").build();
+        handle = new AgentRunHandle(TASK_ID, sender, taskManager, facts, runtimeContext);
+        exported = Collections.synchronizedList(new ArrayList<>());
+        tracerProvider = SdkTracerProvider.builder()
+                .addSpanProcessor(SimpleSpanProcessor.builder(new CollectingSpanExporter(exported)).build())
+                .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        tracerProvider.close();
     }
 
     @Test
@@ -146,6 +175,66 @@ class AgentRunHandleTest {
         assertThat(handle.isForcedDisposal()).isFalse();
     }
 
+    /**
+     * 中断时刻必须在打断动作之前定格，否则未完 span 终点落错
+     */
+    @Test
+    void shouldStampInterruptTimeBeforeInterruptAction() {
+        Disposable disposable = mock(Disposable.class);
+        AtomicInteger stampedWhenInterrupting = new AtomicInteger();
+        handle.bindStream(disposable, () -> {
+            stampedWhenInterrupting.set(facts.interruptedAt() == null ? 0 : 1);
+            handle.markUpstreamTerminated();
+        });
+
+        handle.interruptUpstream();
+
+        assertThat(stampedWhenInterrupting.get()).isOne();
+        // 优雅路径没掐链，cancelledAt 应为空
+        assertThat(facts.cancelledAt()).isNull();
+        assertThat(facts.terminationAt()).isEqualTo(facts.interruptedAt());
+    }
+
+    /**
+     * 根 span 在框架 onComplete 后就 end 了，结局必须在打断前写入
+     */
+    @Test
+    void shouldWriteInterruptedOutcomeBeforeInterruptAction() {
+        Span root = bindRootSpan();
+        Disposable disposable = mock(Disposable.class);
+        // 模拟框架收尾时官方中间件 end 根 span
+        handle.bindStream(disposable, () -> {
+            root.end();
+            handle.markUpstreamTerminated();
+        });
+
+        handle.interruptUpstream();
+
+        assertThat(onlySpan().getAttributes().get(RagentAttributes.RUN_OUTCOME))
+                .isEqualTo(RagentAttributes.RUN_OUTCOME_INTERRUPTED);
+    }
+
+    /**
+     * dispose 后没有线程能读 span，结局必须在掐链前落定
+     */
+    @Test
+    void shouldWriteAbortedOutcomeBeforeDispose() {
+        Span root = bindRootSpan();
+        Disposable disposable = mock(Disposable.class);
+        doAnswer(invocation -> {
+            root.end();
+            return null;
+        }).when(disposable).dispose();
+        // 不发终止信号，等满窗口后走强制断流
+        handle.bindStream(disposable, () -> {
+        });
+
+        handle.interruptUpstream();
+
+        assertThat(onlySpan().getAttributes().get(RagentAttributes.RUN_OUTCOME))
+                .isEqualTo(RagentAttributes.RUN_OUTCOME_ABORTED);
+    }
+
     @Test
     void shouldMarkForcedDisposalWhenAwaitTimesOut() {
         Disposable disposable = mock(Disposable.class);
@@ -157,6 +246,9 @@ class AgentRunHandleTest {
 
         assertThat(handle.isForcedDisposal()).isTrue();
         verify(disposable).dispose();
+        assertThat(facts.cancelledAt()).isNotNull();
+        // 两条路径都写过，收口对齐先写入的
+        assertThat(facts.terminationAt()).isEqualTo(facts.interruptedAt());
     }
 
     @Test
@@ -230,5 +322,16 @@ class AgentRunHandleTest {
     @Test
     void shouldTolerateUnboundStream() {
         assertThatCode(() -> handle.interruptUpstream()).doesNotThrowAnyException();
+    }
+
+    private Span bindRootSpan() {
+        Span root = tracerProvider.get("test").spanBuilder("invoke_agent ragent").startSpan();
+        AgentRunTracer.bindRoot(runtimeContext, root);
+        return root;
+    }
+
+    private SpanData onlySpan() {
+        assertThat(exported).hasSize(1);
+        return exported.get(0);
     }
 }

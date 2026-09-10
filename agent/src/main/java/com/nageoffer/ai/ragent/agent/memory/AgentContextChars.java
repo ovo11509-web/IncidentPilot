@@ -30,11 +30,12 @@ import java.util.List;
 
 /**
  * 上下文体量口径：字符数作为 token 的粗代理，非文本块按零计
+ * 链路追踪也复用此口径，保证两处数字可比
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-final class AgentContextChars {
+public final class AgentContextChars {
 
-    static int total(List<Msg> context) {
+    public static int total(List<Msg> context) {
         int sum = 0;
         for (Msg msg : context) {
             sum += of(msg);

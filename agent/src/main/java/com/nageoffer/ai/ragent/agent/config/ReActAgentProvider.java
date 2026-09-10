@@ -23,14 +23,18 @@ import com.nageoffer.ai.ragent.agent.memory.AgentContextCompactionMiddleware;
 import com.nageoffer.ai.ragent.agent.memory.AgentUserMemoryMiddleware;
 import com.nageoffer.ai.ragent.agent.skill.AgentSkillMaskingMiddleware;
 import com.nageoffer.ai.ragent.agent.state.PgAgentStateStore;
+import com.nageoffer.ai.ragent.agent.tool.AgentToolBatchMiddleware;
 import com.nageoffer.ai.ragent.agent.tool.AgentToolCatalog;
 import com.nageoffer.ai.ragent.agent.tool.AgentToolCatalog.ResolvedCatalog;
+import com.nageoffer.ai.ragent.agent.trace.AgentTraceEnrichmentMiddleware;
 import com.nageoffer.ai.ragent.rag.core.prompt.AgentPromptResolver;
 import com.nageoffer.ai.ragent.rag.core.prompt.AgentPromptSlot;
 import io.agentscope.core.ReActAgent;
+import io.agentscope.core.tracing.OtelTracingMiddleware;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -54,6 +58,12 @@ public class ReActAgentProvider {
     private final AgentContextCompactionMiddleware contextCompactionMiddleware;
     private final AgentConfirmDenialMiddleware confirmDenialMiddleware;
     private final AgentSkillMaskingMiddleware skillMaskingMiddleware;
+    private final AgentToolBatchMiddleware toolBatchMiddleware;
+    /**
+     * 追踪默认关，ObjectProvider 避免开关关闭时装配失败
+     */
+    private final ObjectProvider<OtelTracingMiddleware> otelTracingMiddleware;
+    private final ObjectProvider<AgentTraceEnrichmentMiddleware> traceEnrichmentMiddleware;
 
     private volatile CachedAgent cached;
 
@@ -102,21 +112,27 @@ public class ReActAgentProvider {
     }
 
     private ReActAgent buildAgent(String persona, ResolvedCatalog catalog) {
-        return ReActAgent.builder()
+        ReActAgent.Builder builder = ReActAgent.builder()
                 .name(AGENT_NAME)
                 .sysPrompt(persona)
                 .model(agentChatModel)
                 .toolkit(toolCatalog.buildToolkit(catalog))
                 .maxIters(agentProperties.getMaxIters())
                 .maxRetries(agentProperties.getMaxRetries())
-                .stateStore(agentStateStore)
-                // 先注册即外层：记忆块插在人设与会话之间，压缩中间件的 offset 比对自然吸收这一条
+                .stateStore(agentStateStore);
+        // 追踪包在最外层：span 要盖住记忆与压缩才量得到耗时
+        otelTracingMiddleware.ifAvailable(builder::middleware);
+        traceEnrichmentMiddleware.ifAvailable(builder::middleware);
+        return builder
+                // 外层先执行：记忆块插在人设与会话之间，压缩的 offset 比对自然吸收它
                 .middleware(userMemoryMiddleware)
                 .middleware(contextCompactionMiddleware)
-                // 排在压缩之后：被压进摘要的那条拒绝结果已经不在列表里，改写自然跳过
+                // 压缩之后：被压进摘要的拒绝结果已不在列表里，改写自然跳过
                 .middleware(confirmDenialMiddleware)
-                // 最内层：手册被压缩带走后遮蔽跟着复位，工具与手册同进同出
+                // 手册被压缩带走后遮蔽跟着复位，工具与手册同进同出
                 .middleware(skillMaskingMiddleware)
+                // 最内层：批起止贴着真实执行，不随追踪开关变形
+                .middleware(toolBatchMiddleware)
                 .build();
     }
 
