@@ -21,7 +21,9 @@ import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.agent.dao.mapper.AgentStateMapper;
 import com.nageoffer.ai.ragent.agent.state.PgAgentStateStore;
 import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
+import com.nageoffer.ai.ragent.infra.enums.ModelProvider;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
+import io.agentscope.extensions.model.openai.compat.deepseek.DeepSeekFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -57,15 +59,26 @@ public class AgentEngineConfiguration {
             throw new IllegalStateException("供应商缺少 url 或 endpoints.chat: " + chat.getProvider());
         }
 
-        return OpenAIChatModel.builder()
+        OpenAIChatModel.Builder builder = OpenAIChatModel.builder()
                 .baseUrl(provider.getUrl())
                 .endpointPath(endpointPath)
                 .apiKey(provider.getApiKey())
                 .modelName(chat.getModel())
                 .stream(true)
                 // 兼容端点普遍无法同时处理 response_format 与工具调用，统一走 generate_response 兜底
-                .nativeStructuredOutputWithTools(false)
-                .build();
+                .nativeStructuredOutputWithTools(false);
+        applyProviderFormatter(builder, chat.getProvider());
+        return builder.build();
+    }
+
+    /**
+     * 按供应商挂官方 formatter：DeepSeek 工具定义不认 strict，且思考模式下 reasoning_content
+     * 需按「本轮 + 含工具调用的历史段」保留，通用 formatter 两条都不做
+     */
+    private void applyProviderFormatter(OpenAIChatModel.Builder builder, String providerId) {
+        if (ModelProvider.DEEP_SEEK.matches(providerId)) {
+            builder.formatter(new DeepSeekFormatter());
+        }
     }
 
     @Bean
