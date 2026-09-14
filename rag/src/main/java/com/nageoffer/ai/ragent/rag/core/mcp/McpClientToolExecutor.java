@@ -45,25 +45,41 @@ public class McpClientToolExecutor implements McpToolExecutor {
     }
 
     @Override
-    public CallToolResult execute(Map<String, Object> parameters) {
+    public CallToolResult execute(Map<String, Object> parameters, Map<String, Object> meta) {
         long startMs = System.currentTimeMillis();
+        Map<String, Object> args = parameters != null ? parameters : Map.of();
+        // 入参里有收件人姓名、手机号、地址这类明文，服务端是逐个打码才回的，这里不能顺手又原样写进 INFO
+        // 形状（带了哪些参数、谁在调）足够定位问题，要看值就开 DEBUG
+        log.debug("MCP 远程工具调用入参, toolId={}, params={}", toolDefinition.name(), args);
         try {
-            Map<String, Object> args = parameters != null ? parameters : Map.of();
-            CallToolResult result = mcpClient.callTool(new CallToolRequest(toolDefinition.name(), args));
-            log.info("MCP 远程工具调用完成, toolId={}, params={}, contentSize={}, elapsed={}ms",
-                    toolDefinition.name(), args,
+            CallToolResult result = mcpClient.callTool(buildRequest(args, meta));
+            log.info("MCP 远程工具调用完成, toolId={}, paramKeys={}, userId={}, contentSize={}, elapsed={}ms",
+                    toolDefinition.name(), args.keySet(), McpCallMeta.userIdOf(meta),
                     result.content() != null ? result.content().size() : 0,
                     System.currentTimeMillis() - startMs);
             return result;
         } catch (Exception e) {
             String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            log.warn("MCP 远程工具调用异常, toolId={}, params={}, elapsed={}ms, reason={}",
-                    toolDefinition.name(), parameters,
+            log.warn("MCP 远程工具调用异常, toolId={}, paramKeys={}, userId={}, elapsed={}ms, reason={}",
+                    toolDefinition.name(), args.keySet(), McpCallMeta.userIdOf(meta),
                     System.currentTimeMillis() - startMs, reason);
             return CallToolResult.builder()
                     .content(List.of(new TextContent("远程调用失败: " + reason)))
                     .isError(true)
                     .build();
         }
+    }
+
+    /**
+     * meta 为空时不发 {@code _meta}，让请求体与加身份透传之前保持一致
+     */
+    private CallToolRequest buildRequest(Map<String, Object> args, Map<String, Object> meta) {
+        CallToolRequest.Builder builder = CallToolRequest.builder()
+                .name(toolDefinition.name())
+                .arguments(args);
+        if (meta != null && !meta.isEmpty()) {
+            builder.meta(meta);
+        }
+        return builder.build();
     }
 }

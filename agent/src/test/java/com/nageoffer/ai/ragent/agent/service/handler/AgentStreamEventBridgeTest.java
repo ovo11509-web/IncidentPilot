@@ -641,7 +641,7 @@ class AgentStreamEventBridgeTest {
             }
 
             @Override
-            public CallToolResult execute(Map<String, Object> parameters) {
+            public CallToolResult execute(Map<String, Object> parameters, Map<String, Object> meta) {
                 return null;
             }
         };

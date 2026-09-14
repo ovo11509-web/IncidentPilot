@@ -22,6 +22,7 @@ import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.agent.skill.AgentSkillMaskingMiddleware;
 import com.nageoffer.ai.ragent.agent.tool.AgentToolCatalog.McpToolBinding;
 import com.nageoffer.ai.ragent.agent.trace.AgentToolBodyTracer;
+import com.nageoffer.ai.ragent.rag.core.mcp.McpCallMeta;
 import com.nageoffer.ai.ragent.rag.core.mcp.McpToolExecutor;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.TextBlock;
@@ -165,10 +166,20 @@ public class McpToolBridge extends ToolBase {
         return annotations == null ? null : annotations.readOnlyHint();
     }
 
+    /**
+     * 身份只认 RuntimeContext：这里已经切到 boundedElastic，ThreadLocal 型的 UserContext 传不过来，
+     * 取到的会是 null 且不抛异常，症状是所有业务数据静默挂在空用户上
+     */
+    private static String userId(ToolCallParam param) {
+        RuntimeContext runtimeContext = param == null ? null : param.getRuntimeContext();
+        return runtimeContext == null ? null : runtimeContext.getUserId();
+    }
+
     private ToolResultBlock execute(ToolCallParam param) {
         String toolCallId = toolCallId(param);
         try {
-            CallToolResult result = executor.execute(new HashMap<>(param.getInput()));
+            CallToolResult result = executor.execute(
+                    new HashMap<>(param.getInput()), McpCallMeta.ofUser(userId(param)));
             boolean isError = result != null && Boolean.TRUE.equals(result.isError());
             return buildResult(toolCallId, extractText(result), isError);
         } catch (Exception e) {
