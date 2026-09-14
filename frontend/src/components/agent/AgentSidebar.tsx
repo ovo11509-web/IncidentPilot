@@ -87,6 +87,8 @@ export function AgentSidebar() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState("");
   const [deleteTarget, setDeleteTarget] = React.useState<DeleteTarget | null>(null);
+  /** 哪一行的「…」菜单开着 菜单一开指针就挪到菜单上 行自己收不到 hover 只能记在这 */
+  const [menuId, setMenuId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
   const [avatarFailed, setAvatarFailed] = React.useState(false);
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -269,6 +271,7 @@ export function AgentSidebar() {
                         className="agent-session-item"
                         data-active={active && !selectMode}
                         data-picked={checked}
+                        data-menu={menuId === session.id}
                       >
                         {selectMode ? (
                           <button
@@ -304,11 +307,13 @@ export function AgentSidebar() {
                               onClick={() => openSession(session.id)}
                               title={sessionTip(session)}
                             >
-                              <span className="agent-session-title">
+                              <span className="agent-session-title agent-session-title--fade">
                                 {session.title || "新会话"}
                               </span>
                             </button>
-                            <DropdownMenu>
+                            <DropdownMenu
+                              onOpenChange={(open) => setMenuId(open ? session.id : null)}
+                            >
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
