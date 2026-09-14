@@ -5,3 +5,13 @@ server:
 spring:
   application:
     name: ragent-mcp-server
+
+ragent:
+  bit:
+    datasource:
+      url: jdbc:postgresql://127.0.0.1:5432/ragent_bit?client_encoding=UTF8
+      username: postgres
+      password: postgres
+    pending-order:
+      timeout: 5m
+      scan-interval: 1m
