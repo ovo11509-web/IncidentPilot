@@ -38,9 +38,10 @@ public class AgentProperties {
     private Integer maxIters = 10;
 
     /**
-     * 单次模型调用失败重试次数
+     * 单次模型调用的最大尝试次数（含首次），1 即不重试
+     * 重试加在整条流之上，半程失败会重订阅，已吐出的正文不回滚
      */
-    private Integer maxRetries = 2;
+    private Integer maxRetries = 1;
 
     /**
      * SSE 通道超时，到点即回收上游运行；一次 Agent 运行最多 max-iters 轮，每轮量级接近 RAG 单问全程
