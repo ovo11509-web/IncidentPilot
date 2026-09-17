@@ -23,6 +23,7 @@ import com.nageoffer.ai.ragent.mcp.dao.entity.OrderDO;
 import com.nageoffer.ai.ragent.mcp.dao.mapper.OrderMapper;
 import com.nageoffer.ai.ragent.mcp.config.McpToolAnnotations;
 import com.nageoffer.ai.ragent.mcp.executor.McpToolResults;
+import com.nageoffer.ai.ragent.mcp.executor.McpToolSchema;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -33,9 +34,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+
+import static com.nageoffer.ai.ragent.mcp.executor.McpToolSchema.string;
 
 /**
  * 取消订单，只有没出库的两个状态能取消
@@ -59,16 +60,10 @@ public class BitOrderCancelMcpExecutor {
     }
 
     private Tool buildTool() {
-        Map<String, Object> properties = new LinkedHashMap<>();
-
-        properties.put("orderNo", Map.of(
-                "type", "string",
-                "title", "订单号",
-                "description", "要取消的订单号，来自订单查询，不要凭对话内容拼"
-        ));
-
-        JsonSchema inputSchema = new JsonSchema(
-                "object", properties, List.of("orderNo"), null, null, null);
+        JsonSchema inputSchema = McpToolSchema.object()
+                .required(string("orderNo", "要取消的订单号，来自订单查询，不要凭对话内容拼")
+                        .title("订单号"))
+                .build();
 
         return Tool.builder()
                 .name(TOOL_ID)
@@ -114,7 +109,7 @@ public class BitOrderCancelMcpExecutor {
         } catch (Exception e) {
             log.error("MCP 工具调用失败, toolId={}, elapsed={}ms",
                     TOOL_ID, System.currentTimeMillis() - startMs, e);
-            return McpToolResults.error("订单取消失败: " + e.getMessage());
+            return McpToolResults.failure("订单取消", e);
         }
     }
 

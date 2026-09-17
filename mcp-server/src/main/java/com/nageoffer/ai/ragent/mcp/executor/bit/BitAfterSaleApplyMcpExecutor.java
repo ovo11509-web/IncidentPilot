@@ -28,6 +28,7 @@ import com.nageoffer.ai.ragent.mcp.dao.mapper.OrderItemMapper;
 import com.nageoffer.ai.ragent.mcp.dao.mapper.OrderMapper;
 import com.nageoffer.ai.ragent.mcp.config.McpToolAnnotations;
 import com.nageoffer.ai.ragent.mcp.executor.McpToolResults;
+import com.nageoffer.ai.ragent.mcp.executor.McpToolSchema;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -41,9 +42,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.nageoffer.ai.ragent.mcp.executor.McpToolSchema.string;
 
 /**
  * 发起售后：退货退款、换货、仅退款
@@ -91,35 +93,17 @@ public class BitAfterSaleApplyMcpExecutor {
     }
 
     private Tool buildTool() {
-        Map<String, Object> properties = new LinkedHashMap<>();
-
-        properties.put("orderNo", Map.of(
-                "type", "string",
-                "title", "订单号",
-                "description", "要申请售后的订单号，来自订单查询"
-        ));
-
-        properties.put("skuCode", Map.of(
-                "type", "string",
-                "title", "商品型号",
-                "description", "要申请售后的商品 SKU 型号，取自该订单的商品明细。一单多件时只对这一件生效"
-        ));
-
-        properties.put("type", Map.of(
-                "type", "string",
-                "title", "售后类型",
-                "description", "售后类型：退货退款要把货寄回，换货换同款，仅退款适用于未收到货或货已丢失",
-                "enum", TYPES
-        ));
-
-        properties.put("reason", Map.of(
-                "type", "string",
-                "title", "申请原因",
-                "description", "申请原因，据实填写用户说明的问题，不要代为编造"
-        ));
-
-        JsonSchema inputSchema = new JsonSchema(
-                "object", properties, List.of("orderNo", "skuCode", "type", "reason"), null, null, null);
+        JsonSchema inputSchema = McpToolSchema.object()
+                .required(string("orderNo", "要申请售后的订单号，来自订单查询")
+                        .title("订单号"))
+                .required(string("skuCode", "要申请售后的商品 SKU 型号，取自该订单的商品明细。一单多件时只对这一件生效")
+                        .title("商品型号"))
+                .required(string("type", "售后类型：退货退款要把货寄回，换货换同款，仅退款适用于未收到货或货已丢失")
+                        .title("售后类型")
+                        .options(TYPES))
+                .required(string("reason", "申请原因，据实填写用户说明的问题，不要代为编造")
+                        .title("申请原因"))
+                .build();
 
         return Tool.builder()
                 .name(TOOL_ID)
@@ -196,7 +180,7 @@ public class BitAfterSaleApplyMcpExecutor {
         } catch (Exception e) {
             log.error("MCP 工具调用失败, toolId={}, elapsed={}ms",
                     TOOL_ID, System.currentTimeMillis() - startMs, e);
-            return McpToolResults.error("售后申请提交失败: " + e.getMessage());
+            return McpToolResults.failure("售后申请提交", e);
         }
     }
 
