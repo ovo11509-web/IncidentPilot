@@ -19,6 +19,7 @@ package com.nageoffer.ai.ragent.agent.tool;
 
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.agent.trace.AgentToolBodyTracer;
+import com.nageoffer.ai.ragent.framework.cancellation.TaskCancellation;
 import com.nageoffer.ai.ragent.rag.service.KnowledgeSearchFacade;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolResultBlock;
@@ -48,6 +49,7 @@ public class KnowledgeSearchTool implements AgentTool {
     private static final String QUERY_PARAM = "query";
     private static final String QUERY_DESCRIPTION = "用于检索知识库的完整独立问题";
     private static final String SEARCH_ERROR_MESSAGE = "知识库检索异常，请稍后重试";
+    private static final String INTERRUPTED_MESSAGE = "用户已停止，本次知识检索未完成";
 
     private final String description;
     private final KnowledgeSearchFacade knowledgeSearchFacade;
@@ -104,12 +106,19 @@ public class KnowledgeSearchTool implements AgentTool {
         String normalizedQuery = query.get();
         try {
             String result = knowledgeSearchFacade.search(normalizedQuery);
+            // RAG 逐层降级，取消到这里多半不是异常而是一份空结果，只在 catch 里判会漏掉
+            if (TaskCancellation.isCancelled()) {
+                return buildInterrupted(toolCallId);
+            }
             if (StrUtil.isBlank(result)) {
                 log.warn("知识库检索未返回有效内容, toolCallId: {}", toolCallId);
                 return buildResult(toolCallId, SEARCH_ERROR_MESSAGE, true);
             }
             return buildResult(toolCallId, result, false);
         } catch (Exception e) {
+            if (TaskCancellation.isCancellation(e)) {
+                return buildInterrupted(toolCallId);
+            }
             log.error("知识库检索工具调用异常, toolCallId: {}", toolCallId, e);
             // 工具返回会重新进入模型上下文，不得暴露异常中的内部地址、SQL 或凭据等细节
             return buildResult(toolCallId, SEARCH_ERROR_MESSAGE, true);
@@ -122,6 +131,19 @@ public class KnowledgeSearchTool implements AgentTool {
                 .name(TOOL_NAME)
                 .output(TextBlock.builder().text(StrUtil.emptyIfNull(text)).build())
                 .state(isError ? ToolResultState.ERROR : ToolResultState.SUCCESS)
+                .build();
+    }
+
+    /**
+     * 取消不能报成 ERROR：模型见到失败会在下一轮重试检索，而用户已经喊停
+     */
+    private ToolResultBlock buildInterrupted(String toolCallId) {
+        log.debug("知识库检索被取消, toolCallId: {}", toolCallId);
+        return ToolResultBlock.builder()
+                .id(toolCallId)
+                .name(TOOL_NAME)
+                .output(TextBlock.builder().text(INTERRUPTED_MESSAGE).build())
+                .state(ToolResultState.INTERRUPTED)
                 .build();
     }
 }
