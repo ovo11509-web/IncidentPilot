@@ -36,7 +36,8 @@ class BitSchemaScriptTest {
 
     @Test
     void shouldCoverEveryBusinessTable() {
-        TABLES.forEach(table -> assertTrue(script.contains("CREATE TABLE IF NOT EXISTS " + table + "\n"),
+        String normalized = script.replace("\r\n", "\n");
+        TABLES.forEach(table -> assertTrue(normalized.contains("CREATE TABLE IF NOT EXISTS " + table + "\n"),
                 "建表脚本缺少 " + table));
     }
 

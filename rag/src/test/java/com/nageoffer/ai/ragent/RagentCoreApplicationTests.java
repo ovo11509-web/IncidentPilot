@@ -19,8 +19,10 @@ package com.nageoffer.ai.ragent;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "RAG_LIVE_TESTS", matches = "true")
 class RagentCoreApplicationTests {
 
     @Test

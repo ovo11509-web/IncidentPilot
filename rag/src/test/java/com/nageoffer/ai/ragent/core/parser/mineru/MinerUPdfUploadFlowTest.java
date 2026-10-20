@@ -23,6 +23,7 @@ import com.nageoffer.ai.ragent.core.parser.model.ParsedDocument;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
@@ -54,16 +55,18 @@ import java.util.zip.ZipInputStream;
  * <p>
  * 运行示例:
  * <pre>
- * mvn -pl bootstrap test -Dtest=MinerUPdfUploadFlowTest \
+ * # 仅在真实资源和费用已获授权后设置 RAG_LIVE_TESTS=true
+ * mvn -pl rag -am test -Dtest=MinerUPdfUploadFlowTest \
  *     -Dmineru.test.pdf=/Users/machen/Downloads/sample.pdf \
  *     -DfailIfNoTests=false
  * </pre>
  * <p>
- * 不传 {@code mineru.test.pdf} 时整类跳过(不启动 Spring context),不影响日常构建
+ * 未明确授权设置 {@code RAG_LIVE_TESTS=true} 或不传 {@code mineru.test.pdf} 时整类跳过(不启动 Spring context),不影响日常构建
  * <p>
- * MinerU 返回的 zip 会自动解压到仓库根目录下的 {@code .mineru-output/}(临时目录,已加入 .gitignore)
+ * MinerU 返回的 zip 会自动解压到仓库根目录下的 {@code .output/}(临时目录,已加入 .gitignore)
  */
 @SpringBootTest(classes = TestRagentApplication.class, webEnvironment = WebEnvironment.NONE)
+@EnabledIfEnvironmentVariable(named = "RAG_LIVE_TESTS", matches = "true")
 @EnabledIfSystemProperty(named = "mineru.test.pdf", matches = ".+")
 @DisplayName("MinerU PDF 上传解析全流程(真实环境)")
 class MinerUPdfUploadFlowTest {

@@ -1,0 +1,111 @@
+[
+  {
+    "id": "ALERT-REPLAY",
+    "title": "告警重试与人工重放",
+    "module": "incident",
+    "className": "AlertRecoveryTest",
+    "tests": [
+      "committedReceiptSurvivesWorkerRestart",
+      "fiveRetriesThenOneTerminalFactAndConcurrentReplayRecovery"
+    ],
+    "faultPoint": "五次处理失败、终止及并发人工重放",
+    "evidenceLevel": "真实PG/直接服务调用/SQL时间fixture",
+    "expectedApplications": null,
+    "trace": false,
+    "limitations": "未验证完整告警JVM崩溃、Broker或生产",
+    "schemaVersion": 1,
+    "version": 1,
+    "expectedTests": 2,
+    "testSelector": "AlertRecoveryTest"
+  },
+  {
+    "id": "OUTBOX-RETRY",
+    "title": "Outbox投递恢复",
+    "module": "incident",
+    "className": "OutboxRecoveryTest",
+    "tests": [
+      "failedSendAndExpiredClaimReplayTheSameEnvelopeAndKey"
+    ],
+    "faultPoint": "发送失败、发布标记失败、过期claim",
+    "evidenceLevel": "真实PG/Relay/固定Producer",
+    "expectedApplications": null,
+    "trace": false,
+    "limitations": "未验证真实Broker或消费者",
+    "schemaVersion": 1,
+    "version": 1,
+    "expectedTests": 1,
+    "testSelector": "OutboxRecoveryTest"
+  },
+  {
+    "id": "WORKER-RECOVERY",
+    "title": "Worker崩溃恢复",
+    "module": "bootstrap",
+    "className": "IncidentObservabilityIsolatedTest",
+    "tests": [
+      "actualWorkerCrashRecoversStableExecutionInNewTrace"
+    ],
+    "faultPoint": "签票后真实Worker进程崩溃",
+    "evidenceLevel": "真实双JVM/HTTP/PG/SpanData",
+    "expectedApplications": 1,
+    "trace": true,
+    "limitations": "跨重启允许未导出Span缺失；未验证跨主机",
+    "schemaVersion": 1,
+    "version": 1,
+    "expectedTests": 1,
+    "testSelector": "IncidentObservabilityIsolatedTest#actualWorkerCrashRecoversStableExecutionInNewTrace"
+  },
+  {
+    "id": "RECEIPT-CHANNELS",
+    "title": "回执通道故障",
+    "module": "bootstrap",
+    "className": "IncidentObservabilityIsolatedTest",
+    "tests": [
+      "lostReceiptChannelsRemainUnknownUntilTrustedLateReceipt"
+    ],
+    "faultPoint": "回调丢失、响应丢失、双通道丢失",
+    "evidenceLevel": "真实双JVM/HTTP/PG/三个逻辑执行",
+    "expectedApplications": 3,
+    "trace": true,
+    "limitations": "三个独立Execution各一次应用；不代表真实基础设施",
+    "schemaVersion": 1,
+    "version": 1,
+    "expectedTests": 1,
+    "testSelector": "IncidentObservabilityIsolatedTest#lostReceiptChannelsRemainUnknownUntilTrustedLateReceipt"
+  },
+  {
+    "id": "GOLDEN",
+    "title": "告警到安全处置黄金链",
+    "module": "bootstrap",
+    "className": "IncidentObservabilityIsolatedTest",
+    "tests": [
+      "twoAlertsDiagnosisRejectionAndApprovalHaveActualCrossProcessAncestry"
+    ],
+    "faultPoint": "先拒绝再创建新意图并批准",
+    "evidenceLevel": "真实双JVM/HTTP/PG/本地Runbook",
+    "expectedApplications": 1,
+    "trace": true,
+    "limitations": "固定本地检索，未调用真实模型",
+    "schemaVersion": 1,
+    "version": 1,
+    "expectedTests": 1,
+    "testSelector": "IncidentObservabilityIsolatedTest#twoAlertsDiagnosisRejectionAndApprovalHaveActualCrossProcessAncestry"
+  },
+  {
+    "id": "DIAGNOSIS-SAFETY",
+    "title": "诊断安全拒绝",
+    "module": "bootstrap",
+    "className": "IncidentObservabilityIsolatedTest",
+    "tests": [
+      "actualInvalidAndStaleDiagnosisRequestsCannotExecuteAndKeepAttemptIdentity"
+    ],
+    "faultPoint": "无效与过期诊断请求",
+    "evidenceLevel": "真实双JVM/HTTP/PG/SpanData",
+    "expectedApplications": 0,
+    "trace": true,
+    "limitations": "本地安全模拟范围",
+    "schemaVersion": 1,
+    "version": 1,
+    "expectedTests": 1,
+    "testSelector": "IncidentObservabilityIsolatedTest#actualInvalidAndStaleDiagnosisRequestsCannotExecuteAndKeepAttemptIdentity"
+  }
+]

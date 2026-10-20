@@ -18,39 +18,55 @@
 package com.nageoffer.ai.ragent.rag.rewrite;
 
 import com.nageoffer.ai.ragent.rag.core.rewrite.MultiQuestionRewriteService;
+import com.nageoffer.ai.ragent.rag.core.rewrite.QueryTermMappingService;
 import com.nageoffer.ai.ragent.rag.core.rewrite.RewriteResult;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import com.nageoffer.ai.ragent.rag.config.RAGConfigProperties;
+import com.nageoffer.ai.ragent.rag.core.prompt.PromptTemplateLoader;
+import com.nageoffer.ai.ragent.infra.chat.LLMService;
+import com.nageoffer.ai.ragent.infra.enums.Tier;
+import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
 
-@Slf4j
-@SpringBootTest
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class MultiQuestionRewriteServiceTests {
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-    private final MultiQuestionRewriteService multiQuestionRewriteService;
+public class MultiQuestionRewriteServiceTests {
 
     @Test
     public void shouldReturnRewriteAndSubQuestions() {
         String question = "你好呀，淘宝和天猫数据安全怎么做的？";
+        LLMService llm = mock(LLMService.class);
+        when(llm.chat(any(ChatRequest.class), eq(Tier.FAST))).thenReturn("""
+                {"rewrite":"淘宝和天猫的数据安全措施", "sub_questions":["淘宝数据安全措施", "天猫数据安全措施"]}
+                """);
+        RewriteResult result = service(llm).rewriteWithSplit(question);
 
-        RewriteResult result = multiQuestionRewriteService.rewriteWithSplit(question);
+        Assertions.assertEquals("淘宝和天猫的数据安全措施", result.rewrittenQuestion());
+        Assertions.assertEquals(List.of("淘宝数据安全措施", "天猫数据安全措施"), result.subQuestions());
+    }
 
-        Assertions.assertNotNull(result);
-        Assertions.assertNotNull(result.rewrittenQuestion());
-        Assertions.assertFalse(result.rewrittenQuestion().isBlank());
+    @Test
+    void invalidModelOutputFallsBackToNormalizedQuestion() {
+        LLMService llm = mock(LLMService.class);
+        when(llm.chat(any(ChatRequest.class), eq(Tier.FAST))).thenReturn("not-json");
+        RewriteResult result = service(llm).rewriteWithSplit("淘宝和天猫数据安全怎么做？");
+        Assertions.assertEquals("淘宝和天猫数据安全怎么做？", result.rewrittenQuestion());
+        Assertions.assertEquals(List.of("淘宝和天猫数据安全怎么做？"), result.subQuestions());
+    }
 
-        List<String> subs = result.subQuestions();
-        Assertions.assertNotNull(subs);
-        Assertions.assertFalse(subs.isEmpty());
-        Assertions.assertTrue(subs.stream().allMatch(s -> s != null && !s.isBlank()));
-        boolean hasTaobao = subs.stream().anyMatch(s -> s.contains("淘宝"));
-        boolean hasTmall = subs.stream().anyMatch(s -> s.contains("天猫"));
-        Assertions.assertTrue(hasTaobao && hasTmall, "期望子问题能覆盖并列主体：淘宝和天猫");
+    private static MultiQuestionRewriteService service(LLMService llm) {
+        var properties = new RAGConfigProperties();
+        properties.setQueryRewriteEnabled(true);
+        var mapping = mock(QueryTermMappingService.class);
+        when(mapping.normalize(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
+        var prompts = mock(PromptTemplateLoader.class);
+        when(prompts.load(anyString())).thenReturn("system");
+        return new MultiQuestionRewriteService(llm, properties, mapping, prompts);
     }
 }

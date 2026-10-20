@@ -38,7 +38,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -65,8 +66,11 @@ class ConversationMessageServiceImplOrderTest {
 
     @BeforeAll
     static void initLambdaCache() {
-        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new Configuration(), "");
+        Configuration config = new Configuration();
+        config.setMapUnderscoreToCamelCase(true);
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(config, "");
         TableInfoHelper.initTableInfo(assistant, ConversationMessageDO.class);
+        TableInfoHelper.initTableInfo(assistant, ConversationDO.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -96,5 +100,70 @@ class ConversationMessageServiceImplOrderTest {
         String orderBy = captureOrderBySegment(ConversationMessageOrder.ASC).toLowerCase();
         assertTrue(orderBy.matches(".*order by\\s+create_?time\\s+asc\\s*,\\s*id\\s+asc.*"),
                 "Unexpected ORDER BY: " + orderBy);
+    }
+
+    @Test
+    void missingIdentityDoesNotReadMessages() {
+        assertTrue(conversationMessageService.listMessages("", USER_ID, 6, null).isEmpty());
+        assertTrue(conversationMessageService.listMessages(CONVERSATION_ID, null, 6, null).isEmpty());
+        verifyNoInteractions(conversationMapper, conversationMessageMapper, feedbackService);
+    }
+
+    @Test
+    void conversationOutsideUserScopeDoesNotReadMessages() {
+        when(conversationMapper.selectOne(any())).thenReturn(null);
+        assertTrue(conversationMessageService.listMessages(CONVERSATION_ID, USER_ID, 6, null).isEmpty());
+        ArgumentCaptor<LambdaQueryWrapper<ConversationDO>> scope = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(conversationMapper).selectOne(scope.capture());
+        String sql = scope.getValue().getCustomSqlSegment();
+        assertTrue(sql.contains("conversation_id") && sql.contains("user_id") && sql.contains("deleted"), sql);
+        assertTrue(scope.getValue().getParamNameValuePairs().containsValue(USER_ID));
+        assertTrue(scope.getValue().getParamNameValuePairs().containsValue(CONVERSATION_ID));
+        assertTrue(scope.getValue().getParamNameValuePairs().containsValue(0));
+        verifyNoInteractions(conversationMessageMapper, feedbackService);
+    }
+
+    @Test
+    void emptyMessagesDoNotQueryFeedback() {
+        when(conversationMapper.selectOne(any())).thenReturn(new ConversationDO());
+        when(conversationMessageMapper.selectList(any())).thenReturn(List.of());
+        assertTrue(conversationMessageService.listMessages(CONVERSATION_ID, USER_ID, 6, null).isEmpty());
+        verifyNoInteractions(feedbackService);
+    }
+
+    @Test
+    void boundedDescendingMessagesAreProjectedChronologicallyWithUserFeedback() {
+        when(conversationMapper.selectOne(any())).thenReturn(new ConversationDO());
+        var assistant = ConversationMessageDO.builder().id("2").conversationId(CONVERSATION_ID)
+                .role("assistant").content("fixed-answer").thinkingContent("fixed-reason")
+                .thinkingDuration(2).messageStatus("NORMAL").recommendedQuestions(List.of("next"))
+                .sources(List.of()).build();
+        var user = ConversationMessageDO.builder().id("1").conversationId(CONVERSATION_ID)
+                .role("user").content("fixed-question").build();
+        when(conversationMessageMapper.selectList(any())).thenReturn(new java.util.ArrayList<>(List.of(assistant, user)));
+        when(feedbackService.getUserVotes(USER_ID, List.of("2"))).thenReturn(java.util.Map.of("2", 1));
+        var result = conversationMessageService.listMessages(CONVERSATION_ID, USER_ID, 2, ConversationMessageOrder.DESC);
+        assertEquals(List.of("1", "2"), result.stream().map(v -> v.getId()).toList());
+        assertEquals("fixed-question", result.get(0).getContent());
+        var actual = result.get(1);
+        assertEquals(CONVERSATION_ID, actual.getConversationId());
+        assertEquals("assistant", actual.getRole());
+        assertEquals("fixed-answer", actual.getContent());
+        assertEquals("fixed-reason", actual.getThinkingContent());
+        assertEquals(2, actual.getThinkingDuration());
+        assertEquals("NORMAL", actual.getMessageStatus());
+        assertEquals(List.of("next"), actual.getRecommendedQuestions());
+        assertEquals(List.of(), actual.getSources());
+        assertEquals(1, actual.getVote());
+        assertNull(result.get(0).getVote());
+        ArgumentCaptor<LambdaQueryWrapper<ConversationMessageDO>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(conversationMessageMapper).selectList(query.capture());
+        String sql = query.getValue().getCustomSqlSegment();
+        assertTrue(sql.contains("conversation_id") && sql.contains("user_id") && sql.contains("deleted"), sql);
+        assertTrue(sql.endsWith("limit 2"));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(USER_ID));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(CONVERSATION_ID));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(0));
+        verify(feedbackService).getUserVotes(USER_ID, List.of("2"));
     }
 }

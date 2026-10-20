@@ -159,10 +159,10 @@ class AgentToolCatalogTest {
                 executor("read_query", "只读工具", readOnlyHint(true)),
                 executor("plain_query", "没声明的工具", null));
 
-        // 三个节点都没勾确认：自报的写工具照样拦下，没声明的仍听意图树，否则查询工具会集体开始弹卡片
+        // 未声明只读的工具也必须请求确认；声明本身仍不构成 Spec B 执行授权。
         assertThat(behaviorOf(toolkit, "write_query")).isEqualTo(PermissionBehavior.ASK);
         assertThat(behaviorOf(toolkit, "read_query")).isEqualTo(PermissionBehavior.ALLOW);
-        assertThat(behaviorOf(toolkit, "plain_query")).isEqualTo(PermissionBehavior.ALLOW);
+        assertThat(behaviorOf(toolkit, "plain_query")).isEqualTo(PermissionBehavior.ASK);
     }
 
     /**
@@ -241,7 +241,7 @@ class AgentToolCatalogTest {
         AgentToolCatalog.McpToolFingerprint readOnly = fingerprintOf(false, readOnlyHint(true));
         AgentToolCatalog.McpToolFingerprint readOnlyConfirmed = fingerprintOf(true, readOnlyHint(true));
 
-        assertThat(undeclared.needsConfirm()).isEqualTo(readOnly.needsConfirm());
+        assertThat(undeclared.needsConfirm()).isNotEqualTo(readOnly.needsConfirm());
         assertThat(undeclared).isNotEqualTo(readOnly);
         assertThat(readOnly.readOnly()).isEqualTo(readOnlyConfirmed.readOnly());
         assertThat(readOnly).isNotEqualTo(readOnlyConfirmed);

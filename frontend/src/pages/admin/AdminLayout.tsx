@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bot,
+  BookOpen,
   ChevronDown,
   ChevronRight,
   ChevronsLeft,
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { IncidentPilotMark } from "@/components/common/IncidentPilotMark";
 import { useGitHubStars } from "@/hooks/useGitHubStars";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -76,11 +78,20 @@ type MenuGroup = {
 
 const menuGroups: MenuGroup[] = [
   {
-    title: "导航",
+    title: "值班与响应",
+    items: [
+      { path: "/admin/workbench", label: "值班工作台", icon: LayoutDashboard },
+      { path: "/admin/incidents", label: "事件中心", icon: ShieldCheck },
+      { path: "/admin/runbooks", label: "处置手册", icon: BookOpen },
+      { path: "/admin/workbench#pending", label: "待人工审批", icon: ClipboardList },
+    ]
+  },
+  {
+    title: "AI 与知识配置",
     items: [
       {
         path: "/admin/dashboard",
-        label: "Dashboard",
+        label: "AI运行概览",
         icon: LayoutDashboard
       },
       {
@@ -182,7 +193,10 @@ const menuGroups: MenuGroup[] = [
 ];
 
 const breadcrumbMap: Record<string, string> = {
-  dashboard: "Dashboard",
+  workbench: "值班工作台",
+  incidents: "事件中心",
+  runbooks: "处置手册",
+  dashboard: "AI运行概览",
   agents: "智能体管理",
   "agent-skills": "技能管理",
   knowledge: "知识库管理",
@@ -202,7 +216,7 @@ export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia("(max-width: 1023px)").matches);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
@@ -272,7 +286,7 @@ export function AdminLayout() {
   const breadcrumbs = useMemo(() => {
     const segments = location.pathname.split("/").filter(Boolean);
     const items: { label: string; to?: string }[] = [
-      { label: "首页", to: "/admin/dashboard" }
+      { label: "首页", to: "/admin/workbench" }
     ];
 
     if (segments[0] !== "admin") return items;
@@ -324,6 +338,10 @@ export function AdminLayout() {
 
     if (section === "traces" && segments.length > 2) {
       items.push({ label: "链路详情" });
+    }
+    if (section === "incidents" && segments.length > 2) {
+      items.push(segments[3] === "review" ? { label: "事件详情", to: `/admin/incidents/${segments[2]}` } : { label: "事件详情" });
+      if (segments[3] === "review") items.push({ label: "事件复盘" });
     }
 
     if (section === "agents" && segments.length > 2) {
@@ -439,7 +457,10 @@ export function AdminLayout() {
     }
   };
 
-  const isLeafActive = (path: string, search?: string) => {
+  const isLeafActive = (target: string, search?: string) => {
+    const [path, hash] = target.split("#");
+    if (hash && location.hash !== `#${hash}`) return false;
+    if (!hash && path === "/admin/workbench" && location.hash === "#pending") return false;
     if (location.pathname !== path && !location.pathname.startsWith(`${path}/`)) {
       return false;
     }
@@ -453,23 +474,23 @@ export function AdminLayout() {
   const showSuggest = searchFocused && hasQuery;
 
   return (
-    <div className="admin-layout flex h-screen">
+    <div className={cn("admin-layout incidentpilot-shell flex h-screen", collapsed && "ip-sidebar-collapsed", (location.pathname.startsWith("/admin/workbench") || location.pathname.startsWith("/admin/incidents") || location.pathname.startsWith("/admin/runbooks")) && "ip-incident-route")}>
       <aside className={cn("admin-sidebar", collapsed && "admin-sidebar--collapsed")}>
         <div className="admin-sidebar__brand">
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
             <div className="admin-sidebar__logo">
-              <Bot className="h-[22px] w-[22px]" />
+              <IncidentPilotMark className="h-8 w-8" />
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <h1 className="admin-sidebar__title">Ragent AI 管理后台</h1>
-                <p className="admin-sidebar__subtitle">Knowledge Console</p>
+                <h1 className="admin-sidebar__title">IncidentPilot</h1>
+                <p className="admin-sidebar__subtitle">运维事件响应</p>
               </div>
             )}
           </div>
         </div>
 
-        <nav className="flex-1 space-y-4 px-2 pb-4">
+        <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 pb-4">
           {menuGroups.map((group) => (
             <div key={group.title} className="space-y-2">
               {!collapsed && (
@@ -595,9 +616,11 @@ export function AdminLayout() {
         </nav>
 
         <div className="admin-sidebar__footer space-y-2">
+          {!collapsed && <a href="https://github.com/nageoffer/ragent" target="_blank" rel="noreferrer" className="ip-attribution">基于 nageoffer/ragent · Apache-2.0</a>}
           <button
             type="button"
             className="admin-sidebar__collapse"
+            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
             onClick={() => setCollapsed((prev) => !prev)}
           >
             {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
@@ -715,10 +738,10 @@ export function AdminLayout() {
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-                aria-label="打开 GitHub 仓库"
+                aria-label="打开上游 nageoffer/ragent GitHub 仓库"
               >
                 <Github className="h-4 w-4" />
-                <span className="font-medium">Star</span>
+                <span className="font-medium">上游 Star</span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                   {starLabel}
                 </span>

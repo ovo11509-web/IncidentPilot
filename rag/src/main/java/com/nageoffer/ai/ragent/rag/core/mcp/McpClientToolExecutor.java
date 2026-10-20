@@ -58,10 +58,9 @@ public class McpClientToolExecutor implements McpToolExecutor {
                     System.currentTimeMillis() - startMs);
             return result;
         } catch (Exception e) {
-            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            log.warn("MCP 远程工具调用异常, toolId={}, paramKeys={}, userId={}, elapsed={}ms, reason={}",
+            log.warn("MCP 远程工具调用异常, toolId={}, paramKeys={}, userId={}, elapsed={}ms, failureType={}",
                     toolDefinition.name(), args.keySet(), McpCallMeta.userIdOf(meta),
-                    System.currentTimeMillis() - startMs, reason, e);
+                    System.currentTimeMillis() - startMs, e.getClass().getSimpleName());
             return CallToolResult.builder()
                     .content(List.of(new TextContent(REMOTE_CALL_FAILED_MESSAGE)))
                     .isError(true)

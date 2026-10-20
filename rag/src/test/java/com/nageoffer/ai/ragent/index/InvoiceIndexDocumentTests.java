@@ -38,6 +38,7 @@ import org.apache.tika.metadata.Metadata;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
@@ -52,6 +53,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "RAG_LIVE_TESTS", matches = "true")
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class InvoiceIndexDocumentTests {
 

@@ -1,3 +1,16 @@
+# IncidentPilot
+
+IncidentPilot 是基于 `nageoffer/ragent` 的 Java AI 运维事件响应作品项目，提供告警聚合、证据诊断、人工审批、安全模拟处置、值班工作台、复盘报告与版本化处置手册。
+
+- 项目现状与贡献边界：[项目上下文](docs/PROJECT_CONTEXT.md)。
+- 本地持久演示启动与运行：[本地运行说明](docs/development/local-demo.md)；本轮实施/验收状态见 [Spec K](specs/011-incident-quality-delivery/implementation-report.md)。
+- 自动化门禁与实际环境要求：[交付检查](docs/development/delivery.md)。
+- 接手、启动与验收：[本地交付候选说明](docs/releases/local-candidate-2026-10-12.md)；首次正式版本号为 `v0.1.0`，当前待发布。
+- 当前源码交付：[v0.1.0源码候选](docs/releases/source-candidate-v0.1.0.md)，含完整工作区快照与校验清单；历史因疑似凭据暂不分发，完整历史移交尚未闭合。
+- 保留上游Git历史、Apache-2.0许可证和署名；RAG/Agent框架主要来自上游，Incident领域及安全响应链路属于本项目新增贡献。
+
+本项目只对已有实际本地证据作结论，生产部署、真实模型和基础设施尚未验收。以下保留上游介绍，其中生产化表述不作为IncidentPilot验收结论。
+
 <p align="center">
   <a href="https://github.com/nageoffer/ragent">
     <picture>

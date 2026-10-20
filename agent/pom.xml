@@ -5,13 +5,18 @@
     <parent>
         <groupId>com.nageoffer.ai</groupId>
         <artifactId>ragent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <!-- Agent 执行架构（v2 ReAct）：仅通过窄接口消费 rag 的检索门面与人设解析 -->
     <artifactId>agent</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>com.nageoffer.ai</groupId>
+            <artifactId>incident</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.nageoffer.ai</groupId>
             <artifactId>rag</artifactId>

@@ -23,11 +23,13 @@ import com.nageoffer.ai.ragent.framework.mq.producer.RocketMQProducerAdapter;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 /**
  * RocketMQ 消息队列自动装配配置
  */
 @Configuration
+@Profile("!isolated")
 public class RocketMQAutoConfiguration {
 
     @Bean

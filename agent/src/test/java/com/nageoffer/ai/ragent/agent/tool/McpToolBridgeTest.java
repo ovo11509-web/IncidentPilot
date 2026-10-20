@@ -44,6 +44,22 @@ import static org.mockito.Mockito.when;
 
 class McpToolBridgeTest {
 
+    @Test
+    void oldWriteToolAndUnknownNameCannotExecuteEvenWhenCalledDirectly() {
+        for (var name : List.of("leave_submit", "simulation.set-state", "new_unreviewed_tool")) {
+            var blocked = mock(McpToolExecutor.class);
+            when(blocked.getToolDefinition()).thenReturn(Tool.builder()
+                    .name(name).description("blocked")
+                    .inputSchema(new JsonSchema("object", Map.of(), List.of(), null, null, null)).build());
+            var direct = new McpToolBridge(McpToolBinding.of(name, name, "blocked", false, blocked));
+            var result = direct.callAsync(ToolCallParam.builder()
+                    .toolUseBlock(ToolUseBlock.builder().id("old-card").name(name).input(Map.of()).build())
+                    .build()).block();
+            assertThat(result).isNotNull();
+            verify(blocked, never()).execute(anyMap(), anyMap());
+        }
+    }
+
     private static final String TOOL_ID = "query_order";
 
     private static final String USER_ID = "2001";

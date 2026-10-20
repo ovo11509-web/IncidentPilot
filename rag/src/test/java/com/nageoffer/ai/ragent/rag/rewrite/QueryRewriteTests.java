@@ -29,11 +29,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.util.List;
 
 @Slf4j
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "RAG_LIVE_TESTS", matches = "true")
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class QueryRewriteTests {
 

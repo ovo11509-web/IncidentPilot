@@ -1,111 +1,37 @@
-# 快速测试指南
+# 前端验证
 
-## 问题：No static resource api/ragent/knowledge-base
+遵循 `docs/development/testing.md`。当前仓库Vite为127.0.0.1:5173，/api代理到127.0.0.1:9090；主应用context为/api/ragent。旧8080说明与当前配置不符，以vite.config.ts和application.yaml为准。VITE_API_BASE_URL缺失时Incident专用客户端使用/api/ragent，原全局客户端保持现有行为。
 
-### 原因
-前端开发环境需要配置代理，将API请求转发到后端服务器。
+## 最小检查
 
-### 解决方案
+在frontend目录执行（使用package-lock.json锁定依赖，不通过npx临时下载）：
 
-已在 `vite.config.ts` 中添加代理配置：
-
-```typescript
-server: {
-  port: 5173,
-  proxy: {
-    "/api": {
-      target: "http://localhost:8080",
-      changeOrigin: true,
-      secure: false
-    }
-  }
-}
+```powershell
+npm ci --no-audit --no-fund
+node tests/incident-view.check.mjs
+node node_modules/typescript/bin/tsc --noEmit -p tsconfig.app.json
+npm run lint
+npm run build
 ```
 
-### 测试步骤
+Incident逻辑检查以Node assert和本地TypeScript覆盖成功码、错误元数据、长ID、安全整数、选择/批准资格、冻结意图、分页去重、串行读取及写请求不自动重试。全局tsc原有WorkflowDashboard缺少ComponentType类型import，本轮仅补类型import使类型门禁可执行。
 
-#### 1. 确认后端服务运行
-```bash
-curl http://localhost:8080/api/ragent/knowledge-base
-# 应该返回：{"code":"A000001","message":"未登录或登录已过期",...}
-# 这说明后端服务正常，只是需要登录
-```
+## Incident真实隔离验收
 
-#### 2. 重启前端开发服务器
-```bash
-cd /Users/machen/workspace/nageoffer/ragent/frontend
+实际流程及启动命令见 `specs/004-incident-operations-ui/quickstart.md`。显式Java测试夹具复用Bootstrap/MCP双JVM模式及临时PostgreSQL、Redis和存储，使用普通ragent_app角色；tests/incident-browser-fixture.mjs仅把Vite代理指向本次临时主应用，不修改日常代理或连接开发数据库。临时账号凭据位于ignored target内，停止后删除，证据中不得保存。
 
-# 停止旧的服务器（如果有）
-pkill -f "vite"
+通过真实浏览器操作 `/admin/incidents`：两签名告警→本地诊断/引用→选择→拒绝零应用→明确新Action/独立批准→一次模拟应用→刷新复核。应用次数取模拟数据库及可信回执；截图/mock/预置UNKNOWN只证明展示，不能替代真实执行。权限、旧版本、无映射、HTML纯文本、UNKNOWN场景分开记账。
 
-# 启动新的服务器
-npm run dev
-```
+实际命令结果保存在frontend/.output/spec-d-*-final.log；浏览器/服务器安全制品在incident/target/ui-evaluation/<runId>/。构建原有大chunk警告不等于失败，不在此阶段调整打包策略。没有运行记录的命令或场景不得标为通过。
 
-#### 3. 访问前端
-打开浏览器访问：http://localhost:5173 或 http://localhost:5174
+## DEP-001统一门禁
 
-#### 4. 登录测试
-1. 使用管理员账号登录（role='admin'）
-2. 点击左侧边栏底部的用户头像
-3. 选择"管理后台"
-4. 进入知识库管理页面
+在仓库根目录运行 `pwsh -NoProfile -File scripts/check-delivery.ps1 -Gate Frontend`，固定执行npm ci --no-audit --no-fund、Incident本地TypeScript/Node断言、lint、build；All按Backend→Frontend顺序执行。无需Docker，不使用npx临时下载检查工具。当前本机Node20.19.5/npm10.8.2，CI定义Node22；Node22/Linux/托管运行未经实测不得视为通过。
 
-#### 5. 测试知识库功能
-- 点击"新建知识库"
-- 填写表单：
-  - 名称：测试知识库
-  - Embedding模型：text-embedding-v3
-  - Collection名称：test_kb
-- 点击创建
+四阶段真实退出码及源码摘要存于bootstrap/target/delivery-gates/<UUID>；CI只上传safe/summary.json，不能上传构建dist、日志、配置/XML或临时账号。确定性门禁不代替本节真实浏览器验收。详见 [交付说明](../docs/development/delivery.md) 和 [Spec H结果](../specs/008-local-delivery-gates/quickstart.md)。
 
-### 常见问题
+## Spec J：复盘与处置手册
 
-**Q: 端口被占用怎么办？**
-A: Vite会自动尝试下一个端口（5174、5175...）
+沿用上述命令，incident-view.check.mjs 追加跨页采集/游标异常/数量上限/途中取消/首尾变化/跨事件/导出字段与 Markdown 转义、历史 UNKNOWN/失效证据及 Runbook 来源/章节/精确版本不回退检查。测试读取仓库打包语料，无付费或外部模型。
 
-**Q: 代理不生效？**
-A: 确保重启了开发服务器，配置修改后需要重启
-
-**Q: 后端API返回401？**
-A: 正常现象，需要先登录获取token
-
-**Q: 如何创建管理员账号？**
-A: 在数据库中手动设置用户的role字段为'admin'：
-```sql
-UPDATE t_user SET role = 'admin' WHERE username = 'your_username';
-```
-
-### API路径说明
-
-| 前端请求 | 代理后 | 后端实际路径 |
-|---------|--------|-------------|
-| /api/ragent/knowledge-base | http://localhost:8080/api/ragent/knowledge-base | /knowledge-base (context-path已包含/api/ragent) |
-
-### 网络请求检查
-
-打开浏览器开发者工具（F12）-> Network标签，查看请求：
-
-**正常情况：**
-- Request URL: http://localhost:5173/api/ragent/knowledge-base
-- Status: 200 OK 或 401 Unauthorized（未登录）
-- Response: JSON格式数据
-
-**异常情况：**
-- Status: 404 Not Found
-- Response: "No static resource..."
-- 解决：检查代理配置，重启开发服务器
-
-### 当前状态
-
-✅ 后端服务运行中：http://localhost:8080
-✅ 前端服务运行中：http://localhost:5174
-✅ 代理配置已添加
-✅ 可以开始测试
-
-### 下一步
-
-1. 登录系统
-2. 进入管理后台
-3. 测试知识库CRUD功能
-4. 如有问题，查看浏览器控制台和Network标签
+浏览器入口：事件详情→查看事件复盘报告→下载 Markdown；侧栏→处置手册；展开历史引用→核对同版本手册。复盘注明非事务快照，变化/失败禁导出；语料为模拟手册。实际运行和限制见 [Spec J 实施记录](../specs/010-incident-review-runbooks/implementation-report.md)。

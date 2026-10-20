@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.nageoffer.ai</groupId>
     <artifactId>ragent</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
 
     <name>ragent-ai</name>
     <packaging>pom</packaging>
@@ -45,6 +45,7 @@
         <module>framework</module>
         <module>infra-ai</module>
         <module>system</module>
+        <module>incident</module>
         <module>rag</module>
         <module>agent</module>
         <module>bootstrap</module>
@@ -326,4 +327,18 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <!-- Explicit local lab runs only; ordinary report locations remain unchanged. -->
+        <profile>
+            <id>local-fault-lab</id>
+            <activation><property><name>lab.reportRoot</name></property></activation>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <reportsDirectory>${lab.reportRoot}/${project.artifactId}</reportsDirectory>
+                </configuration>
+            </plugin></plugins></build>
+        </profile>
+    </profiles>
 </project>

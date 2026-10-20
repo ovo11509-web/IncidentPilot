@@ -5,7 +5,7 @@
     <parent>
         <groupId>com.nageoffer.ai</groupId>
         <artifactId>ragent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <!-- 系统支撑域：用户认证、审计与示例问题等平台侧公共能力，位于各业务引擎之下 -->

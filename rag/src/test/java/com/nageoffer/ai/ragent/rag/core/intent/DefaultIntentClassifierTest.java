@@ -147,4 +147,41 @@ class DefaultIntentClassifierTest {
         assertFalse(intentList.contains("id=system-welcome"));
         assertEquals(List.of("kb-leave"), scores.stream().map(score -> score.getNode().getId()).toList());
     }
+
+    @Test
+    void malformedModelJsonReturnsNoIntent() {
+        stubCandidates();
+        when(llmService.chat(any())).thenReturn("not-json");
+        assertEquals(List.of(), classifier.classifyTargets("fixed-question"));
+        verifyNoInteractions(intentNodeMapper);
+    }
+
+    @Test
+    void providerFailureReturnsNoIntentWithoutRetrying() {
+        stubCandidates();
+        when(llmService.chat(any())).thenThrow(new IllegalStateException("fixed-provider-error"));
+        assertEquals(List.of(), classifier.classifyTargets("fixed-question"));
+        verify(llmService).chat(any());
+        verifyNoInteractions(intentNodeMapper);
+    }
+
+    @Test
+    void wrappedScoresIgnoreUnknownOrIncompleteCandidatesAndSortKnownScores() {
+        stubCandidates();
+        when(llmService.chat(any())).thenReturn("""
+                {"results":[{"id":"kb-one","score":0.3},{"id":"unknown","score":1},
+                {"id":"kb-two","score":0.8},{"id":"kb-one"},"invalid-element"]}
+                """);
+        var scores = classifier.classifyTargets("fixed-question");
+        assertEquals(List.of("kb-two", "kb-one"), scores.stream().map(s -> s.getNode().getId()).toList());
+        assertEquals(List.of(0.8, 0.3), scores.stream().map(NodeScore::getScore).toList());
+        verifyNoInteractions(intentNodeMapper);
+    }
+
+    private void stubCandidates() {
+        when(intentTreeCacheManager.getIntentTreeFromCache()).thenReturn(List.of(
+                IntentNode.builder().id("kb-one").name("one").kind(IntentKind.KB).build(),
+                IntentNode.builder().id("kb-two").name("two").kind(IntentKind.KB).build()));
+        when(promptTemplateLoader.render(anyString(), anyMap())).thenReturn("fixed-prompt");
+    }
 }

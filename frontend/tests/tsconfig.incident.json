@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.app.json",
+  "compilerOptions": { "noEmit": false, "outDir": "../.output/incident" },
+  "include": ["../src/lib/incidentView.ts", "../src/lib/workbenchView.ts", "../src/lib/incidentReview.ts", "../src/lib/runbookView.ts", "../src/types/incident.ts", "../src/types/runbook.ts"]
+}

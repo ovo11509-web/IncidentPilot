@@ -133,16 +133,18 @@ class McpClientToolExecutorTest {
         assertThat(renderedLog()).contains("receiverPhone").contains("2001").doesNotContain(PHONE);
     }
 
-    /**
-     * 值只是降到 DEBUG，不是删了——查问题时还得看得见
-     */
+    /** DEBUG 和远端异常也不能把未经信任的参数值写入日志。 */
     @Test
-    void shouldStillCarryParameterValuesAtDebugLevel() {
+    void shouldNeverLogParameterValuesAtDebugLevel() {
         executorLogger.setLevel(Level.DEBUG);
 
         executor.execute(Map.of("receiverPhone", PHONE), McpCallMeta.ofUser("2001"));
 
-        assertThat(renderedLog()).contains(PHONE);
+        assertThat(renderedLog()).contains("receiverPhone").doesNotContain(PHONE);
+        when(mcpClient.callTool(any())).thenThrow(new IllegalStateException("remote echo " + PHONE));
+        assertThat(executor.execute(Map.of("receiverPhone", PHONE), McpCallMeta.ofUser("2001"))
+                .isError()).isTrue();
+        assertThat(renderedLog()).contains("IllegalStateException").doesNotContain(PHONE);
     }
 
     private String renderedLog() {

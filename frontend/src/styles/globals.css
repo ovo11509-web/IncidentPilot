@@ -134,6 +134,7 @@
   --dsw-specific-sidebar-nav-item-active-accent: #eff6ff;
 }
 
+
 .dark {
   color-scheme: light;
 }
@@ -5513,4 +5514,143 @@ textarea {
   .agent-app .agent-dot[data-status="probing"] {
     animation: none;
   }
+}
+
+/* IncidentPilot B theme: public shell and explicitly scoped incident pages only. */
+.incidentpilot-shell {
+  --ip-bg:#070e1a; --ip-panel:#0e1930; --ip-panel-raised:#13213a;
+  --ip-border:#2c4261; --ip-text:#edf4ff; --ip-muted:#a5b5cc;
+  --ip-cyan:#38bdf8; --ip-violet:#b9acff; --ip-amber:#fbbf24;
+  background:var(--ip-bg);
+}
+.incidentpilot-shell .admin-sidebar { width:236px; min-height:0; flex-shrink:0; border-right:1px solid #223656; background:linear-gradient(180deg,#101a2c,#0a1222); color:#b6c4da; }
+.incidentpilot-shell .admin-sidebar--collapsed { width:64px; }
+.incidentpilot-shell .admin-sidebar__brand { padding:25px 18px 23px; }
+.incidentpilot-shell .admin-sidebar__logo { background:#142e49; color:#67d6ff; border:1px solid #2c577a; border-radius:12px; box-shadow:0 0 24px #38bdf812; }
+.incidentpilot-shell .admin-sidebar__title { font-size:18px; letter-spacing:-.4px; color:#edf4ff; }
+.incidentpilot-shell .admin-sidebar__subtitle { margin-top:4px; color:#a5b5cc; }
+.incidentpilot-shell .admin-sidebar__group-title { color:#a5b5cc; font-size:11px; letter-spacing:1px; }
+.incidentpilot-shell .admin-sidebar__item { min-height:42px; color:#c2cee0; border:1px solid transparent; }
+.incidentpilot-shell .admin-sidebar--collapsed .admin-sidebar__item { padding-left:2px; padding-right:2px; gap:0; }
+.incidentpilot-shell .admin-sidebar__item--active { background:linear-gradient(90deg,#1a3b57,#202b4f); border-color:#335775; color:#b8ecff; }
+.incidentpilot-shell .admin-sidebar__item-icon,.incidentpilot-shell .admin-sidebar__item-icon.is-active { color:inherit; flex-shrink:0; }
+.incidentpilot-shell .admin-sidebar__indicator { background:#5bd6ff; }
+.incidentpilot-shell .admin-sidebar__collapse { color:#c2cee0; border-color:#2c4261; background:#13213a; }
+.incidentpilot-shell .ip-attribution { display:block; color:#a5b5cc; font-size:10px; line-height:1.6; padding:5px 0; overflow-wrap:anywhere; }
+.incidentpilot-shell .admin-main { min-width:0; }
+.incidentpilot-shell .admin-topbar { background:#0c1627; color:#d7e3f4; border-bottom:1px solid #223656; }
+.incidentpilot-shell .admin-topbar-inner { min-width:0; gap:12px; }
+.incidentpilot-shell .admin-topbar button,.incidentpilot-shell .admin-topbar a,.incidentpilot-shell .admin-topbar input { color:#d7e3f4; background:#13213a; border-color:#2c4261; }
+.incidentpilot-shell .admin-topbar input::placeholder { color:#a5b5cc; }
+.incidentpilot-shell .admin-topbar-kbd { color:#a5b5cc; border-color:#385276; background:#0e1930; }
+.incidentpilot-shell .admin-topbar-suggest { color:#24324a; }
+.incidentpilot-shell.ip-incident-route .admin-main { background:radial-gradient(ellipse at 80% 0%,#18365d35,transparent 50%),#070e1a; color:#edf4ff; }
+.incidentpilot-shell.ip-incident-route .admin-main > div > nav { color:#a5b5cc; }
+.incidentpilot-shell.ip-incident-route .admin-main > div > nav .text-slate-700 { color:#edf4ff; }
+.incidentpilot-shell :focus-visible { outline:2px solid #67d6ff; outline-offset:3px; }
+.incidentpilot-page { color:var(--ip-text); min-width:0; font-size:14px; line-height:1.6; }
+.incidentpilot-page h1 { font-size:28px; font-weight:650; letter-spacing:-.6px; line-height:1.4; }
+.incidentpilot-page h2 { font-size:15px; font-weight:600; }
+.incidentpilot-page .ip-muted { color:var(--ip-muted); }
+.incidentpilot-page .ip-eyebrow { color:#72d5fb; font-size:10px; letter-spacing:2px; margin-bottom:7px; }
+.ip-page-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+.ip-heading-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.ip-snapshot { color:#a5b5cc; font-size:11px; margin:17px 0; overflow-wrap:anywhere; }
+.ip-workbench { padding-bottom:12px; }
+.ip-stat-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-bottom:22px; }
+.ip-stat { position:relative; overflow:hidden; padding:19px 20px; border:1px solid #2c4261; border-radius:12px; background:linear-gradient(135deg,#142440,#0e1930); }
+.ip-stat::after { content:""; position:absolute; right:-30px; top:-35px; width:120px; height:100px; background:radial-gradient(ellipse,#38bdf818,transparent 70%); pointer-events:none; }
+.ip-stat-label { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#bfccdf; font-size:13px; }
+.ip-stat-label svg { color:#67d6ff; }
+.ip-tone-violet .ip-stat-label svg { color:#b9acff; }
+.ip-tone-amber .ip-stat-label svg,.ip-amber { color:#fbbf24; }
+.ip-stat-value { display:flex; gap:12px; align-items:baseline; margin:11px 0 7px; font-size:34px; font-weight:600; line-height:1.1; }
+.ip-stat-value span { font-size:11px; font-weight:400; color:#a5b5cc; }
+.ip-stat-foot { font-size:10px; color:#a5b5cc; overflow-wrap:anywhere; }
+.ip-workbench-grid { display:grid; grid-template-columns:minmax(0,2.3fr) minmax(260px,1fr); gap:20px; align-items:start; }
+.ip-workbench-main,.ip-workbench-side { display:grid; gap:20px; min-width:0; }
+.ip-panel { border:1px solid #2c4261; border-radius:12px; background:linear-gradient(135deg,#101e34,#0e1930); padding:20px; min-width:0; }
+.ip-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.ip-panel-heading h2 { display:flex; align-items:center; gap:9px; }
+.ip-panel-heading h2 svg { color:#67d6ff; }
+.ip-caption { font-size:11px; margin:9px 0 16px; }
+.ip-link { color:#81dfff; display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+.ip-link:hover { color:#c4f1ff; text-decoration:underline; }
+.ip-id { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
+.ip-badge { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border:1px solid #37536d; border-radius:6px; font-size:11px; color:#b8eaff; background:#122c43; white-space:nowrap; }
+.ip-violet { background:#262440; border-color:#50466e; color:#d0c4ff; }
+.ip-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; border:1px solid #5a7a9b; background:#142e49; color:#dbf2ff; border-radius:7px; padding:8px 12px; font-size:12px; }
+.ip-button:hover:not(:disabled) { background:#204467; }
+.ip-button:disabled { cursor:wait; opacity:.65; }
+.ip-table-scroll { max-width:100%; overflow:auto; }
+.ip-table { width:100%; border-collapse:collapse; text-align:left; font-size:12px; }
+.ip-table th { font-size:10px; font-weight:500; color:#b5c4d9; background:#15253d; white-space:nowrap; }
+.ip-table th,.ip-table td { padding:12px 10px; border-bottom:1px solid #223656; }
+.ip-table td { white-space:nowrap; }
+.ip-table tr:last-child td { border-bottom:0; }
+.ip-table tbody tr:hover { background:#18334e65; }
+.ip-chart { height:230px; width:100%; min-width:0; }
+.ip-chart-data { color:#a5b5cc; font-size:11px; margin-top:10px; }
+.ip-chart-data summary { cursor:pointer; }
+.ip-pending { display:flex; flex-direction:column; gap:5px; padding:14px; border:1px solid #304563; border-radius:8px; margin:12px 0; background:#14203a; font-size:11px; }
+.ip-pending:hover { border-color:#60bade; background:#192c47; }
+.ip-pending-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:3px; }
+.ip-pending strong { color:#edf4ff; font-size:12px; }
+.ip-activity { display:grid; gap:17px; margin:16px 0 2px; }
+.ip-activity li { position:relative; display:flex; flex-direction:column; padding-left:19px; min-width:0; font-size:11px; }
+.ip-activity-dot { position:absolute; left:0; top:6px; width:7px; height:7px; border-radius:50%; background:#63cefa; box-shadow:0 0 8px #38bdf844; }
+.ip-empty { padding:28px 10px; text-align:center; color:#a5b5cc; font-size:13px; }
+.ip-error { padding:14px; border:1px solid #974455; border-radius:8px; background:#351b2d; color:#ffc4ce; margin-bottom:18px; }
+.ip-error .ip-link { margin-left:12px; }
+.incidentpilot-page .bg-white { background:#0e1930; }
+.incidentpilot-page .bg-slate-50,.incidentpilot-page .bg-slate-100 { background:#15253d; }
+.incidentpilot-page .bg-indigo-50 { background:#212340; }
+.incidentpilot-page .bg-amber-50 { background:#372c18; }
+.incidentpilot-page .bg-rose-50 { background:#351b2d; }
+.incidentpilot-page .text-slate-500,.incidentpilot-page .text-slate-600 { color:#a5b5cc; }
+.incidentpilot-page .text-indigo-600 { color:#81dfff; }
+.incidentpilot-page .text-amber-700,.incidentpilot-page .text-amber-800 { color:#ffd878; }
+.incidentpilot-page .text-rose-700 { color:#ffc4ce; }
+.incidentpilot-page .border,.incidentpilot-page .border-t,.incidentpilot-page .border-l-2 { border-color:#2c4261; }
+.incidentpilot-page .hover\:bg-slate-50:hover { background:#18334e; }
+.incidentpilot-shell .incidentpilot-page input,.incidentpilot-shell .incidentpilot-page select,.incidentpilot-shell .incidentpilot-page textarea { background:#101d33; color:#edf4ff; border-color:#5a7a9b; max-width:100%; }
+.incidentpilot-page select option { color:#edf4ff; background:#101d33; }
+.incidentpilot-page button { white-space:normal; height:auto; min-height:36px; }
+.incidentpilot-page button.bg-primary { background:#24608f; color:#edf4ff; }
+.incidentpilot-page button[data-variant="outline"] { background:#15253d; color:#edf4ff; border-color:#5a7a9b; }
+.incidentpilot-page section[id],.incidentpilot-page article[id] { scroll-margin-top:24px; }
+.incidentpilot-page .ip-action-selected { outline:2px solid #67d6ff; outline-offset:3px; background:#152b44; }
+.ip-flow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.ip-flow > div { border:1px solid #2c4261; padding:14px; border-radius:8px; background:#13213a; min-width:0; }
+.ip-flow strong { display:block; margin-bottom:6px; color:#b4ddff; font-size:12px; }
+.ip-flow span { font-size:12px; overflow-wrap:anywhere; }
+.ip-spin { animation:ip-spin 1.2s linear infinite; }
+@keyframes ip-spin { to { transform:rotate(360deg); } }
+@media(max-width:1279px) { .ip-workbench-grid { grid-template-columns:minmax(0,1.8fr) minmax(240px,1fr); } .ip-stat { padding:16px; } }
+@media(max-width:1023px) {
+  .incidentpilot-shell:not(.ip-sidebar-collapsed) .admin-sidebar { position:absolute; left:0; top:0; bottom:0; z-index:40; box-shadow:15px 0 60px #0008; }
+  .incidentpilot-shell .admin-topbar-search { max-width:240px; }
+  .ip-workbench-grid { grid-template-columns:1fr; }
+  .ip-workbench-side { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .ip-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:639px) {
+  .incidentpilot-shell .admin-topbar-search { display:none; }
+  .incidentpilot-shell .admin-sidebar--collapsed { width:54px; }
+  .incidentpilot-shell .admin-sidebar--collapsed .admin-sidebar__brand { padding:17px 5px; }
+  .incidentpilot-shell .admin-topbar-inner { padding:10px; }
+  .incidentpilot-shell .admin-main > div { padding-left:12px; padding-right:12px; }
+  .incidentpilot-shell .admin-sidebar__footer { padding-left:7px; padding-right:7px; }
+  .incidentpilot-page h1 { font-size:23px; }
+  .ip-workbench-side,.ip-flow { grid-template-columns:1fr; }
+  .ip-stat-grid { gap:10px; }
+  .ip-stat { padding:12px; }
+  .ip-stat-value { font-size:28px; gap:5px; flex-wrap:wrap; }
+  .ip-panel { padding:14px; }
+  .incidentpilot-page .p-6 { padding:16px; }
+  .incidentpilot-page label input { margin-left:0; display:block; width:100%; }
+  .ip-stat-foot { font-size:9px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .incidentpilot-shell * { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }

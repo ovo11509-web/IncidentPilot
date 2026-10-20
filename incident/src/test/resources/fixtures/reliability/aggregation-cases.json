@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "seeds": [7, 23, 91],
+  "cases": [
+    {"id":"single","offsetMicros":[0],"keys":[0],"expectedAnchors":[0]},
+    {"id":"before-window","offsetMicros":[0,1799999999],"keys":[0,0],"expectedAnchors":[0,0]},
+    {"id":"at-window","offsetMicros":[0,1800000000],"keys":[0,0],"expectedAnchors":[0,0]},
+    {"id":"after-window","offsetMicros":[0,1800000001],"keys":[0,0],"expectedAnchors":[0,1]},
+    {"id":"chain","offsetMicros":[0,1200000000,2400000000],"keys":[0,0,0],"expectedAnchors":[0,0,0]},
+    {"id":"gap-then-chain","offsetMicros":[0,1860000000,1920000000],"keys":[0,0,0],"expectedAnchors":[0,1,1]},
+    {"id":"three-episodes","offsetMicros":[0,1860000000,3720000000],"keys":[0,0,0],"expectedAnchors":[0,1,2]},
+    {"id":"different-key","offsetMicros":[0,1000000],"keys":[0,1],"expectedAnchors":[0,1]},
+    {"id":"interleaved-key","offsetMicros":[0,300000000,600000000,900000000],"keys":[0,1,0,1],"expectedAnchors":[0,1,0,1]},
+    {"id":"failed-anchor","offsetMicros":[0,1000000],"keys":[0,0],"failed":[0],"expectedAnchors":[null,0]},
+    {"id":"all-failed","offsetMicros":[0,1000000],"keys":[0,0],"failed":[0,1],"expectedAnchors":[null,null]},
+    {"id":"failed-bridge","offsetMicros":[0,1200000000,2400000000],"keys":[0,0,0],"failed":[1],"expectedAnchors":[0,null,0]},
+    {"id":"seal-equality","offsetMicros":[0,600000000,600000001],"keys":[0,0,0],"preprocess":[0],"sealAtMicros":600000000,"expectedAnchors":[0,0,2]},
+    {"id":"preseal-late","offsetMicros":[0,1000000,3000000],"keys":[0,0,0],"preprocess":[0],"sealAtMicros":2000000,"expectedAnchors":[0,0,2]},
+    {"id":"failed-separate","offsetMicros":[0,1860000000,1920000000],"keys":[0,0,0],"failed":[0],"expectedAnchors":[null,1,1]}
+  ]
+}

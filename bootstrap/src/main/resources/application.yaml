@@ -15,8 +15,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     type: com.zaxxer.hikari.HikariDataSource
-    username: postgres
-    password: postgres
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
     url: jdbc:postgresql://127.0.0.1:5432/ragent?client_encoding=UTF8
     hikari:
       connection-timeout: 5000
@@ -38,6 +38,32 @@ ragent:
   demo-mode: false
   eval:
     enabled: true
+
+incident:
+  ingress:
+    max-body-bytes: 65536
+    max-json-depth: 16
+    signature-skew: 300s
+  # 来源和 keyId 仅引用运行环境变量名；实际密钥不可写入本文件。
+  aggregation:
+    rule-version: alert-incident-v1
+    window: 30m
+  retry:
+    delays: [10s, 30s, 2m, 10m, 30m]
+  worker:
+    enabled: true
+  outbox:
+    enabled: true
+    max-backoff: 15m
+  action:
+    approval-ttl: 15m
+    authorization-ttl: 5m
+    ticket-ttl: 2m
+    max-execution-duration: 2m
+    receipt-grace-period: 3m
+    pre-consumption-retries: 3
+    worker:
+      enabled: false
 
 # Agent 执行架构（ragent.engine.type=agent 时生效）；单模型无 fallback，供应商可用性由 provider 侧保障
 agent:
@@ -341,3 +367,8 @@ rocketmq:
 
 milvus:
   uri: http://localhost:19530
+
+# Incident/MCP auxiliary tracing; no external exporter unless explicitly configured.
+observability:
+  enabled: ${OBSERVABILITY_ENABLED:false}
+  endpoint: ${OBSERVABILITY_ENDPOINT:}

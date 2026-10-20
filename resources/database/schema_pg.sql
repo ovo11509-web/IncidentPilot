@@ -1060,3 +1060,376 @@ COMMENT ON COLUMN t_agent_memory_control.user_id IS '用户ID';
 COMMENT ON COLUMN t_agent_memory_control.revision IS '记忆集版本号，提交期与水位一同双校验';
 COMMENT ON COLUMN t_agent_memory_control.create_time IS '建行时刻，兼作抽取下界：更早的历史消息不倒灌';
 COMMENT ON COLUMN t_agent_memory_control.update_time IS '更新时间';
+
+-- Spec A: reliable Alert to Incident
+
+-- Spec A: reliable Alert to Incident. Run as the schema owner/migration role.
+-- ragent_app has no password here; provision its credential outside the repository.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ragent_app') THEN
+        CREATE ROLE ragent_app LOGIN;
+    END IF;
+END
+$$;
+
+CREATE TABLE t_incident (
+    id VARCHAR(20) PRIMARY KEY,
+    aggregation_key VARCHAR(96) NOT NULL,
+    fingerprint CHAR(64) NOT NULL,
+    aggregation_rule_version VARCHAR(32) NOT NULL,
+    aggregation_window_seconds INTEGER NOT NULL CHECK (aggregation_window_seconds > 0),
+    episode_start_at TIMESTAMPTZ NOT NULL,
+    episode_anchor_alert_id VARCHAR(20) NOT NULL,
+    first_alert_received_at TIMESTAMPTZ NOT NULL,
+    last_alert_received_at TIMESTAMPTZ NOT NULL,
+    alert_count INTEGER NOT NULL CHECK (alert_count > 0),
+    lifecycle_state VARCHAR(24) NOT NULL CHECK (lifecycle_state IN ('OPEN', 'ACKNOWLEDGED', 'MITIGATING', 'RESOLVED', 'CLOSED')),
+    lifecycle_sealed_at TIMESTAMPTZ,
+    aggregation_slot_active BOOLEAN NOT NULL,
+    born_sealed BOOLEAN NOT NULL,
+    created_event_id VARCHAR(20) NOT NULL UNIQUE,
+    timeline_seq BIGINT NOT NULL CHECK (timeline_seq >= 1),
+    version BIGINT NOT NULL CHECK (version >= 0),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uk_incident_episode UNIQUE (aggregation_key, episode_start_at, episode_anchor_alert_id),
+    CONSTRAINT ck_incident_time_order CHECK (first_alert_received_at <= last_alert_received_at),
+    CONSTRAINT ck_incident_seal CHECK ((lifecycle_state IN ('RESOLVED', 'CLOSED')) = (lifecycle_sealed_at IS NOT NULL)
+        OR (lifecycle_state IN ('OPEN', 'ACKNOWLEDGED', 'MITIGATING') AND lifecycle_sealed_at IS NOT NULL)),
+    CONSTRAINT ck_incident_slot CHECK (NOT aggregation_slot_active OR (NOT born_sealed AND lifecycle_sealed_at IS NULL))
+);
+CREATE UNIQUE INDEX uk_incident_active_slot ON t_incident (aggregation_key) WHERE aggregation_slot_active;
+CREATE INDEX idx_incident_state ON t_incident (lifecycle_state);
+CREATE INDEX idx_incident_updated_at ON t_incident (updated_at);
+
+CREATE TABLE t_incident_alert (
+    id VARCHAR(20) PRIMARY KEY,
+    source_id VARCHAR(128) NOT NULL,
+    external_alert_id VARCHAR(128) NOT NULL,
+    protocol_version SMALLINT NOT NULL CHECK (protocol_version = 1),
+    payload_json JSONB NOT NULL,
+    payload_digest CHAR(64) NOT NULL,
+    event_type VARCHAR(16) NOT NULL CHECK (event_type = 'FIRING'),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    rule_id VARCHAR(128) NOT NULL,
+    title VARCHAR(256) NOT NULL,
+    severity VARCHAR(16) NOT NULL CHECK (severity IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')),
+    environment VARCHAR(64) NOT NULL,
+    service VARCHAR(128) NOT NULL,
+    resource_type VARCHAR(64) NOT NULL,
+    resource_id VARCHAR(256) NOT NULL,
+    summary VARCHAR(2048),
+    labels_json JSONB NOT NULL,
+    fingerprint CHAR(64) NOT NULL,
+    aggregation_key VARCHAR(96) NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL,
+    correlation_id VARCHAR(20) NOT NULL,
+    processing_status VARCHAR(16) NOT NULL CHECK (processing_status IN ('RECEIVED', 'PROCESSED', 'FAILED')),
+    processing_epoch INTEGER NOT NULL DEFAULT 0 CHECK (processing_epoch >= 0),
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
+    next_attempt_at TIMESTAMPTZ,
+    last_failure_code VARCHAR(64),
+    last_failure_summary VARCHAR(512),
+    failed_at TIMESTAMPTZ,
+    incident_id VARCHAR(20) REFERENCES t_incident (id),
+    attachment_event_id VARCHAR(20) UNIQUE,
+    attached_at TIMESTAMPTZ,
+    version BIGINT NOT NULL DEFAULT 0 CHECK (version >= 0),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uk_incident_alert_identity UNIQUE (source_id, external_alert_id),
+    CONSTRAINT ck_alert_attachment CHECK ((incident_id IS NULL AND attachment_event_id IS NULL AND attached_at IS NULL)
+        OR (incident_id IS NOT NULL AND attachment_event_id IS NOT NULL AND attached_at IS NOT NULL)),
+    CONSTRAINT ck_alert_processing CHECK (
+        (processing_status = 'RECEIVED' AND next_attempt_at IS NOT NULL AND failed_at IS NULL)
+        OR (processing_status = 'PROCESSED' AND next_attempt_at IS NULL AND incident_id IS NOT NULL AND failed_at IS NULL)
+        OR (processing_status = 'FAILED' AND next_attempt_at IS NULL AND last_failure_code IS NOT NULL AND failed_at IS NOT NULL))
+);
+ALTER TABLE t_incident ADD CONSTRAINT fk_incident_anchor_alert
+    FOREIGN KEY (episode_anchor_alert_id) REFERENCES t_incident_alert (id) DEFERRABLE INITIALLY DEFERRED;
+CREATE INDEX idx_alert_due ON t_incident_alert (next_attempt_at, received_at, id) WHERE processing_status = 'RECEIVED';
+CREATE INDEX idx_alert_episode ON t_incident_alert (aggregation_key, received_at, id);
+CREATE INDEX idx_alert_incident ON t_incident_alert (incident_id);
+CREATE INDEX idx_alert_correlation ON t_incident_alert (correlation_id);
+
+CREATE TABLE t_incident_alert_audit (
+    id VARCHAR(20) PRIMARY KEY,
+    alert_id VARCHAR(20) NOT NULL REFERENCES t_incident_alert (id),
+    fact_key VARCHAR(160) NOT NULL UNIQUE,
+    fact_type VARCHAR(40) NOT NULL CHECK (fact_type IN ('ALERT_RECEIVED', 'ALERT_TERMINAL_FAILED', 'ALERT_REPLAY_ACCEPTED', 'ALERT_REPLAY_REJECTED', 'ALERT_RECOVERED')),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    actor_type VARCHAR(24) NOT NULL CHECK (actor_type IN ('SOURCE', 'SYSTEM', 'USER')),
+    actor_id VARCHAR(128) NOT NULL,
+    request_id VARCHAR(40),
+    correlation_id VARCHAR(20) NOT NULL,
+    processing_epoch INTEGER NOT NULL CHECK (processing_epoch >= 0),
+    reason_code VARCHAR(64),
+    reason_summary VARCHAR(512),
+    failure_code VARCHAR(64),
+    attempt_count_snapshot INTEGER CHECK (attempt_count_snapshot >= 0),
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX idx_alert_audit_alert ON t_incident_alert_audit (alert_id, occurred_at);
+
+CREATE TABLE t_incident_timeline (
+    id VARCHAR(20) PRIMARY KEY,
+    incident_id VARCHAR(20) NOT NULL REFERENCES t_incident (id),
+    sequence_no BIGINT NOT NULL CHECK (sequence_no >= 1),
+    business_event_key VARCHAR(180) NOT NULL UNIQUE,
+    event_type VARCHAR(48) NOT NULL CHECK (event_type IN ('INCIDENT_CREATED', 'ALERT_ATTACHED', 'LATE_ALERT_ATTACHED_AFTER_SEAL', 'INCIDENT_AGGREGATION_SEALED', 'INCIDENT_STATUS_CHANGED')),
+    actor_type VARCHAR(24) NOT NULL CHECK (actor_type IN ('SOURCE', 'SYSTEM', 'USER', 'SERVICE')),
+    actor_id VARCHAR(128) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    correlation_id VARCHAR(20) NOT NULL,
+    related_entity_type VARCHAR(24) CHECK (related_entity_type IN ('ALERT', 'INCIDENT')),
+    related_entity_id VARCHAR(20),
+    summary_json JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uk_incident_timeline_sequence UNIQUE (incident_id, sequence_no),
+    CONSTRAINT ck_timeline_related CHECK ((related_entity_type IS NULL) = (related_entity_id IS NULL))
+);
+
+CREATE TABLE t_incident_outbox (
+    event_id VARCHAR(20) PRIMARY KEY,
+    business_event_key VARCHAR(180) NOT NULL UNIQUE,
+    incident_id VARCHAR(20) NOT NULL REFERENCES t_incident (id),
+    aggregate_version BIGINT NOT NULL CHECK (aggregate_version >= 0),
+    event_type VARCHAR(64) NOT NULL CHECK (event_type IN ('incident.created', 'incident.alert-attached')),
+    schema_version SMALLINT NOT NULL CHECK (schema_version = 1),
+    correlation_id VARCHAR(20) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    payload_json JSONB NOT NULL,
+    publish_status VARCHAR(16) NOT NULL CHECK (publish_status IN ('PENDING', 'PUBLISHED')),
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    next_attempt_at TIMESTAMPTZ,
+    claim_token VARCHAR(64),
+    claim_until TIMESTAMPTZ,
+    published_at TIMESTAMPTZ,
+    broker_message_id VARCHAR(128),
+    last_error_code VARCHAR(64),
+    last_error_summary VARCHAR(512),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT ck_outbox_claim CHECK ((claim_token IS NULL) = (claim_until IS NULL)),
+    CONSTRAINT ck_outbox_status CHECK ((publish_status = 'PENDING' AND next_attempt_at IS NOT NULL AND published_at IS NULL)
+        OR (publish_status = 'PUBLISHED' AND next_attempt_at IS NULL AND claim_token IS NULL AND published_at IS NOT NULL))
+);
+CREATE INDEX idx_outbox_due ON t_incident_outbox (next_attempt_at, created_at, event_id) WHERE publish_status = 'PENDING';
+CREATE INDEX idx_outbox_published ON t_incident_outbox (published_at) WHERE publish_status = 'PUBLISHED';
+
+GRANT USAGE ON SCHEMA public TO ragent_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ragent_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ragent_app;
+REVOKE UPDATE, DELETE ON t_incident_alert_audit, t_incident_timeline FROM ragent_app;
+REVOKE UPDATE, DELETE ON t_incident_alert_audit, t_incident_timeline FROM PUBLIC;
+
+-- Spec B: approval to safe simulation. Run as the schema owner after Spec A.
+
+CREATE TABLE t_incident_action (
+    id VARCHAR(20) PRIMARY KEY,
+    incident_id VARCHAR(20) NOT NULL REFERENCES t_incident (id),
+    source_type VARCHAR(16) NOT NULL CHECK (source_type IN ('USER', 'AGENT')),
+    source_request_id VARCHAR(128) NOT NULL,
+    proposed_by_type VARCHAR(16) NOT NULL CHECK (proposed_by_type IN ('USER', 'AGENT')),
+    proposed_by_id VARCHAR(128) NOT NULL,
+    original_action_id VARCHAR(20) REFERENCES t_incident_action (id),
+    tool_name VARCHAR(64) NOT NULL CHECK (tool_name = 'simulation.set-state'),
+    tool_version VARCHAR(16) NOT NULL CHECK (tool_version = '1'),
+    target_type VARCHAR(32) NOT NULL CHECK (target_type = 'SIM_SERVICE'),
+    target_id VARCHAR(128) NOT NULL,
+    parameters_json JSONB NOT NULL CHECK (jsonb_typeof(parameters_json) = 'object'),
+    proposal_digest CHAR(64) NOT NULL CHECK (proposal_digest ~ '^[0-9a-f]{64}$'),
+    binding_version VARCHAR(32) NOT NULL CHECK (binding_version = 'action-binding-v1'),
+    binding_digest CHAR(64) NOT NULL CHECK (binding_digest ~ '^[0-9a-f]{64}$'),
+    execution_key VARCHAR(128) NOT NULL UNIQUE,
+    state VARCHAR(24) NOT NULL CHECK (state IN ('PENDING_APPROVAL', 'APPROVED',
+        'APPROVAL_REJECTED', 'DISPATCHING', 'EXECUTING', 'SUCCEEDED', 'FAILED',
+        'EXECUTION_REJECTED', 'EXPIRED', 'UNKNOWN')),
+    version BIGINT NOT NULL DEFAULT 0 CHECK (version >= 0),
+    approval_due_at TIMESTAMPTZ NOT NULL,
+    authorization_due_at TIMESTAMPTZ,
+    last_reason_code VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uk_action_source UNIQUE (incident_id, source_type, source_request_id),
+    CONSTRAINT ck_action_authorization CHECK (state NOT IN ('APPROVED', 'DISPATCHING',
+        'EXECUTING', 'SUCCEEDED', 'FAILED', 'EXECUTION_REJECTED', 'UNKNOWN')
+        OR authorization_due_at IS NOT NULL)
+);
+CREATE INDEX idx_action_incident ON t_incident_action (incident_id, created_at);
+CREATE INDEX idx_action_dispatch ON t_incident_action (state, authorization_due_at, id)
+    WHERE state IN ('APPROVED', 'DISPATCHING');
+CREATE INDEX idx_action_approval_due ON t_incident_action (approval_due_at, id)
+    WHERE state = 'PENDING_APPROVAL';
+
+CREATE TABLE t_incident_action_approval (
+    id VARCHAR(20) PRIMARY KEY,
+    action_id VARCHAR(20) NOT NULL UNIQUE REFERENCES t_incident_action (id),
+    status VARCHAR(16) NOT NULL CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED')),
+    version BIGINT NOT NULL DEFAULT 0 CHECK (version >= 0),
+    binding_digest CHAR(64) NOT NULL CHECK (binding_digest ~ '^[0-9a-f]{64}$'),
+    approval_due_at TIMESTAMPTZ NOT NULL,
+    decider_id VARCHAR(128),
+    role_snapshot VARCHAR(64),
+    decided_at TIMESTAMPTZ,
+    authorization_due_at TIMESTAMPTZ,
+    reason_code VARCHAR(64),
+    reason_summary VARCHAR(512),
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT ck_approval_decision CHECK (
+        (status = 'PENDING' AND decider_id IS NULL AND decided_at IS NULL AND authorization_due_at IS NULL)
+        OR (status = 'APPROVED' AND decider_id IS NOT NULL AND decided_at IS NOT NULL
+            AND authorization_due_at IS NOT NULL)
+        OR (status = 'REJECTED' AND decider_id IS NOT NULL AND decided_at IS NOT NULL)
+        OR (status = 'EXPIRED' AND decided_at IS NOT NULL))
+);
+
+CREATE TABLE t_incident_action_execution (
+    id VARCHAR(20) PRIMARY KEY,
+    action_id VARCHAR(20) NOT NULL UNIQUE REFERENCES t_incident_action (id),
+    execution_key VARCHAR(128) NOT NULL UNIQUE,
+    dispatch_request_id VARCHAR(128) NOT NULL UNIQUE,
+    tool_name VARCHAR(64) NOT NULL CHECK (tool_name = 'simulation.set-state'),
+    tool_version VARCHAR(16) NOT NULL CHECK (tool_version = '1'),
+    target_type VARCHAR(32) NOT NULL CHECK (target_type = 'SIM_SERVICE'),
+    target_id VARCHAR(128) NOT NULL,
+    binding_digest CHAR(64) NOT NULL CHECK (binding_digest ~ '^[0-9a-f]{64}$'),
+    max_execution_duration_ms BIGINT NOT NULL CHECK (max_execution_duration_ms > 0),
+    receipt_grace_period_ms BIGINT NOT NULL CHECK (receipt_grace_period_ms > 0),
+    execution_started_at TIMESTAMPTZ,
+    receipt_due_at TIMESTAMPTZ,
+    current_receipt_id VARCHAR(20),
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT ck_execution_deadline CHECK ((execution_started_at IS NULL) = (receipt_due_at IS NULL))
+);
+
+CREATE TABLE t_incident_execution_ticket (
+    id VARCHAR(20) PRIMARY KEY,
+    execution_id VARCHAR(20) NOT NULL REFERENCES t_incident_action_execution (id),
+    secret_digest CHAR(64) NOT NULL UNIQUE CHECK (secret_digest ~ '^[0-9a-f]{64}$'),
+    status VARCHAR(16) NOT NULL CHECK (status IN ('ISSUED', 'CONSUMED', 'EXPIRED')),
+    issued_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    invalidation_reason VARCHAR(64),
+    replaced_by_ticket_id VARCHAR(20) REFERENCES t_incident_execution_ticket (id),
+    CONSTRAINT ck_ticket_time CHECK (issued_at < expires_at),
+    CONSTRAINT ck_ticket_consumed CHECK ((status = 'CONSUMED') = (consumed_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX uk_execution_issued_ticket ON t_incident_execution_ticket (execution_id)
+    WHERE status = 'ISSUED';
+CREATE INDEX idx_ticket_execution ON t_incident_execution_ticket (execution_id, issued_at);
+
+CREATE TABLE t_incident_action_receipt (
+    id VARCHAR(20) PRIMARY KEY,
+    execution_id VARCHAR(20) NOT NULL REFERENCES t_incident_action_execution (id),
+    action_id VARCHAR(20) NOT NULL REFERENCES t_incident_action (id),
+    request_id VARCHAR(128) NOT NULL,
+    receipt_version SMALLINT NOT NULL CHECK (receipt_version = 1),
+    receipt_digest CHAR(64) NOT NULL CHECK (receipt_digest ~ '^[0-9a-f]{64}$'),
+    result_status VARCHAR(16) NOT NULL CHECK (result_status IN ('SUCCESS', 'FAILED', 'REJECTED', 'UNKNOWN')),
+    result_code VARCHAR(64) NOT NULL,
+    tool_name VARCHAR(64) NOT NULL CHECK (tool_name = 'simulation.set-state'),
+    tool_version VARCHAR(16) NOT NULL CHECK (tool_version = '1'),
+    target_type VARCHAR(32) NOT NULL CHECK (target_type = 'SIM_SERVICE'),
+    target_id VARCHAR(128) NOT NULL,
+    execution_key VARCHAR(128) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL,
+    summary_json JSONB NOT NULL CHECK (jsonb_typeof(summary_json) = 'object'),
+    disposition VARCHAR(16) NOT NULL CHECK (disposition IN ('APPLIED', 'CONSISTENT', 'CONFLICT')),
+    CONSTRAINT uk_execution_receipt UNIQUE (execution_id, id)
+);
+CREATE INDEX idx_receipt_action ON t_incident_action_receipt (action_id, accepted_at);
+ALTER TABLE t_incident_action_execution ADD CONSTRAINT fk_execution_current_receipt
+    FOREIGN KEY (id, current_receipt_id) REFERENCES t_incident_action_receipt (execution_id, id)
+    DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE t_incident_timeline DROP CONSTRAINT t_incident_timeline_event_type_check;
+ALTER TABLE t_incident_timeline ADD CONSTRAINT ck_timeline_event_type CHECK (event_type IN (
+    'INCIDENT_CREATED', 'ALERT_ATTACHED', 'LATE_ALERT_ATTACHED_AFTER_SEAL',
+    'INCIDENT_AGGREGATION_SEALED', 'INCIDENT_STATUS_CHANGED', 'ACTION_PROPOSED',
+    'ACTION_APPROVAL_DECIDED', 'ACTION_DISPATCHED', 'ACTION_TICKET_ISSUED',
+    'ACTION_TICKET_EXPIRED', 'ACTION_TICKET_CONSUMED', 'ACTION_STATUS_CHANGED',
+    'ACTION_RECEIPT_ACCEPTED', 'ACTION_RECONCILIATION_RECORDED',
+    'ACTION_MANUAL_CONCLUSION', 'ACTION_RECEIPT_CONFLICT'));
+ALTER TABLE t_incident_timeline DROP CONSTRAINT t_incident_timeline_related_entity_type_check;
+ALTER TABLE t_incident_timeline ADD CONSTRAINT ck_timeline_related_type
+    CHECK (related_entity_type IN ('ALERT', 'INCIDENT', 'ACTION', 'EXECUTION'));
+ALTER TABLE t_incident_outbox DROP CONSTRAINT t_incident_outbox_event_type_check;
+ALTER TABLE t_incident_outbox ADD CONSTRAINT ck_outbox_event_type CHECK (event_type IN (
+    'incident.created', 'incident.alert-attached', 'incident.action-approval-decided',
+    'incident.action-receipt-accepted'));
+
+GRANT SELECT, INSERT, UPDATE ON t_incident_action, t_incident_action_approval,
+    t_incident_action_execution, t_incident_execution_ticket TO ragent_app;
+GRANT SELECT, INSERT ON t_incident_action_receipt TO ragent_app;
+REVOKE UPDATE, DELETE ON t_incident_action_receipt FROM ragent_app;
+REVOKE UPDATE, DELETE ON t_incident_action_receipt FROM PUBLIC;
+
+-- Spec C, schema owner only. No credentials or knowledge-domain foreign keys.
+CREATE TABLE t_incident_diagnosis_request (
+    id VARCHAR(20) PRIMARY KEY,
+    incident_id VARCHAR(20) NOT NULL REFERENCES t_incident(id),
+    actor_id VARCHAR(128) NOT NULL,
+    source_request_id VARCHAR(128) NOT NULL,
+    request_digest CHAR(64) NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
+    snapshot_json JSONB NOT NULL CHECK (jsonb_typeof(snapshot_json)='object'),
+    snapshot_digest CHAR(64) NOT NULL CHECK (snapshot_digest ~ '^[0-9a-f]{64}$'),
+    facts_digest CHAR(64) NOT NULL CHECK (facts_digest ~ '^[0-9a-f]{64}$'),
+    incident_version BIGINT NOT NULL CHECK (incident_version>=0),
+    timeline_watermark BIGINT NOT NULL CHECK (timeline_watermark>=0),
+    corpus_version VARCHAR(64) NOT NULL,
+    corpus_digest CHAR(64) NOT NULL CHECK (corpus_digest ~ '^[0-9a-f]{64}$'),
+    owner_token_digest CHAR(64) NOT NULL CHECK (owner_token_digest ~ '^[0-9a-f]{64}$'),
+    state VARCHAR(16) NOT NULL CHECK (state IN ('RUNNING','COMPLETED')),
+    version BIGINT NOT NULL DEFAULT 0 CHECK (version>=0),
+    created_at TIMESTAMPTZ NOT NULL,
+    deadline_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    UNIQUE (incident_id,actor_id,source_request_id),
+    CHECK (deadline_at>created_at),
+    CHECK ((state='COMPLETED')=(completed_at IS NOT NULL))
+);
+CREATE INDEX idx_diagnosis_incident ON t_incident_diagnosis_request(incident_id,created_at,id);
+CREATE INDEX idx_diagnosis_due ON t_incident_diagnosis_request(incident_id,deadline_at) WHERE state='RUNNING';
+CREATE TABLE t_incident_diagnosis_result (
+    diagnosis_id VARCHAR(20) PRIMARY KEY REFERENCES t_incident_diagnosis_request(id),
+    status VARCHAR(32) NOT NULL CHECK (status IN ('SUPPORTED','INSUFFICIENT_EVIDENCE','INVALID_EVIDENCE','FAILED')),
+    reason_code VARCHAR(64) NOT NULL,
+    result_json JSONB NOT NULL CHECK (jsonb_typeof(result_json)='object'),
+    result_digest CHAR(64) NOT NULL CHECK (result_digest ~ '^[0-9a-f]{64}$'),
+    stale_at_publish BOOLEAN NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    CHECK (status='SUPPORTED' OR NOT jsonb_path_exists(result_json,'$.recommendations[*] ? (@.convertible == true)'))
+);
+CREATE TABLE t_incident_diagnosis_action_link (
+    action_id VARCHAR(20) PRIMARY KEY REFERENCES t_incident_action(id),
+    incident_id VARCHAR(20) NOT NULL REFERENCES t_incident(id),
+    diagnosis_id VARCHAR(20) NOT NULL REFERENCES t_incident_diagnosis_result(diagnosis_id),
+    recommendation_id VARCHAR(128) NOT NULL,
+    recommendation_digest CHAR(64) NOT NULL CHECK (recommendation_digest ~ '^[0-9a-f]{64}$'),
+    diagnosis_digest CHAR(64) NOT NULL CHECK (diagnosis_digest ~ '^[0-9a-f]{64}$'),
+    facts_digest CHAR(64) NOT NULL CHECK (facts_digest ~ '^[0-9a-f]{64}$'),
+    actor_id VARCHAR(128) NOT NULL,
+    source_request_id VARCHAR(128) NOT NULL,
+    selection_digest CHAR(64) NOT NULL CHECK (selection_digest ~ '^[0-9a-f]{64}$'),
+    created_at TIMESTAMPTZ NOT NULL,
+    UNIQUE(incident_id,actor_id,source_request_id)
+);
+ALTER TABLE t_incident_timeline DROP CONSTRAINT ck_timeline_event_type;
+ALTER TABLE t_incident_timeline ADD CONSTRAINT ck_timeline_event_type CHECK (event_type IN (
+    'INCIDENT_CREATED','ALERT_ATTACHED','LATE_ALERT_ATTACHED_AFTER_SEAL','INCIDENT_AGGREGATION_SEALED',
+    'INCIDENT_STATUS_CHANGED','ACTION_PROPOSED','ACTION_APPROVAL_DECIDED','ACTION_DISPATCHED',
+    'ACTION_TICKET_ISSUED','ACTION_TICKET_EXPIRED','ACTION_TICKET_CONSUMED','ACTION_STATUS_CHANGED',
+    'ACTION_RECEIPT_ACCEPTED','ACTION_RECONCILIATION_RECORDED','ACTION_MANUAL_CONCLUSION',
+    'ACTION_RECEIPT_CONFLICT','DIAGNOSIS_RECORDED','DIAGNOSIS_ACTION_LINKED'));
+ALTER TABLE t_incident_timeline DROP CONSTRAINT ck_timeline_related_type;
+ALTER TABLE t_incident_timeline ADD CONSTRAINT ck_timeline_related_type
+    CHECK(related_entity_type IN ('ALERT','INCIDENT','ACTION','EXECUTION','DIAGNOSIS'));
+GRANT SELECT,INSERT ON t_incident_diagnosis_request,t_incident_diagnosis_result,t_incident_diagnosis_action_link TO ragent_app;
+REVOKE UPDATE,DELETE ON t_incident_diagnosis_request,t_incident_diagnosis_result,t_incident_diagnosis_action_link FROM ragent_app,PUBLIC;
+GRANT UPDATE(state,version,completed_at) ON t_incident_diagnosis_request TO ragent_app;

@@ -94,6 +94,7 @@ public class AgentTracingConfiguration {
      * ConditionalOnMissingBean(OpenTelemetry) 留出退让空间
      */
     @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(prefix = "observability", name = "enabled", havingValue = "false", matchIfMissing = true)
     public OpenTelemetrySdk agentOpenTelemetrySdk(
             @Value("${spring.application.name}") String applicationName) {
         if (StrUtil.isBlank(traceProperties.getEndpoint())
@@ -132,6 +133,22 @@ public class AgentTracingConfiguration {
         GlobalOpenTelemetry.set(sdk);
         log.info("Agent 链路追踪已启用, 上报至 {}", traceProperties.getEndpoint());
         return sdk;
+    }
+
+    @Bean("agentObservabilityCustomizer")
+    @ConditionalOnProperty(prefix = "observability", name = "enabled", havingValue = "true")
+    public java.util.function.Consumer<io.opentelemetry.sdk.trace.SdkTracerProviderBuilder> agentObservabilityCustomizer(
+            @Value("${spring.application.name:ragent}") String applicationName) {
+        return builder -> {
+            if (StrUtil.isBlank(traceProperties.getEndpoint()) || StrUtil.isBlank(traceProperties.getPublicKey())
+                    || StrUtil.isBlank(traceProperties.getSecretKey())) {
+                throw new IllegalStateException("agent.trace requires endpoint and credentials");
+            }
+            var exporter = OtlpHttpSpanExporter.builder().setEndpoint(traceProperties.getEndpoint())
+                    .addHeader("Authorization", basicCredential()).addHeader(INGESTION_VERSION_HEADER, "4").build();
+            builder.setResource(resource(traceProperties, buildProperties.getIfAvailable(), applicationName))
+                    .setSpanLimits(hardLimits()).addSpanProcessor(BatchSpanProcessor.builder(exporter).build());
+        };
     }
 
     /**

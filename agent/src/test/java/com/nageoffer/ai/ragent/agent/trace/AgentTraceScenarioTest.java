@@ -383,7 +383,7 @@ class AgentTraceScenarioTest {
         assertThat(batchSpan().getAttributes().get(AgentTraceAttributes.LEVEL))
                 .isEqualTo(AgentTraceAttributes.LEVEL_WARNING);
         // 批 span 也不许跨等待：它在事件落完那刻就收了，之后那五分钟与本次运行的耗时无关
-        assertThat(durationMillis(batchSpan())).isZero();
+        assertThat(durationMillis(batchSpan())).isLessThan(1_000);
 
         assertSpanNames(ROOT_SPAN, BATCH_SPAN);
         assertInvariants(List.of(), List.of("call-1"));

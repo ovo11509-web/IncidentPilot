@@ -12,7 +12,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuthStore();
   const [showPassword, setShowPassword] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
-  const [form, setForm] = React.useState({ username: "admin", password: "admin" });
+  const [form, setForm] = React.useState({ username: "", password: "" });
   const [error, setError] = React.useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -27,7 +27,7 @@ export function LoginPage() {
       if (!remember) {
         // 如需仅在内存中保存登录态，可在此扩展。
       }
-      navigate("/chat");
+      navigate(useAuthStore.getState().user?.role === "admin" ? "/admin/workbench" : "/chat");
     } catch (err) {
       setError((err as Error).message || "登录失败，请稍后重试。");
     }
@@ -38,9 +38,9 @@ export function LoginPage() {
       <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-blue-50/50 to-blue-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900" />
       <div className="relative z-10 w-full max-w-md rounded-3xl border border-border/70 bg-background/80 p-8 shadow-soft backdrop-blur">
         <div className="mb-6">
-          <p className="font-display text-2xl font-semibold">欢迎回来</p>
+          <p className="font-display text-2xl font-semibold">IncidentPilot</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            登录后继续你的检索增强对话。
+            登录事件响应工作台或智能对话。
           </p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>

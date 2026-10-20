@@ -1,0 +1,389 @@
+{
+  "packetVersion": 1,
+  "preparedOn": "2026-10-03",
+  "timezone": "Asia/Shanghai",
+  "purpose": "FR-017/T028 human review preparation only",
+  "humanReviewStatus": "PENDING",
+  "caseCount": 34,
+  "distinctInputAndExpectedSignatureCount": 34,
+  "duplicateGroups": [],
+  "sources": {
+    "rag/src/test/resources/fixtures/runbook/cases-v2.json": {
+      "fileSha256": "a24fafa7457bb74b4c027b5000c99712a85f751f1246e0ada90ac3ade0fd65bf",
+      "canonicalJsonSha256": "f8154160bdb4605d302e458b08778b27a9fc876f1109cc075a0e87cd3b59decc"
+    },
+    "rag/src/test/resources/fixtures/runbook/corpus/manifest-v1.json": {
+      "fileSha256": "f56c287b42efab9fbc8837f93b9c1e84dfd4263894efa4ca7262fcdcef0a9f7b",
+      "canonicalJsonSha256": "2b2196674e6a03ed95172fae503e2a8616a54cf540186d58afb1a858ec95bcad"
+    },
+    "rag/target/runbook-eval/e1cf5f14-80f3-4227-ad71-a829cc6e072d/report.json": {
+      "fileSha256": "ca7c04ebb93c322b906c477a6702163eeb48aa756b3e5c6eb54da8de6243fd11",
+      "canonicalJsonSha256": "3252742a2ae542190186a66f0740f3e0cb57bceb006b952a576b93b5c6dae8fb"
+    },
+    "agent/target/diagnosis-eval/0b72f960-7bcc-47ef-9c59-20e43ca28491/report.json": {
+      "fileSha256": "2753383bd61eeb663f3cdb59f8f436954f0b3cac1666fd6509be8eeea14f073d",
+      "canonicalJsonSha256": "fe9b3ffc94d613de4d1a1cdd7e0e46eddf82093ed7e29df17359dab19f3ca7e2"
+    }
+  },
+  "runs": {
+    "retrieval": {
+      "runId": "e1cf5f14-80f3-4227-ad71-a829cc6e072d",
+      "runType": "ACTUAL_LEXICAL_RETRIEVAL",
+      "gitHead": "67624931f20812922568d3641a095adb291263ba",
+      "gitDirty": true,
+      "actualCommand": ".\\mvnw.cmd '-Dspotless.apply.skip=true' -pl agent -am '-Dtest=RunbookOfflineEvaluationTest,DiagnosisOfflineEvaluationTest,RunbookCorpusTest,RunbookRetrievalTest,DiagnosisEvidenceValidatorTest' '-Dsurefire.failIfNoSpecifiedTests=false' test",
+      "startedAt": "2026-10-03T15:49:37.256478100Z",
+      "finishedAt": "2026-10-03T15:49:37.407072500Z",
+      "javaVersion": "21.0.12",
+      "datasetVersion": "runbook-cases-v2",
+      "datasetDigest": "f8154160bdb4605d302e458b08778b27a9fc876f1109cc075a0e87cd3b59decc",
+      "corpusVersion": "runbooks-v1",
+      "corpusDigest": "21d725266293084cd1d25b3e25724408958f3fd5323a7e8217e8a341ced9882c",
+      "fixtureClock": "2026-10-03T12:00:00Z",
+      "retrieverVersion": "lexical-v1",
+      "retrievalConfigVersion": "lexical-v1-top20-expanded",
+      "generatorVersion": "NONE",
+      "ruleVersion": "NONE",
+      "promptVersion": "NONE",
+      "snapshotVersion": "NONE_QUERY_FACTS_ONLY",
+      "testEntryPoint": "RunbookOfflineEvaluationTest",
+      "isolation": "CLASSPATH_FIXTURE_NO_EXTERNAL_SERVICES",
+      "modelCalls": 0,
+      "writeCalls": 0,
+      "humanLabelReview": "PENDING",
+      "labelOrigin": "SYNTHETIC_RULE_BASELINE_USER_REVISIONS_UNSIGNED",
+      "configuration": {
+        "topK": 3,
+        "maxChunks": 20,
+        "maxEvidenceBytes": 262144,
+        "service": "incident-demo",
+        "environment": "demo",
+        "resourceType": "sim_service",
+        "selectionConfiguration": "NOT_USED_OFFLINE_NO_ACTION_SELECTION"
+      },
+      "configurationDigest": "67c854234c8f0c2a0858186f9abf81effd2bdff6285521ec5239737fba6dba26"
+    },
+    "diagnosis": {
+      "runId": "0b72f960-7bcc-47ef-9c59-20e43ca28491",
+      "runType": "ACTUAL_RULE_EXTRACTION",
+      "gitHead": "67624931f20812922568d3641a095adb291263ba",
+      "gitDirty": true,
+      "actualCommand": ".\\mvnw.cmd '-Dspotless.apply.skip=true' -pl agent -am '-Dtest=RunbookOfflineEvaluationTest,DiagnosisOfflineEvaluationTest,RunbookCorpusTest,RunbookRetrievalTest,DiagnosisEvidenceValidatorTest' '-Dsurefire.failIfNoSpecifiedTests=false' test",
+      "startedAt": "2026-10-03T15:50:02.133765400Z",
+      "finishedAt": "2026-10-03T15:50:02.304736600Z",
+      "javaVersion": "21.0.12",
+      "datasetVersion": "runbook-cases-v2",
+      "datasetDigest": "f8154160bdb4605d302e458b08778b27a9fc876f1109cc075a0e87cd3b59decc",
+      "corpusVersion": "runbooks-v1",
+      "corpusDigest": "21d725266293084cd1d25b3e25724408958f3fd5323a7e8217e8a341ced9882c",
+      "fixtureClock": "2026-10-03T12:00:00Z",
+      "retrieverVersion": "lexical-v1",
+      "retrievalConfigVersion": "lexical-v1-top20-expanded",
+      "generatorVersion": "extractive-v1",
+      "ruleVersion": "reviewed-rules-v1",
+      "promptVersion": "NONE",
+      "snapshotVersion": 1,
+      "testEntryPoint": "DiagnosisOfflineEvaluationTest",
+      "isolation": "CLASSPATH_FIXTURE_NO_EXTERNAL_SERVICES",
+      "modelCalls": 0,
+      "writeCalls": 0,
+      "humanLabelReview": "PENDING",
+      "labelOrigin": "SYNTHETIC_RULE_BASELINE_USER_REVISIONS_UNSIGNED",
+      "configuration": {
+        "topK": 3,
+        "maxChunks": 20,
+        "maxEvidenceBytes": 262144,
+        "service": "incident-demo",
+        "environment": "demo",
+        "resourceType": "sim_service",
+        "selectionConfiguration": "NOT_USED_OFFLINE_NO_ACTION_SELECTION"
+      },
+      "configurationDigest": "67c854234c8f0c2a0858186f9abf81effd2bdff6285521ec5239737fba6dba26"
+    }
+  },
+  "integrityChecks": {
+    "retrievalCitations": 89,
+    "diagnosisCitations": 42,
+    "verifiedTotal": 131
+  },
+  "cases": [
+    {
+      "caseId": "RB-OVERLOAD-positive-en",
+      "datasetCaseDigest": "57d1f06560b7782ba27ca72fdac34a5772e377b0b20b07490c54f2945211b86f",
+      "diagnosisInputDigest": "4e2c211e9ab2ad25154cdebe26cc3791c0142e41cc6c5e3b90dd5ce6b03599be",
+      "actualOutputDigest": "95ad2c7bb3475e51dac1d011d0c5e6ec87c36119ec279eed7aff35b65b4ed1c9",
+      "evidenceAnchor": "case-01",
+      "retrievalReportedCaseDigest": "57d1f06560b7782ba27ca72fdac34a5772e377b0b20b07490c54f2945211b86f"
+    },
+    {
+      "caseId": "RB-OVERLOAD-positive-zh",
+      "datasetCaseDigest": "5ccd9ab12f9b2f936a0d8b0ec1c7296406d10d9aeee41e39f781d0a800b17140",
+      "diagnosisInputDigest": "16a84a0cb7232abf15dddb91af267cacda5cf7ab08e6d92c59401935757dba37",
+      "actualOutputDigest": "536743a2db1748c7b6306aa1d1a321c0e794860af3438e9f3362f6da696d4c61",
+      "evidenceAnchor": "case-02",
+      "retrievalReportedCaseDigest": "5ccd9ab12f9b2f936a0d8b0ec1c7296406d10d9aeee41e39f781d0a800b17140"
+    },
+    {
+      "caseId": "RB-OVERLOAD-insufficient",
+      "datasetCaseDigest": "2bfd1b2311868ac695e8944f1a29c965356210720bcf762cd213f52472833fa4",
+      "diagnosisInputDigest": "bee8a437fdb5e348b94ead0bbbad97161abd854b0557b94582c060ac96c56224",
+      "actualOutputDigest": "5201e657383196f6fe98a7535d786bfffe086d3cd5808abc242747b9eb394609",
+      "evidenceAnchor": "case-03",
+      "retrievalReportedCaseDigest": "2bfd1b2311868ac695e8944f1a29c965356210720bcf762cd213f52472833fa4"
+    },
+    {
+      "caseId": "RB-OVERLOAD-wrong-scope",
+      "datasetCaseDigest": "6fca381d7fa22d383aa1ae385826c8b3616f5a4126fcf8e3912f32376505faeb",
+      "diagnosisInputDigest": "178981c55785251459c84d20c0b26e623fda1bb0fbf440b0504c95df59535886",
+      "actualOutputDigest": "7547bee9bc3a1d5fbf5728e266748a974ea26999e563ea7ad8c1565ceed85764",
+      "evidenceAnchor": "case-04",
+      "retrievalReportedCaseDigest": "6fca381d7fa22d383aa1ae385826c8b3616f5a4126fcf8e3912f32376505faeb"
+    },
+    {
+      "caseId": "RB-OVERLOAD-expired",
+      "datasetCaseDigest": "039868ded4349ebc51dbcf9f1a0da943a4fd8db36a9329e2757f09129276c81a",
+      "diagnosisInputDigest": "4e2c211e9ab2ad25154cdebe26cc3791c0142e41cc6c5e3b90dd5ce6b03599be",
+      "actualOutputDigest": "7b3cb1483a585bd73b522015aa80756ed3151b5cf2ea834e4c6177f3636b5e89",
+      "evidenceAnchor": "case-05",
+      "retrievalReportedCaseDigest": "039868ded4349ebc51dbcf9f1a0da943a4fd8db36a9329e2757f09129276c81a"
+    },
+    {
+      "caseId": "RB-OVERLOAD-injection",
+      "datasetCaseDigest": "1a054ab6473f41c37a4b935774ac5821077d0e766f26604de1734d7d1c69fc1e",
+      "diagnosisInputDigest": "d934d37d6456fc19e651e17d6e2cbf24995f9b39624fb1b76a772e596a3fb2f1",
+      "actualOutputDigest": "ee6e533eadc9f8030c5135a7d4f54a0460744aa746a0d59d416379f1a9768942",
+      "evidenceAnchor": "case-06",
+      "retrievalReportedCaseDigest": "1a054ab6473f41c37a4b935774ac5821077d0e766f26604de1734d7d1c69fc1e"
+    },
+    {
+      "caseId": "RB-JAVA-OOM-positive-en",
+      "datasetCaseDigest": "297e8dc5dfd494ac6f9d34962ba3d506627b224770aa8ecee6e90195892774a5",
+      "diagnosisInputDigest": "9b35d48566a73223f9b5cc4fad05c5f32df8c0486c133dcc92494e1d9c9eba33",
+      "actualOutputDigest": "78d7b431c0c712da2a9a8e02f5d15193d8ddbda8e1000c3b3151da252f182696",
+      "evidenceAnchor": "case-07",
+      "retrievalReportedCaseDigest": "297e8dc5dfd494ac6f9d34962ba3d506627b224770aa8ecee6e90195892774a5"
+    },
+    {
+      "caseId": "RB-JAVA-OOM-positive-zh",
+      "datasetCaseDigest": "ec323b70e95daef12c7d3525fd0c6e346815cb8abe6720cf23b3322618c6a08e",
+      "diagnosisInputDigest": "5912133755aeb9beee632e07346253420e03b8949d7cdd3d78577af41990d75e",
+      "actualOutputDigest": "9414368ec0d00d7fe1a72ba7b9b98bb4cbaf93d823a7cc4a6a4ff5ae7102aa16",
+      "evidenceAnchor": "case-08",
+      "retrievalReportedCaseDigest": "ec323b70e95daef12c7d3525fd0c6e346815cb8abe6720cf23b3322618c6a08e"
+    },
+    {
+      "caseId": "RB-UNCLASSIFIED-disk-insufficient",
+      "datasetCaseDigest": "025686a3e06ee5e39a198db2c035221c4f113fcfa4325f18eb8cf1bc540baafa",
+      "diagnosisInputDigest": "9dccd99d532d1395f6f9bc012f735435a7968ff2a3aff251bb9525950de61a85",
+      "actualOutputDigest": "d9e0ab3373e11b1bf4b403a7beff8be9662ef908994c98d597e33672fe05a80c",
+      "evidenceAnchor": "case-09",
+      "retrievalReportedCaseDigest": "025686a3e06ee5e39a198db2c035221c4f113fcfa4325f18eb8cf1bc540baafa"
+    },
+    {
+      "caseId": "RB-JAVA-OOM-wrong-scope",
+      "datasetCaseDigest": "d366857d8a4d648c409da5b980dfd0519a3da6186f9591d406e24c243b437c42",
+      "diagnosisInputDigest": "921492bcba0fc7dd89e58734e9d8365e849a204fab86ddda36d9069e447cbe57",
+      "actualOutputDigest": "543771a59766bbe02508a50cfa55d259be37f0b54b973779af0a55bf9af8d9b4",
+      "evidenceAnchor": "case-10",
+      "retrievalReportedCaseDigest": "d366857d8a4d648c409da5b980dfd0519a3da6186f9591d406e24c243b437c42"
+    },
+    {
+      "caseId": "RB-JAVA-OOM-expired",
+      "datasetCaseDigest": "c3a24556f6e7c73156984129ba6a140efc0361a8375d6f984b96ea1214df88ac",
+      "diagnosisInputDigest": "9b35d48566a73223f9b5cc4fad05c5f32df8c0486c133dcc92494e1d9c9eba33",
+      "actualOutputDigest": "1c09c786735692e31d91cca6a94ce603edef010ae111ec79391a09194cbb6f03",
+      "evidenceAnchor": "case-11",
+      "retrievalReportedCaseDigest": "c3a24556f6e7c73156984129ba6a140efc0361a8375d6f984b96ea1214df88ac"
+    },
+    {
+      "caseId": "RB-JAVA-OOM-injection",
+      "datasetCaseDigest": "b37ece64cf9f7c20b16247bd7adf13da9fe002e48306cec385284db0aa1b1154",
+      "diagnosisInputDigest": "7fa054048a9b387f99995648a37473cd995d18e7eec7f2b98ff3907201df031a",
+      "actualOutputDigest": "b6f0b927642f224edb9c0c28bcb48e8827f2d7e68ec939b57b18df3e159f3729",
+      "evidenceAnchor": "case-12",
+      "retrievalReportedCaseDigest": "b37ece64cf9f7c20b16247bd7adf13da9fe002e48306cec385284db0aa1b1154"
+    },
+    {
+      "caseId": "RB-POOL-positive-en",
+      "datasetCaseDigest": "46e7b9ddc2089e2cdd83cd4593aca0101f979539bfc48be4be97ebabfb9b40ca",
+      "diagnosisInputDigest": "8fb2858afd324136f8f484398616ac76613511310ce54dab34bfd2af5c13e4c4",
+      "actualOutputDigest": "edd473d1b23404198be9f342faee4038b308289535c577481146c92158878712",
+      "evidenceAnchor": "case-13",
+      "retrievalReportedCaseDigest": "46e7b9ddc2089e2cdd83cd4593aca0101f979539bfc48be4be97ebabfb9b40ca"
+    },
+    {
+      "caseId": "RB-POOL-positive-zh",
+      "datasetCaseDigest": "5943099acb6c15911222b7736d2be14b4ae929c7441d5c29e71fe17254fb1625",
+      "diagnosisInputDigest": "b954f2e8d3bcd91de1785604ce81d85e58478f89b2d1bb71220e16b88f405a43",
+      "actualOutputDigest": "4a1e1bdbc0e23a760ffa4d0b14cd7ee13eb4b9a1633df7d2018a12a540f9c8ae",
+      "evidenceAnchor": "case-14",
+      "retrievalReportedCaseDigest": "5943099acb6c15911222b7736d2be14b4ae929c7441d5c29e71fe17254fb1625"
+    },
+    {
+      "caseId": "RB-UNCLASSIFIED-generic-insufficient",
+      "datasetCaseDigest": "2318733308d44a3db48e1d01dd5d8d63edac4742a10afff80e8ef1d0965694fd",
+      "diagnosisInputDigest": "c2082d84422c97b29aedaac7183fbcb8bc7aa181db838697dc80954fdb4530c6",
+      "actualOutputDigest": "0fdce2d8633ea78c466ffad0408eead8014af0fa1dd8fd0c5f4d93a13c89aa69",
+      "evidenceAnchor": "case-15",
+      "retrievalReportedCaseDigest": "2318733308d44a3db48e1d01dd5d8d63edac4742a10afff80e8ef1d0965694fd"
+    },
+    {
+      "caseId": "RB-POOL-wrong-scope",
+      "datasetCaseDigest": "7e69878d1745780126356e9695886068e1e43f4a425585ee52779cdca17c9a08",
+      "diagnosisInputDigest": "2c92d08c9627f2e5f7480b06972249badb23d1dbebad551512df5446b7148ddf",
+      "actualOutputDigest": "8dbf5858017eacbfa393efbe314cb7ff71b3e13f2ad1ad498f302d9567904f7f",
+      "evidenceAnchor": "case-16",
+      "retrievalReportedCaseDigest": "7e69878d1745780126356e9695886068e1e43f4a425585ee52779cdca17c9a08"
+    },
+    {
+      "caseId": "RB-POOL-expired",
+      "datasetCaseDigest": "e03dd9953f14a745aaaefb17b4fec6220e2d8e2461f2bb401f1705e0f11c5aaf",
+      "diagnosisInputDigest": "8fb2858afd324136f8f484398616ac76613511310ce54dab34bfd2af5c13e4c4",
+      "actualOutputDigest": "a222014c0595a7a71bb2d9053942a8e74d4d571255ca1224a8cac882bd957ee3",
+      "evidenceAnchor": "case-17",
+      "retrievalReportedCaseDigest": "e03dd9953f14a745aaaefb17b4fec6220e2d8e2461f2bb401f1705e0f11c5aaf"
+    },
+    {
+      "caseId": "RB-POOL-injection",
+      "datasetCaseDigest": "3f433406b2513ca409c0707dc5d0259f32bf0cc2bb271327acafb20b78c58ee5",
+      "diagnosisInputDigest": "fd86f252f0107e7dd19be0f3d9b2404bd2d94e16a831e023376cf3e86efa225b",
+      "actualOutputDigest": "5a2274f0dce1936480e757be4fc0a0f44900b95974735b802dc734856b38d9c3",
+      "evidenceAnchor": "case-18",
+      "retrievalReportedCaseDigest": "3f433406b2513ca409c0707dc5d0259f32bf0cc2bb271327acafb20b78c58ee5"
+    },
+    {
+      "caseId": "RB-HEALTH-positive-en",
+      "datasetCaseDigest": "ebf40df89ba94948af34ca707324e89e21407cd18fb024abaefac14a7950717a",
+      "diagnosisInputDigest": "dfea0bf66da7b2e7a82e43ad1cd846ebcc51fa92d30a923d2ccf70f935491843",
+      "actualOutputDigest": "d19b7ead5c6b8a39ddaae0df133573d0cb16dfaf0d383b2b518aee399cf0fc21",
+      "evidenceAnchor": "case-19",
+      "retrievalReportedCaseDigest": "ebf40df89ba94948af34ca707324e89e21407cd18fb024abaefac14a7950717a"
+    },
+    {
+      "caseId": "RB-HEALTH-positive-zh",
+      "datasetCaseDigest": "b4a645e6fb6799f47f76b322274b8c0a0e38bb04c8b459b9983c5c131f5cf6f8",
+      "diagnosisInputDigest": "c2da4875b8a3cf7e351d9d5bcb142c5c45e1ae8085d515e6cb6abfb8c06b6596",
+      "actualOutputDigest": "0232b354b3205d65bbda2c1b599a927c2940d56da9445137a6edf6af0344b13c",
+      "evidenceAnchor": "case-20",
+      "retrievalReportedCaseDigest": "b4a645e6fb6799f47f76b322274b8c0a0e38bb04c8b459b9983c5c131f5cf6f8"
+    },
+    {
+      "caseId": "RB-UNCLASSIFIED-unrelated-insufficient",
+      "datasetCaseDigest": "adcf737e4c23e920699770787b1ee8b56ddadced943df14bd7691156343794be",
+      "diagnosisInputDigest": "c795a6f2141f06463e478d28f843086636f7ce6184c7b2dcdfe884c7c41bef55",
+      "actualOutputDigest": "c385698ca567f59955a83494c09070bf30f0393774ff7f1d4f7fdeba620c4b6d",
+      "evidenceAnchor": "case-21",
+      "retrievalReportedCaseDigest": "adcf737e4c23e920699770787b1ee8b56ddadced943df14bd7691156343794be"
+    },
+    {
+      "caseId": "RB-HEALTH-wrong-scope",
+      "datasetCaseDigest": "494e72addcfd543e52a19c297035a1b33ae54a5205238ce58742a91c2cfb6dfe",
+      "diagnosisInputDigest": "9bf2c7350a1086879bcb58b7a4df0ac28931ccdfbfd2ee93f17a2783a4d10f02",
+      "actualOutputDigest": "3d652072d33d9374fa21807077e4812afa0acd3df843c2538ea1ae27fa8ef5a1",
+      "evidenceAnchor": "case-22",
+      "retrievalReportedCaseDigest": "494e72addcfd543e52a19c297035a1b33ae54a5205238ce58742a91c2cfb6dfe"
+    },
+    {
+      "caseId": "RB-HEALTH-expired",
+      "datasetCaseDigest": "399e742070292af081ce70dfc2c9d0098ed0f8e3b0559f31ed6d08c8daf5b29f",
+      "diagnosisInputDigest": "dfea0bf66da7b2e7a82e43ad1cd846ebcc51fa92d30a923d2ccf70f935491843",
+      "actualOutputDigest": "15f2e6dec160566332ebab53e1632c307071766d9bce9b905684905142c76b3c",
+      "evidenceAnchor": "case-23",
+      "retrievalReportedCaseDigest": "399e742070292af081ce70dfc2c9d0098ed0f8e3b0559f31ed6d08c8daf5b29f"
+    },
+    {
+      "caseId": "RB-HEALTH-injection",
+      "datasetCaseDigest": "566a3d10d90f03b44fc95a76acc96e0b896c85637cfe5397924511e8370e467e",
+      "diagnosisInputDigest": "6df6d9475326dc79b985f421bc8710bd2f32872eeef4664b83504c8b8868ff19",
+      "actualOutputDigest": "9c5ade1c92bf27082bef4c7a29f0f9a80d2dd366c7532bd8ce12e09cb774b5a0",
+      "evidenceAnchor": "case-24",
+      "retrievalReportedCaseDigest": "566a3d10d90f03b44fc95a76acc96e0b896c85637cfe5397924511e8370e467e"
+    },
+    {
+      "caseId": "RB-BACKLOG-positive-en",
+      "datasetCaseDigest": "5d5f671abdef6fc26767f96778f81ff062d25baac96755580fd846fb4be52109",
+      "diagnosisInputDigest": "a794af9a2f6e25dd61fb247b77fe5c763ba3cf36c6d5040adb6c9094d0e9523f",
+      "actualOutputDigest": "3c05acc117f57202dd2de4a5a71e8672afb87ac1f362dc3a6a173410db572c2b",
+      "evidenceAnchor": "case-25",
+      "retrievalReportedCaseDigest": "5d5f671abdef6fc26767f96778f81ff062d25baac96755580fd846fb4be52109"
+    },
+    {
+      "caseId": "RB-BACKLOG-positive-zh",
+      "datasetCaseDigest": "5a8f8139aae7a409f32486034ae1e710d77d228f2f1b008e7d31776c12e1b5c9",
+      "diagnosisInputDigest": "1b669cf6fa051f529980eb3b17f9d31692f339c6b04c986e6dcc6d2478bcb486",
+      "actualOutputDigest": "c7a5da1caa901612b11ebdbb7e26bcc172387c954a7c2339d7a6d46b0bae0338",
+      "evidenceAnchor": "case-26",
+      "retrievalReportedCaseDigest": "5a8f8139aae7a409f32486034ae1e710d77d228f2f1b008e7d31776c12e1b5c9"
+    },
+    {
+      "caseId": "RB-UNCLASSIFIED-symbols-insufficient",
+      "datasetCaseDigest": "f9dd3d1701ba41887af513f2b266d4fd697ec95eb43495dd3b8921fcb54c9ade",
+      "diagnosisInputDigest": "ab65f8c7d8dae2f90886eb8709a953c277cd7e325229407246ce4d379e47e559",
+      "actualOutputDigest": "e63396a12ecf5dcc6a2d467ff0eeab68dffaf6d651969d4b8d55b584f9c0d7dc",
+      "evidenceAnchor": "case-27",
+      "retrievalReportedCaseDigest": "f9dd3d1701ba41887af513f2b266d4fd697ec95eb43495dd3b8921fcb54c9ade"
+    },
+    {
+      "caseId": "RB-BACKLOG-wrong-scope",
+      "datasetCaseDigest": "cf66d88d0dc024a6325e5a56a0be5d0c52dc39ef3c9a18da8373891126655843",
+      "diagnosisInputDigest": "3316862dc5376cf6528188d0b53b3cbb940c76b76df29478ea1c72bff2052065",
+      "actualOutputDigest": "1f719e40a88652f74bf66f6f7f05ffb9653ea8b832eb939c5fb210033f453ffc",
+      "evidenceAnchor": "case-28",
+      "retrievalReportedCaseDigest": "cf66d88d0dc024a6325e5a56a0be5d0c52dc39ef3c9a18da8373891126655843"
+    },
+    {
+      "caseId": "RB-BACKLOG-expired",
+      "datasetCaseDigest": "fa6e1057a63486cf4d16a5629061f923f517e1faa05523a1f8b44b125a2be019",
+      "diagnosisInputDigest": "a794af9a2f6e25dd61fb247b77fe5c763ba3cf36c6d5040adb6c9094d0e9523f",
+      "actualOutputDigest": "1801c517c1b416125f35a570692aafd2d5a207ec5b34099fea13ebcc9bb31b71",
+      "evidenceAnchor": "case-29",
+      "retrievalReportedCaseDigest": "fa6e1057a63486cf4d16a5629061f923f517e1faa05523a1f8b44b125a2be019"
+    },
+    {
+      "caseId": "RB-BACKLOG-injection",
+      "datasetCaseDigest": "072479a5b3bd915543aacb22218d3af1aefb5fa1fd027a1a108c32a81563b7bf",
+      "diagnosisInputDigest": "84f6a3954bc70f7de012fed4cef12ab9dbfef7005f62af50d1ad2276bc55ac18",
+      "actualOutputDigest": "69e6eb61402eb738ae8b9880a4d2aa123434b498d03ab045d7646503f8aa48be",
+      "evidenceAnchor": "case-30",
+      "retrievalReportedCaseDigest": "072479a5b3bd915543aacb22218d3af1aefb5fa1fd027a1a108c32a81563b7bf"
+    },
+    {
+      "caseId": "UNCLASSIFIED-holdout-insufficient",
+      "datasetCaseDigest": "64a709444baf62de2d865382a8720400d7253662e1ccee19c3d160486e234463",
+      "diagnosisInputDigest": "3461d71d97110dccd90f63ec15bc8800a231f92c10ed37ce84b7e4e61f49e1c5",
+      "actualOutputDigest": "2a59cf8252eb0e05b58db510665f363ba10f0c30432f2b3b1ea4855c0f2195cd",
+      "evidenceAnchor": "case-31",
+      "retrievalReportedCaseDigest": "64a709444baf62de2d865382a8720400d7253662e1ccee19c3d160486e234463"
+    },
+    {
+      "caseId": "RB-HEALTH-holdout-wrong-scope",
+      "datasetCaseDigest": "b2b0725a8611f59a7b6c322f1b8356043f42d368f80cee0ff53b71dd595484ab",
+      "diagnosisInputDigest": "fc6125c9913818f4c608475797e0e06234780f000491cb41cac37e1957cae35c",
+      "actualOutputDigest": "1a583d58ca1f528eb95e96aad6c89fa76c01b54b8a2d8b2fd6ec8a42b91b8c6b",
+      "evidenceAnchor": "case-32",
+      "retrievalReportedCaseDigest": "b2b0725a8611f59a7b6c322f1b8356043f42d368f80cee0ff53b71dd595484ab"
+    },
+    {
+      "caseId": "RB-POOL-holdout-expired",
+      "datasetCaseDigest": "1b3c29e69a912830b6262f148ab8df430dea0b66f35d22866e9fa4368b7f3f66",
+      "diagnosisInputDigest": "b954f2e8d3bcd91de1785604ce81d85e58478f89b2d1bb71220e16b88f405a43",
+      "actualOutputDigest": "93afb6ce6d223ec397b95edeb19ae5745eed67eae68d647b81a338b2e731ca7e",
+      "evidenceAnchor": "case-33",
+      "retrievalReportedCaseDigest": "1b3c29e69a912830b6262f148ab8df430dea0b66f35d22866e9fa4368b7f3f66"
+    },
+    {
+      "caseId": "RB-OVERLOAD-holdout-injection",
+      "datasetCaseDigest": "1f73512ea31f2546037101da04463295cdc43631f72de2b6595d9e814130524a",
+      "diagnosisInputDigest": "7953569f6882403d314cb6b762bf3f5b5ff603f94341cfc3c2d306f77f472948",
+      "actualOutputDigest": "fc95ae44990d00fecec5386f899b03e03fb262471cda8d96095f6936fd032a0e",
+      "evidenceAnchor": "case-34",
+      "retrievalReportedCaseDigest": "1f73512ea31f2546037101da04463295cdc43631f72de2b6595d9e814130524a"
+    }
+  ],
+  "digestDefinitions": {
+    "retrievalReportedCaseDigest": "源报告inputDigest是完整case（含gold）的摘要，不是实际检索输入",
+    "diagnosisInputDigest": "首条queryFact生成的合成快照摘要，不含clock；clock单独作用于有效期校验",
+    "actualOutputDigest": "审阅附件的canonical输出摘要，不是人员API诊断摘要承诺"
+  },
+  "archiveNote": "完整原始报告保存到对应runId目录，防止最新别名复跑后改变本审阅附件的原始来源。"
+}

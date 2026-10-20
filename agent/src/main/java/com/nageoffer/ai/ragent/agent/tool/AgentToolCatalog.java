@@ -62,7 +62,8 @@ public class AgentToolCatalog {
      * Toolkit 按名注册会覆盖，这几个名字不许 MCP 工具占用
      */
     private static final Set<String> RESERVED_TOOL_NAMES = Set.of(
-            KnowledgeSearchTool.TOOL_NAME, MemoryFlushTool.TOOL_NAME, SkillLoadTool.TOOL_NAME);
+            KnowledgeSearchTool.TOOL_NAME, MemoryFlushTool.TOOL_NAME, SkillLoadTool.TOOL_NAME,
+            "simulation.set-state");
 
     private final KnowledgeSearchFacade knowledgeSearchFacade;
     private final IntentNodeRegistry intentNodeRegistry;

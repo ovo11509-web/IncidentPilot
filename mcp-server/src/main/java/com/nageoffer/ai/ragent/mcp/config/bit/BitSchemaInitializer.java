@@ -47,7 +47,7 @@ public class BitSchemaInitializer {
     /**
      * 改了 bit-schema.sql 就把这个数加一
      */
-    static final int SCHEMA_VERSION = 7;
+    static final int SCHEMA_VERSION = 8;
 
     private static final String SCHEMA_SCRIPT = "db/bit-schema.sql";
 

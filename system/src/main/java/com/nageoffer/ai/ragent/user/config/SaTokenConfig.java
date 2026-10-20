@@ -69,6 +69,10 @@ public class SaTokenConfig implements WebMvcConfigurer {
                         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
                             return;
                         }
+                        // Machine ingress and shared status GET enforce their own credentials in incident.
+                        if (isIncidentLocalAuthRoute(request)) {
+                            return;
+                        }
                     }
                     // 执行登录检查
                     StpUtil.checkLogin();
@@ -84,7 +88,17 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 // 拦截所有路径
                 .addPathPatterns("/**")
                 // 排除认证相关路径和错误页面
-                .excludePathPatterns("/auth/**", "/error")
+                .excludePathPatterns("/auth/**", "/error", "/incident/v1/alerts", "/incident/v1/alerts/*",
+                        "/incident/internal/v1/action-tickets/consume", "/incident/internal/v1/action-receipts")
                 .order(ORDER_USER_CONTEXT);
+    }
+
+    public static boolean isIncidentLocalAuthRoute(HttpServletRequest request) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return ("POST".equals(request.getMethod()) && "/incident/v1/alerts".equals(path))
+                || ("POST".equals(request.getMethod()) && ("/incident/internal/v1/action-tickets/consume".equals(path)
+                        || "/incident/internal/v1/action-receipts".equals(path)))
+                || ("GET".equals(request.getMethod())
+                        && path.matches("/incident/v1/alerts/[0-9]{1,20}"));
     }
 }

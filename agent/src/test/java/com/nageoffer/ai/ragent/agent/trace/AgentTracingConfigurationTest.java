@@ -47,6 +47,43 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AgentTracingConfigurationTest {
 
+    @Test
+    void shouldUseExactlyOneOwnerForEverySwitchCombination() {
+        for (boolean obs : new boolean[]{false, true}) {
+            for (boolean agent : new boolean[]{false, true}) {
+                try {
+                    new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(org.springframework.boot.autoconfigure.context.ConfigurationPropertiesAutoConfiguration.class)).withUserConfiguration(AgentTraceProperties.class,
+                            AgentTracingConfiguration.class,
+                            com.nageoffer.ai.ragent.framework.observability.ObservabilityConfiguration.class)
+                            .withPropertyValues("ragent.engine.type=agent", "observability.enabled=" + obs,
+                                    "agent.trace.enabled=" + agent, "spring.application.name=matrix-test",
+                                    "agent.trace.endpoint=http://127.0.0.1:1/v1/traces",
+                                    "agent.trace.public-key=local-test-public", "agent.trace.secret-key=local-test-secret")
+                            .run(ctx -> {
+                                assertThat(ctx).hasNotFailed();
+                                assertThat(ctx.getBeansOfType(OpenTelemetrySdk.class)).hasSize(obs || agent ? 1 : 0);
+                                assertThat(ctx.getBeansOfType(io.agentscope.core.tracing.OtelTracingMiddleware.class))
+                                        .hasSize(agent ? 1 : 0);
+                                assertThat(GlobalOpenTelemetry.isSet()).isEqualTo(obs || agent);
+                                if (obs && agent) assertThat(ctx.containsBean("agentOpenTelemetrySdk")).isFalse();
+                            });
+                } finally { GlobalOpenTelemetry.resetForTest(); }
+            }
+        }
+    }
+
+    @Test
+    void sharedOwnerStillRequiresAgentCredentials() {
+        try {
+            new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(org.springframework.boot.autoconfigure.context.ConfigurationPropertiesAutoConfiguration.class)).withUserConfiguration(AgentTraceProperties.class,
+                    AgentTracingConfiguration.class,
+                    com.nageoffer.ai.ragent.framework.observability.ObservabilityConfiguration.class)
+                    .withPropertyValues("ragent.engine.type=agent", "observability.enabled=true",
+                            "agent.trace.enabled=true", "spring.application.name=matrix-test")
+                    .run(ctx -> assertThat(ctx).hasFailed());
+        } finally { GlobalOpenTelemetry.resetForTest(); }
+    }
+
     private static final AttributeKey<String> SERVICE_NAME = AttributeKey.stringKey("service.name");
     private static final AttributeKey<String> SERVICE_VERSION = AttributeKey.stringKey("service.version");
     private static final AttributeKey<String> ENVIRONMENT = AttributeKey.stringKey("deployment.environment.name");

@@ -24,14 +24,25 @@ import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTrans
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * MCP Server 配置类
  */
 @Configuration
+@Profile("!local-demo")
 public class McpServerConfig {
+    /** Reviewed read-only implementations; tool annotations alone never grant ordinary-route access. */
+    private static final Set<String> ORDINARY_READ_ONLY = Set.of(
+            "current_date", "weather_query", "youcom_search", "asset_query",
+            "query_after_sale", "query_cart", "query_coupons", "leave_query",
+            "query_logistics", "meeting_room_query", "sales_query", "ticket_query",
+            "query_order", "search_product");
 
     @Bean
     public HttpServletStreamableServerTransportProvider transportProvider() {
@@ -41,18 +52,30 @@ public class McpServerConfig {
 
     @Bean
     public ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpServlet(
-            HttpServletStreamableServerTransportProvider transportProvider) {
+            @Qualifier("transportProvider") HttpServletStreamableServerTransportProvider transportProvider) {
         return new ServletRegistrationBean<>(transportProvider, "/mcp");
     }
 
     @Bean
-    public McpSyncServer mcpServer(HttpServletStreamableServerTransportProvider transportProvider,
+    public McpSyncServer mcpServer(
+            @Qualifier("transportProvider") HttpServletStreamableServerTransportProvider transportProvider,
                                    List<McpServerFeatures.SyncToolSpecification> toolSpecs) {
-        requireReadOnlyHint(toolSpecs);
+        var allowed = ordinaryTools(toolSpecs);
         return McpServer.sync(transportProvider)
                 .serverInfo("ragent-mcp-server", "0.0.1")
-                .tools(toolSpecs)
+                .tools(allowed)
                 .build();
+    }
+
+    public static List<McpServerFeatures.SyncToolSpecification> ordinaryTools(
+            List<McpServerFeatures.SyncToolSpecification> offered) {
+        var seen = new HashSet<String>();
+        for (var spec : offered) {
+            if (!seen.add(spec.tool().name())) throw new IllegalStateException("duplicate MCP tool name");
+        }
+        return offered.stream().filter(spec -> ORDINARY_READ_ONLY.contains(spec.tool().name())
+                && spec.tool().annotations() != null
+                && Boolean.TRUE.equals(spec.tool().annotations().readOnlyHint())).toList();
     }
 
     /**

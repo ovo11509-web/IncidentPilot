@@ -8,7 +8,7 @@ module.exports = {
     "plugin:react-hooks/recommended",
     "prettier"
   ],
-  ignorePatterns: ["dist", "node_modules"],
+  ignorePatterns: ["dist", "node_modules", ".output"],
   parser: "@typescript-eslint/parser",
   parserOptions: {
     ecmaVersion: "latest",

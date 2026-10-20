@@ -1,0 +1,733 @@
+openapi: 3.1.0
+info:
+  title: IncidentPilot 审批到安全模拟处置 API
+  version: 1.0.0
+  description: |
+    Spec B 的主应用 HTTP 契约。复用 Spec A 的 /api/ragent 根路径和 Result 外形；
+    状态码必须是实际 HTTP 状态。受保护 MCP 线协议见 protected-mcp.md。
+    P0 人员路由沿用 admin 角色；人工 UNKNOWN 结论还须通过独立的
+    INCIDENT_ACTION_RESOLVE_UNKNOWN 业务权限检查，目前仅 admin 满足。
+servers:
+  - url: /api/ragent
+tags:
+  - name: Actions
+  - name: Approvals
+  - name: Recovery
+  - name: Internal Execution
+paths:
+  /incident/v1/incidents/{incidentId}/actions:
+    parameters:
+      - $ref: '#/components/parameters/IncidentId'
+    post:
+      tags: [Actions]
+      operationId: proposeAction
+      summary: 在未关闭 Incident 上提出模拟处置
+      description: 人员使用当前登录态，来源类型由服务端确定为 USER；已认证 Agent 受控来源通过主应用内的 Incident 应用服务提出，不使用该人员 HTTP 路由冒充会话。
+      security:
+        - SessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeActionRequest'
+      responses:
+        '201':
+          description: 新 Action 已创建，等待人工审批
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionEnvelope'
+        '200':
+          description: 同来源请求和规范绑定的幂等重复
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      tags: [Actions]
+      operationId: listIncidentActions
+      summary: 查询 Incident 下的 Action 安全摘要
+      security:
+        - SessionToken: []
+      responses:
+        '200':
+          description: 授权可见的 Action 列表，按创建时间与 ID 稳定排序
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionListEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /incident/v1/actions/{actionId}:
+    parameters:
+      - $ref: '#/components/parameters/ActionId'
+    get:
+      tags: [Actions]
+      operationId: getAction
+      summary: 查询 Action、审批、Execution、票据安全状态与回执
+      security:
+        - SessionToken: []
+      responses:
+        '200':
+          description: 权威 Action 状态；不返回票据秘密和服务凭据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /incident/v1/actions/{actionId}/decision:
+    parameters:
+      - $ref: '#/components/parameters/ActionId'
+    post:
+      tags: [Approvals]
+      operationId: decideAction
+      summary: 由当前已认证且有权限的人员批准或拒绝
+      description: |
+        人员身份和角色只取服务端会话。旧确认卡、请求体和 _meta 不可指定批准人。
+        已关闭 Incident、过期 Action 或版本竞争返回 409，不生成执行许可。
+      security:
+        - SessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: 审批决定已提交；批准不立即执行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /incident/v1/actions/{actionId}/reconcile:
+    parameters:
+      - $ref: '#/components/parameters/ActionId'
+    post:
+      tags: [Recovery]
+      operationId: requestReadOnlyReconciliation
+      summary: 为 UNKNOWN Action 请求只读对账
+      description: 不调用写工具；不能证明结果时保持 UNKNOWN。
+      security:
+        - SessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconcileRequest'
+      responses:
+        '202':
+          description: 对账请求已接受，可按 actionId 查询结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /incident/v1/actions/{actionId}/manual-conclusion:
+    parameters:
+      - $ref: '#/components/parameters/ActionId'
+    post:
+      tags: [Recovery]
+      operationId: concludeUnknownAction
+      summary: 专门授权人员提交有证据的确定结论
+      security:
+        - SessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualConclusionRequest'
+      responses:
+        '200':
+          description: UNKNOWN 已收敛；同一结论的幂等提交返回原结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /incident/internal/v1/action-tickets/consume:
+    post:
+      tags: [Internal Execution]
+      operationId: consumeActionTicket
+      summary: MCP 服务在副作用前在线消费一次性票据
+      security:
+        - CallbackServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketConsumeRequest'
+      responses:
+        '200':
+          description: GRANTED 或 DUPLICATE 的结构化判定；仅 GRANTED 可启动工具
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketConsumeEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /incident/internal/v1/action-receipts:
+    post:
+      tags: [Internal Execution]
+      operationId: submitActionReceipt
+      summary: MCP 服务幂等提交同一结构化回执
+      security:
+        - CallbackServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Receipt'
+      responses:
+        '200':
+          description: APPLIED、CONSISTENT 或相同回执幂等结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptResultEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: 冲突回执已隔离为核查证据，原确定终态未覆盖
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    SessionToken:
+      type: http
+      scheme: bearer
+      description: 现有 Sa-Token 人员登录态；服务端执行当前权限检查
+    CallbackServiceToken:
+      type: http
+      scheme: bearer
+      description: MCP 服务到主应用的独立内部服务身份；不得使用人员令牌
+  parameters:
+    IncidentId:
+      name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 20
+    ActionId:
+      name: actionId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 20
+  schemas:
+    ProposeActionRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceRequestId, toolName, toolVersion, targetId, parameters]
+      properties:
+        sourceRequestId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        originalActionId:
+          type: string
+          maxLength: 20
+        toolName:
+          type: string
+          const: simulation.set-state
+        toolVersion:
+          type: string
+          const: '1'
+        targetId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        parameters:
+          $ref: '#/components/schemas/SimulationParameters'
+    SimulationParameters:
+      type: object
+      additionalProperties: false
+      required: [desiredState]
+      properties:
+        desiredState:
+          type: string
+          enum: [READY, PAUSED]
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, expectedVersion]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT]
+        expectedVersion:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+          maxLength: 512
+          description: REJECT 必填；存储前受限、脱敏
+    ReconcileRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, expectedVersion]
+      properties:
+        requestId:
+          type: string
+          maxLength: 128
+        expectedVersion:
+          type: integer
+          minimum: 0
+    ManualConclusionRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, expectedVersion, outcome, reason, evidenceRef]
+      properties:
+        requestId:
+          type: string
+          maxLength: 128
+        expectedVersion:
+          type: integer
+          minimum: 0
+        outcome:
+          type: string
+          enum: [SUCCEEDED, FAILED]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+        evidenceRef:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: 可核查且经授权的安全证据引用，不存任意 URL 或秘密
+    TicketConsumeRequest:
+      type: object
+      additionalProperties: false
+      required: [ticket, actionId, incidentId, executionId, executionKey, requestId, toolName, toolVersion, targetId, parameters, bindingVersion]
+      properties:
+        ticket:
+          type: string
+          minLength: 1
+          writeOnly: true
+        actionId:
+          type: string
+        incidentId:
+          type: string
+        executionId:
+          type: string
+        executionKey:
+          type: string
+        requestId:
+          type: string
+        toolName:
+          type: string
+        toolVersion:
+          type: string
+        targetId:
+          type: string
+        parameters:
+          $ref: '#/components/schemas/SimulationParameters'
+        bindingVersion:
+          type: string
+          const: action-binding-v1
+    TicketConsumeResult:
+      type: object
+      additionalProperties: false
+      required: [decision, actionId, executionId]
+      properties:
+        decision:
+          type: string
+          enum: [GRANTED, DUPLICATE]
+        actionId:
+          type: string
+        executionId:
+          type: string
+        executionStartedAt:
+          type: string
+          format: date-time
+        receiptDueAt:
+          type: string
+          format: date-time
+        maxExecutionDurationMs:
+          type: integer
+          format: int64
+          minimum: 1
+          description: GRANTED 时返回 Execution 已冻结的执行上限；MCP 必须采用不大于此值的超时
+        currentStatus:
+          type: string
+          description: DUPLICATE 时的安全当前状态
+    Receipt:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, receiptId, actionId, incidentId, executionId, executionKey, requestId, toolName, toolVersion, target, resultStatus, resultCode, occurredAt, summary]
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        receiptId:
+          type: string
+        actionId:
+          type: string
+        incidentId:
+          type: string
+        executionId:
+          type: string
+        executionKey:
+          type: string
+        requestId:
+          type: string
+        toolName:
+          type: string
+        toolVersion:
+          type: string
+        target:
+          type: object
+          additionalProperties: false
+          required: [type, id]
+          properties:
+            type:
+              type: string
+              const: SIM_SERVICE
+            id:
+              type: string
+        resultStatus:
+          type: string
+          enum: [SUCCESS, FAILED, REJECTED, UNKNOWN]
+        resultCode:
+          type: string
+          maxLength: 64
+        occurredAt:
+          type: string
+          format: date-time
+        summary:
+          type: object
+          description: 版本化白名单安全摘要；不得包含票据、凭据和任意原始错误
+    ApprovalView:
+      type: object
+      required: [status, approvalDueAt]
+      properties:
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, EXPIRED]
+        approvalDueAt:
+          type: string
+          format: date-time
+        authorizationDueAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+        deciderId:
+          type: string
+        reasonCode:
+          type: string
+    ExecutionView:
+      type: object
+      required: [executionId, executionKey, ticketStatus]
+      properties:
+        executionId:
+          type: string
+        executionKey:
+          type: string
+        ticketStatus:
+          type: string
+          enum: [ISSUED, CONSUMED, EXPIRED]
+        executionStartedAt:
+          type: string
+          format: date-time
+        receiptDueAt:
+          type: string
+          format: date-time
+        resultStatus:
+          type: string
+          enum: [SUCCESS, FAILED, REJECTED, UNKNOWN]
+        resultCode:
+          type: string
+    TicketView:
+      type: object
+      required: [ticketId, status, issuedAt, expiresAt]
+      properties:
+        ticketId:
+          type: string
+        status:
+          type: string
+          enum: [ISSUED, CONSUMED, EXPIRED]
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        invalidationReason:
+          type: string
+    ReceiptView:
+      type: object
+      required: [receiptId, resultStatus, resultCode, disposition]
+      properties:
+        receiptId:
+          type: string
+        resultStatus:
+          type: string
+          enum: [SUCCESS, FAILED, REJECTED, UNKNOWN]
+        resultCode:
+          type: string
+        disposition:
+          type: string
+          enum: [APPLIED, CONSISTENT, CONFLICT]
+        acceptedAt:
+          type: string
+          format: date-time
+    ActionView:
+      type: object
+      required: [actionId, incidentId, state, version, toolName, toolVersion, targetType, targetId, bindingDigest, approval]
+      properties:
+        actionId:
+          type: string
+        incidentId:
+          type: string
+        originalActionId:
+          type: string
+        state:
+          type: string
+          enum: [PENDING_APPROVAL, APPROVED, APPROVAL_REJECTED, DISPATCHING, EXECUTING, SUCCEEDED, FAILED, EXECUTION_REJECTED, EXPIRED, UNKNOWN]
+        version:
+          type: integer
+          minimum: 0
+        toolName:
+          type: string
+        toolVersion:
+          type: string
+        targetType:
+          type: string
+          const: SIM_SERVICE
+        targetId:
+          type: string
+        bindingDigest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        parameters:
+          $ref: '#/components/schemas/SimulationParameters'
+        approval:
+          $ref: '#/components/schemas/ApprovalView'
+        execution:
+          $ref: '#/components/schemas/ExecutionView'
+        tickets:
+          type: array
+          description: 仅安全状态和时间；不得返回票据秘密或摘要
+          items:
+            $ref: '#/components/schemas/TicketView'
+        receipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReceiptView'
+        timeline:
+          type: array
+          description: 仅返回关联此 Action/Execution 的稳定事实身份及安全类型，不返回原始摘要
+          items:
+            type: object
+            required: [sequenceNo, businessEventKey, eventType, relatedEntityType, relatedEntityId]
+            properties:
+              sequenceNo:
+                type: integer
+              businessEventKey:
+                type: string
+              eventType:
+                type: string
+              relatedEntityType:
+                type: string
+              relatedEntityId:
+                type: string
+        lastReasonCode:
+          type: string
+        nextStep:
+          type: string
+          enum: [AWAIT_APPROVAL, AWAIT_DISPATCH, AWAIT_RECEIPT, RECONCILE, REVIEW_EVIDENCE, NONE]
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        currentState:
+          type: string
+        currentVersion:
+          type: integer
+    ActionEnvelope:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ActionView'
+    ActionListEnvelope:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionView'
+    TicketConsumeEnvelope:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/TicketConsumeResult'
+    ReceiptResultEnvelope:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          type: object
+          required: [disposition, actionState]
+          properties:
+            disposition:
+              type: string
+              enum: [APPLIED, CONSISTENT, DUPLICATE]
+            actionState:
+              type: string
+    ErrorEnvelope:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/Error'
+  responses:
+    BadRequest:
+      description: 请求格式或类型不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: 缺少或无效身份；未认证请求不得改变 Action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: 当前人员无权执行该操作
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: 对象不存在或无权获知其存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: 绑定冲突、状态竞争、过期或终态冲突；返回安全当前状态
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unprocessable:
+      description: 业务字段、模拟目标或证据无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unavailable:
+      description: 持久化边界暂不可用；不得推断已授权或未执行
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'

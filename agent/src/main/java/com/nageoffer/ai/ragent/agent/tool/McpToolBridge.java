@@ -41,6 +41,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -50,6 +51,12 @@ import java.util.stream.Collectors;
 public class McpToolBridge extends ToolBase {
 
     private static final String CALL_FAILED_MESSAGE = "工具调用失败，请稍后重试";
+
+    /** Audited read paths only. The protected Incident write tool is never exposed through this bridge. */
+    private static final Set<String> SAFE_READ_ONLY_TOOLS = Set.of(
+            "current_date", "weather_query", "youcom_search", "asset_query", "query_after_sale",
+            "query_cart", "query_coupons", "leave_query", "query_logistics", "meeting_room_query",
+            "sales_query", "ticket_query", "query_order", "search_product");
 
     private final McpToolExecutor executor;
 
@@ -90,6 +97,10 @@ public class McpToolBridge extends ToolBase {
                     这个工具属于技能 %s，手册还没加载，本次调用没有执行。
                     请先调用 load_skill 取 skill_code 为 %s 的手册，按手册里的步骤办。"""
                     .formatted(maskedBy, maskedBy), true));
+        }
+        if (!SAFE_READ_ONLY_TOOLS.contains(getName())) {
+            return Mono.just(buildResult(toolCallId(param),
+                    "该工具未纳入 Incident 审批链，不能通过聊天确认卡执行", true));
         }
         return AgentToolBodyTracer.trace(this, param, () -> Mono.fromCallable(() -> execute(param))
                 .subscribeOn(Schedulers.boundedElastic()));

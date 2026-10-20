@@ -1,0 +1,934 @@
+openapi: 3.1.0
+info:
+  title: IncidentPilot 可靠告警到 Incident API
+  version: 1.0.0
+  description: |
+    Spec A 的 HTTP 契约。所有响应沿用 Result 外形，但 HTTP 状态必须是真实协议状态。
+    来源 HMAC 的精确签名编码见 hmac-signing.md。
+servers:
+  - url: /api/ragent
+tags:
+  - name: Alert Ingress
+  - name: Alert Operations
+  - name: Incident
+  - name: Operations
+
+paths:
+  /incident/v1/alerts:
+    post:
+      tags: [Alert Ingress]
+      operationId: receiveAlertV1
+      summary: 可靠接收一条 v1 FIRING Alert
+      description: |
+        只接受来源 HMAC。复合失败按 415 → 413 → 401 → 400 → 422 → 持久化的顺序裁决。
+        202 只表示已可靠持久化，不表示 Incident 已形成。
+      security:
+        - SourceHmac: []
+      parameters:
+        - $ref: '#/components/parameters/ProtocolVersionHeaderRequired'
+        - $ref: '#/components/parameters/SourceIdHeaderRequired'
+        - $ref: '#/components/parameters/KeyIdHeaderRequired'
+        - $ref: '#/components/parameters/RequestTimestampHeaderRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertV1Request'
+      responses:
+        '200':
+          description: 相同载荷的既有 PROCESSED 或 FAILED Alert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSubmissionEnvelope'
+        '202':
+          description: 新接收，或相同载荷的既有 RECEIVED Alert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSubmissionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: 幂等身份已存在但规范业务载荷不同；data 返回原有安全对账标识
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /incident/v1/alerts/{alertId}:
+    get:
+      tags: [Alert Operations]
+      operationId: getAlertStatusV1
+      summary: 查询 Alert 处理状态
+      description: |
+        可以使用来源 HMAC 或人员在 Authorization 头提供的现有 Sa-Token 登录令牌二选一；
+        两类凭据混用、缺失或来源头不完整均失败关闭。来源只能查询自己的 Alert，所有权不匹配与不存在均返回 404；
+        人员必须通过路由本地登录与 admin 角色校验，越权返回 403。
+      security:
+        - SourceHmac: []
+        - SessionToken: []
+      parameters:
+        - $ref: '#/components/parameters/AlertIdPath'
+        - $ref: '#/components/parameters/ProtocolVersionHeaderOptional'
+        - $ref: '#/components/parameters/SourceIdHeaderOptional'
+        - $ref: '#/components/parameters/KeyIdHeaderOptional'
+        - $ref: '#/components/parameters/RequestTimestampHeaderOptional'
+      responses:
+        '200':
+          description: 状态可见
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertStatusEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /incident/v1/alerts/{alertId}/replay:
+    post:
+      tags: [Alert Operations]
+      operationId: replayFailedAlertV1
+      summary: 授权人员重放 FAILED Alert
+      security:
+        - SessionToken: []
+      parameters:
+        - $ref: '#/components/parameters/AlertIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplayAlertRequest'
+      responses:
+        '202':
+          description: 重放已持久化接受，状态已变为 RECEIVED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertReplayEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 当前状态不是 FAILED，或 expectedVersion 过期；data 返回安全当前状态与版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /incident/v1/incidents/{incidentId}:
+    get:
+      tags: [Incident]
+      operationId: getIncidentV1
+      summary: 查询 Incident 当前快照
+      security:
+        - SessionToken: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIdPath'
+      responses:
+        '200':
+          description: 当前快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /incident/v1/incidents/{incidentId}/transitions:
+    post:
+      tags: [Incident]
+      operationId: transitionIncidentV1
+      summary: 请求一次受保护的 Incident 主状态转换
+      description: |
+        只接受规格完整转换表中的边；每次请求必须声明 expectedState 和 expectedVersion。
+        需要原因的转换由服务端按目标边强制 reason 非空。
+      security:
+        - SessionToken: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentTransitionRequest'
+      responses:
+        '200':
+          description: 转换成功后的 Incident 快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 非法边、较新未关闭 Incident 阻止重开，或预期状态/版本过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /incident/v1/incidents/{incidentId}/timeline:
+    get:
+      tags: [Incident]
+      operationId: listIncidentTimelineV1
+      summary: 按稳定序号读取只追加 Timeline
+      security:
+        - SessionToken: []
+      parameters:
+        - $ref: '#/components/parameters/IncidentIdPath'
+        - name: afterSequence
+          in: query
+          required: false
+          description: 只返回 sequenceNo 大于此值的事实；默认 0
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: Timeline 页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /incident/v1/operations/status:
+    get:
+      tags: [Operations]
+      operationId: getIncidentOperationsStatusV1
+      summary: 查询可与持久化状态对账的只读运行状态
+      security:
+        - SessionToken: []
+      responses:
+        '200':
+          description: 当前数据库和 Worker/Publisher 安全摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsStatusEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+components:
+  securitySchemes:
+    SourceHmac:
+      type: apiKey
+      in: header
+      name: X-Incident-Signature
+      description: 与四个 X-Incident-* 元数据头共同使用；精确编码见 hmac-signing.md
+    SessionToken:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 仓库现有 Sa-Token 登录令牌使用 Authorization 原始头值，不添加 Bearer 前缀。
+
+  parameters:
+    AlertIdPath:
+      name: alertId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/StableId'
+    IncidentIdPath:
+      name: incidentId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/StableId'
+    ProtocolVersionHeaderRequired:
+      name: X-Incident-Protocol-Version
+      in: header
+      required: true
+      description: 语法有效但不支持的版本在来源验签成功后返回 422；语法无效返回 401。
+      schema:
+        type: string
+        pattern: '^(0|[1-9][0-9]{0,2})$'
+    SourceIdHeaderRequired:
+      name: X-Incident-Source-Id
+      in: header
+      required: true
+      schema:
+        $ref: '#/components/schemas/SourceId'
+    KeyIdHeaderRequired:
+      name: X-Incident-Key-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+    RequestTimestampHeaderRequired:
+      name: X-Incident-Request-Timestamp
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^(0|[1-9][0-9]*)$'
+    ProtocolVersionHeaderOptional:
+      name: X-Incident-Protocol-Version
+      in: header
+      required: false
+      description: 使用来源 HMAC 时必填；人员登录查询时省略。语法有效但不支持的值经成功验签后返回 422。
+      schema:
+        type: string
+        pattern: '^(0|[1-9][0-9]{0,2})$'
+    SourceIdHeaderOptional:
+      name: X-Incident-Source-Id
+      in: header
+      required: false
+      description: 使用来源 HMAC 时必填
+      schema:
+        $ref: '#/components/schemas/SourceId'
+    KeyIdHeaderOptional:
+      name: X-Incident-Key-Id
+      in: header
+      required: false
+      description: 使用来源 HMAC 时必填
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+    RequestTimestampHeaderOptional:
+      name: X-Incident-Request-Timestamp
+      in: header
+      required: false
+      description: 使用来源 HMAC 时必填
+      schema:
+        type: string
+        pattern: '^(0|[1-9][0-9]*)$'
+
+  responses:
+    BadRequest:
+      description: 请求结构或标识格式无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: 缺少认证、登录过期或来源 HMAC 失败；不公开细分原因
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: 人员已认证但无目标能力
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: 目标不存在或按来源所有权隐藏
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    PayloadTooLarge:
+      description: 实际读取字节超过配置上限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnsupportedMediaType:
+      description: 媒体类型不是 application/json 或 charset 不是 UTF-8
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnprocessableEntity:
+      description: 语法有效但违反 v1 字段、版本或业务证据契约
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: 持久化接受/业务提交前的暂时性故障；retryable=true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    StableId:
+      type: string
+      pattern: '^[0-9]{1,20}$'
+    SourceId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[a-z0-9][a-z0-9._-]{0,127}$'
+    ProcessingStatus:
+      type: string
+      enum: [RECEIVED, PROCESSED, FAILED]
+    IncidentState:
+      type: string
+      enum: [OPEN, ACKNOWLEDGED, MITIGATING, RESOLVED, CLOSED]
+    Severity:
+      type: string
+      enum: [CRITICAL, HIGH, MEDIUM, LOW]
+    ResourceV1:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$'
+        id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$'
+          description: 大小写敏感的不透明标识
+    LabelsV1:
+      type: object
+      maxProperties: 32
+      propertyNames:
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$'
+      additionalProperties:
+        type: string
+        maxLength: 256
+      description: 值可在 NFC/trim 后为空字符串；键不得在规范化后重复
+    AlertV1Request:
+      type: object
+      additionalProperties: false
+      required:
+        - externalAlertId
+        - eventType
+        - occurredAt
+        - ruleId
+        - title
+        - severity
+        - environment
+        - service
+        - resource
+      properties:
+        externalAlertId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$'
+        eventType:
+          type: string
+          const: FIRING
+        occurredAt:
+          type: string
+          format: date-time
+          description: 必须显式包含 Z 或数值时区偏移
+        ruleId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Unicode 人类文本；拒绝 NUL、C0/C1 控制字符和未配对代理项
+        severity:
+          $ref: '#/components/schemas/Severity'
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+        service:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+        resource:
+          $ref: '#/components/schemas/ResourceV1'
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: 可缺失但不可为 null/空；Unicode 安全文本规则同 title
+        labels:
+          $ref: '#/components/schemas/LabelsV1'
+
+    AlertSubmissionData:
+      type: object
+      additionalProperties: false
+      required: [protocolVersion, alertId, correlationId, processingStatus, duplicate, replayEligible]
+      properties:
+        protocolVersion:
+          type: integer
+          const: 1
+        alertId:
+          $ref: '#/components/schemas/StableId'
+        correlationId:
+          $ref: '#/components/schemas/StableId'
+        processingStatus:
+          $ref: '#/components/schemas/ProcessingStatus'
+        duplicate:
+          type: boolean
+        replayEligible:
+          type: boolean
+        incidentId:
+          $ref: '#/components/schemas/StableId'
+        failureCode:
+          type: string
+          maxLength: 64
+    AlertSubmissionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/BaseSuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AlertSubmissionData'
+
+    AlertStatusData:
+      type: object
+      additionalProperties: false
+      required: [alertId, correlationId, sourceId, processingStatus, replayEligible, version, attemptCount, retryCount]
+      properties:
+        alertId:
+          $ref: '#/components/schemas/StableId'
+        correlationId:
+          $ref: '#/components/schemas/StableId'
+        sourceId:
+          $ref: '#/components/schemas/SourceId'
+        processingStatus:
+          $ref: '#/components/schemas/ProcessingStatus'
+        replayEligible:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        attemptCount:
+          type: integer
+          minimum: 0
+        retryCount:
+          type: integer
+          minimum: 0
+        nextAttemptAt:
+          type: string
+          format: date-time
+        failureCode:
+          type: string
+          maxLength: 64
+        failureSummary:
+          type: string
+          maxLength: 512
+        failedAt:
+          type: string
+          format: date-time
+        incidentId:
+          $ref: '#/components/schemas/StableId'
+    AlertStatusEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/BaseSuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AlertStatusData'
+
+    ReplayAlertRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStatus, expectedVersion, reason]
+      properties:
+        expectedStatus:
+          type: string
+          const: FAILED
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: NFC/trim 后非空的受限安全原因
+    AlertReplayData:
+      type: object
+      additionalProperties: false
+      required: [alertId, correlationId, processingStatus, replayEligible, version]
+      properties:
+        alertId:
+          $ref: '#/components/schemas/StableId'
+        correlationId:
+          $ref: '#/components/schemas/StableId'
+        processingStatus:
+          type: string
+          const: RECEIVED
+        replayEligible:
+          type: boolean
+          const: false
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    AlertReplayEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/BaseSuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AlertReplayData'
+
+    IncidentData:
+      type: object
+      additionalProperties: false
+      required:
+        - incidentId
+        - aggregationKey
+        - aggregationRuleVersion
+        - aggregationWindowSeconds
+        - episodeStartAt
+        - episodeAnchorAlertId
+        - firstAlertReceivedAt
+        - lastAlertReceivedAt
+        - alertCount
+        - lifecycleState
+        - aggregationOpen
+        - bornSealed
+        - version
+      properties:
+        incidentId:
+          $ref: '#/components/schemas/StableId'
+        aggregationKey:
+          type: string
+          pattern: '^alert-incident-v1:[0-9a-f]{64}$'
+        aggregationRuleVersion:
+          type: string
+          const: alert-incident-v1
+        aggregationWindowSeconds:
+          type: integer
+          minimum: 1
+        episodeStartAt:
+          type: string
+          format: date-time
+        episodeAnchorAlertId:
+          $ref: '#/components/schemas/StableId'
+        firstAlertReceivedAt:
+          type: string
+          format: date-time
+        lastAlertReceivedAt:
+          type: string
+          format: date-time
+        alertCount:
+          type: integer
+          minimum: 1
+        lifecycleState:
+          $ref: '#/components/schemas/IncidentState'
+        lifecycleSealedAt:
+          type: string
+          format: date-time
+        aggregationOpen:
+          type: boolean
+          description: 由生命周期封存、最新 Alert 时间、实际窗口和 DB 当前时间推导
+        bornSealed:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+    IncidentEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/BaseSuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/IncidentData'
+
+    IncidentTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedState, expectedVersion, targetState]
+      properties:
+        expectedState:
+          $ref: '#/components/schemas/IncidentState'
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        targetState:
+          $ref: '#/components/schemas/IncidentState'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: RESOLVED、重开和 MITIGATING→ACKNOWLEDGED 时必填
+
+    TimelineFact:
+      type: object
+      additionalProperties: false
+      required: [eventId, sequenceNo, eventType, actorType, actorId, occurredAt, correlationId, summary]
+      properties:
+        eventId:
+          $ref: '#/components/schemas/StableId'
+        sequenceNo:
+          type: integer
+          format: int64
+          minimum: 1
+        eventType:
+          type: string
+          enum:
+            - INCIDENT_CREATED
+            - ALERT_ATTACHED
+            - LATE_ALERT_ATTACHED_AFTER_SEAL
+            - INCIDENT_AGGREGATION_SEALED
+            - INCIDENT_STATUS_CHANGED
+        actorType:
+          type: string
+          enum: [SOURCE, SYSTEM, USER, SERVICE]
+        actorId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          $ref: '#/components/schemas/StableId'
+        relatedEntityType:
+          type: string
+          enum: [ALERT, INCIDENT]
+        relatedEntityId:
+          $ref: '#/components/schemas/StableId'
+        summary:
+          type: object
+          additionalProperties: true
+          description: 按 eventType 白名单生成的版本化安全结构；实现不得透传任意输入
+    TimelinePage:
+      type: object
+      additionalProperties: false
+      required: [incidentId, items, nextAfterSequence, hasMore]
+      properties:
+        incidentId:
+          $ref: '#/components/schemas/StableId'
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/TimelineFact'
+        nextAfterSequence:
+          type: integer
+          format: int64
+          minimum: 0
+        hasMore:
+          type: boolean
+    TimelineEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/BaseSuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/TimelinePage'
+
+    OperationsStatusData:
+      type: object
+      additionalProperties: false
+      required:
+        - observedAt
+        - receivedBacklogCount
+        - dueRetryCount
+        - failedAlertCount
+        - pendingOutboxCount
+        - expiredOutboxClaimCount
+      properties:
+        observedAt:
+          type: string
+          format: date-time
+        receivedBacklogCount:
+          type: integer
+          format: int64
+          minimum: 0
+        oldestReceivedAgeSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+        dueRetryCount:
+          type: integer
+          format: int64
+          minimum: 0
+        failedAlertCount:
+          type: integer
+          format: int64
+          minimum: 0
+        pendingOutboxCount:
+          type: integer
+          format: int64
+          minimum: 0
+        oldestPendingOutboxAgeSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+        expiredOutboxClaimCount:
+          type: integer
+          format: int64
+          minimum: 0
+        lastWorkerSuccessAt:
+          type: string
+          format: date-time
+        lastPublisherSuccessAt:
+          type: string
+          format: date-time
+        recentFailureCodes:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [component, code, observedAt]
+            properties:
+              component:
+                type: string
+                enum: [ALERT_WORKER, OUTBOX_PUBLISHER]
+              code:
+                type: string
+                maxLength: 64
+              observedAt:
+                type: string
+                format: date-time
+              alertId:
+                $ref: '#/components/schemas/StableId'
+              incidentId:
+                $ref: '#/components/schemas/StableId'
+              eventId:
+                $ref: '#/components/schemas/StableId'
+              correlationId:
+                $ref: '#/components/schemas/StableId'
+    OperationsStatusEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/BaseSuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/OperationsStatusData'
+
+    BaseSuccessEnvelope:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code:
+          type: string
+          const: '0'
+        message:
+          type: string
+          maxLength: 256
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 40
+    ErrorData:
+      type: object
+      additionalProperties: false
+      required: [retryable]
+      properties:
+        retryable:
+          type: boolean
+        alertId:
+          $ref: '#/components/schemas/StableId'
+        correlationId:
+          $ref: '#/components/schemas/StableId'
+        processingStatus:
+          $ref: '#/components/schemas/ProcessingStatus'
+        incidentState:
+          $ref: '#/components/schemas/IncidentState'
+        currentVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId, data]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 稳定机器错误码
+        message:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: 安全消息，不含载荷差异、堆栈、签名或秘密
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 40
+        data:
+          $ref: '#/components/schemas/ErrorData'

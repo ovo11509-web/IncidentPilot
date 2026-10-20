@@ -5,7 +5,7 @@
 -- 这个库不允许存在任何需要跨版本保留的数据：结构版本一落后就 dropdb 重来，
 -- 本项目不做增量迁移。改了本文件就把 BitSchemaInitializer.SCHEMA_VERSION 一起加一
 --
--- 建表约定：
+-- 既有商城演示表建表约定（下文 simulation_* 两表按 Spec B 独立安全模型）：
 --   每张表一律 id BIGINT    代理主键，业务编码走 UNIQUE 约束——业务编码当主键在改编码规则时
 --   会牵动所有引用它的行，代理键把这条路堵死；
 --   每张表一律有 create_time 与 update_time。应用侧由 BitMetaObjectHandler 填，库里不设 DEFAULT；
@@ -301,3 +301,24 @@ COMMENT ON COLUMN t_ticket.content IS '工单内容，要带上已经确认过�
 COMMENT ON COLUMN t_ticket.status IS '受理状态';
 COMMENT ON COLUMN t_ticket.create_time IS '提交时间';
 COMMENT ON COLUMN t_ticket.update_time IS '更新时间';
+
+-- Spec B 隔离模拟处置。按已确认 data-model：业务 target_id 与 execution_key 为主键，
+-- 数据库也强制状态范围；不沿用商城演示表的 BIGINT 代理主键与无 CHECK 约定。
+CREATE TABLE IF NOT EXISTS simulation_target
+(
+    target_id  VARCHAR(128) PRIMARY KEY,
+    state      VARCHAR(8) NOT NULL CHECK (state IN ('READY', 'PAUSED')),
+    version    BIGINT NOT NULL DEFAULT 0 CHECK (version >= 0),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS simulation_application
+(
+    execution_key  VARCHAR(128) PRIMARY KEY,
+    target_id      VARCHAR(128) NOT NULL REFERENCES simulation_target (target_id),
+    desired_state  VARCHAR(8) NOT NULL CHECK (desired_state IN ('READY', 'PAUSED')),
+    before_state   VARCHAR(8) NOT NULL CHECK (before_state IN ('READY', 'PAUSED')),
+    after_state    VARCHAR(8) NOT NULL CHECK (after_state IN ('READY', 'PAUSED')),
+    applied_at     TIMESTAMPTZ NOT NULL,
+    result_summary JSONB NOT NULL CHECK (jsonb_typeof(result_summary) = 'object')
+);

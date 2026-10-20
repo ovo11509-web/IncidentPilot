@@ -1,0 +1,47 @@
+# IncidentPilot owned local dependencies. Stop retains every volume.
+services:
+  main-db:
+    image: ${MAIN_IMAGE:?}
+    pull_policy: never
+    environment:
+      POSTGRES_DB: incidentpilot
+      POSTGRES_PASSWORD: ${MAIN_PASSWORD:?}
+    ports: ["127.0.0.1:${MAIN_PORT:?}:5432"]
+    volumes: ["main-data:/var/lib/postgresql/data"]
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U postgres -d incidentpilot"], interval: 2s, timeout: 2s, retries: 40}
+  simulation-db:
+    image: ${SIM_IMAGE:?}
+    pull_policy: never
+    environment:
+      POSTGRES_DB: incidentpilot_simulation
+      POSTGRES_PASSWORD: ${SIM_PASSWORD:?}
+    ports: ["127.0.0.1:${SIM_PORT:?}:5432"]
+    volumes: ["simulation-data:/var/lib/postgresql/data"]
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U postgres -d incidentpilot_simulation"], interval: 2s, timeout: 2s, retries: 40}
+  redis:
+    image: ${REDIS_IMAGE:?}
+    pull_policy: never
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?}", "--appendonly", "yes"]
+    ports: ["127.0.0.1:${REDIS_PORT:?}:6379"]
+    volumes: ["redis-data:/data"]
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+  storage:
+    image: ${STORAGE_IMAGE:?}
+    pull_policy: never
+    command: ["--address", ":9000", "--access-key", "${STORAGE_USER:?}", "--secret-key", "${STORAGE_PASSWORD:?}", "/data"]
+    ports: ["127.0.0.1:${STORAGE_PORT:?}:9000"]
+    volumes: ["storage-data:/data", "storage-logs:/logs"]
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+volumes:
+  main-data:
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+  simulation-data:
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+  redis-data:
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+  storage-data:
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}
+  storage-logs:
+    labels: {incidentpilot.local.instance: "${INSTANCE_ID:?}"}

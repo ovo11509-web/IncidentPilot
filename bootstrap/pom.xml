@@ -5,13 +5,30 @@
     <parent>
         <groupId>com.nageoffer.ai</groupId>
         <artifactId>ragent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>bootstrap</artifactId>
     <description>启动装配层：仅启动类与配置相关代码，业务代码禁止入内</description>
 
     <dependencies>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.nageoffer.ai</groupId>
+            <artifactId>mcp-server</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.nageoffer.ai</groupId>
+            <artifactId>incident</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.nageoffer.ai</groupId>
             <artifactId>rag</artifactId>

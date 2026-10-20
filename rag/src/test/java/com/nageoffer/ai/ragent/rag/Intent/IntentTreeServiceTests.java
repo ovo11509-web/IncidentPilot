@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.util.List;
 import java.util.Objects;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "RAG_LIVE_TESTS", matches = "true")
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class IntentTreeServiceTests {
 

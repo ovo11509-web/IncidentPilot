@@ -127,6 +127,12 @@ class AgentToolBodyTracerCoverageTest {
                 batch.end();
             }
 
+            if ("leave_submit".equals(toolName)) {
+                // Spec B disables legacy writes before the execution-body tracer.
+                assertThat(exported.stream()
+                        .filter(data -> ("execute_tool " + toolName).equals(data.getName()))).isEmpty();
+                continue;
+            }
             assertThat(exported.stream()
                     .filter(data -> ("execute_tool " + toolName).equals(data.getName())))
                     .as("工具 %s 没有留下执行体 span", toolName)

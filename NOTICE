@@ -1,0 +1,23 @@
+IncidentPilot
+
+本文件由 IncidentPilot 新增，用于说明项目来源和修改范围，不是上游项目的声明。
+
+IncidentPilot 衍生自 nageoffer/ragent：
+https://github.com/nageoffer/ragent
+
+本项目保留上游 Git 历史、源码中的作者与版权声明，以及仓库根目录的 Apache License 2.0。
+本文件不替换 LICENSE，也不改变上游作者对其原有代码的权利。
+
+RAG、Agent、模型路由、知识入库、MCP 桥接及原有管理界面主要来自上游。
+IncidentPilot 的新增修改包括 Incident 领域、告警接入与聚合、状态机、追加式时间线、
+Outbox 与恢复、人工审批与一次性票据、安全模拟处置与 UNKNOWN 对账、Runbook
+诊断证据、事件工作台与复盘、故障实验、可靠性检查及本地交付工具。
+具体贡献与验收边界见 docs/PROJECT_CONTEXT.md 和 specs/ 中的实施记录。
+
+源码保留的可选基础设施示例和历史文档属于其各自原有语境；不得据此宣称
+IncidentPilot 已在生产环境运行，或将上游能力及运行成绩表述为本项目独立完成。
+
+本地交付候选不是正式发布。未提交的新增实现来自当前源码快照，不能仅检出基线 HEAD
+获得。原有 Git 历史保留在原仓库；因历史配置存在待审查的疑似凭据，候选不默认附带
+Git bundle，只记录基线 HEAD、分支和上游来源，不改写或删除历史。配置与交付边界见
+docs/releases/configuration-boundary.md。

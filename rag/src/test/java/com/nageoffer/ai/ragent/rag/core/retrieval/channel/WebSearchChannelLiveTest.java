@@ -31,15 +31,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * You.com 联网检索通道真实 API 集成测试
  * <p>
- * 仅当环境变量 YDC_API_KEY 存在时运行（1 次真实调用），日常构建自动跳过
+ * 仅在明确授权后设置 RAG_LIVE_TESTS=true 且 YDC_API_KEY 存在时运行；日常构建跳过
  */
 @DisplayName("You.com 联网检索通道（真实 API）")
-@EnabledIfEnvironmentVariable(named = "YDC_API_KEY", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "RAG_LIVE_TESTS", matches = "true")
 class WebSearchChannelLiveTest {
 
     @Test
     @DisplayName("真实检索返回非空 Chunk，且带来源链接")
     void liveSearchReturnsChunks() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                System.getenv("YDC_API_KEY") != null && !System.getenv("YDC_API_KEY").isBlank(),
+                "Explicit live permission also requires YDC_API_KEY");
         SearchChannelProperties properties = new SearchChannelProperties();
         SearchChannelProperties.WebSearch webSearch = properties.getChannels().getWebSearch();
         webSearch.setEnabled(true);
