@@ -1,446 +1,214 @@
 # IncidentPilot
 
-IncidentPilot 是基于 `nageoffer/ragent` 的 Java AI 运维事件响应作品项目，提供告警聚合、证据诊断、人工审批、安全模拟处置、值班工作台、复盘报告与版本化处置手册。
+**Java AI 运维事件响应平台：让告警、诊断、审批和处置形成可追溯的闭环。**
 
-- 项目现状与贡献边界：[项目上下文](docs/PROJECT_CONTEXT.md)。
-- 本地持久演示启动与运行：[本地运行说明](docs/development/local-demo.md)；本轮实施/验收状态见 [Spec K](specs/011-incident-quality-delivery/implementation-report.md)。
-- 自动化门禁与实际环境要求：[交付检查](docs/development/delivery.md)。
-- 接手、启动与验收：[本地交付候选说明](docs/releases/local-candidate-2026-10-12.md)；首次正式版本号为 `v0.1.0`，当前待发布。
-- 当前源码交付：[v0.1.0源码候选](docs/releases/source-candidate-v0.1.0.md)，含完整工作区快照与校验清单；历史因疑似凭据暂不分发，完整历史移交尚未闭合。
-- 保留上游Git历史、Apache-2.0许可证和署名；RAG/Agent框架主要来自上游，Incident领域及安全响应链路属于本项目新增贡献。
+基于 [nageoffer/ragent](https://github.com/nageoffer/ragent) 改造，面向 SRE、运维人员和值班开发者。
+项目重点是 Java 后端的可靠事件处理与安全执行；RAG、Agent 等通用能力复用上游，并明确区分新增贡献。
 
-本项目只对已有实际本地证据作结论，生产部署、真实模型和基础设施尚未验收。以下保留上游介绍，其中生产化表述不作为IncidentPilot验收结论。
+[快速启动](#快速启动) · [改造贡献](#改造贡献) · [核心设计](#核心设计) · [验证记录](#验证记录) · [架构文档](docs/ARCHITECTURE.md)
 
-<p align="center">
-  <a href="https://github.com/nageoffer/ragent">
-    <picture>
-      <source srcset="assets/ragent-ai-banner.png">
-      <img src="assets/ragent-ai-banner.png" alt="Ragent AI">
-    </picture>
-  </a>
-</p>
+> 当前构建版本为 `0.1.0`，尚未创建正式 Release。默认演示使用本地模拟 Runbook 和安全模拟资源，不连接真实模型或生产处置系统。
 
-<p align="center">
-  <strong>后端程序员转型 AI 工程师的第一站</strong><br/>
-</p>
+## 项目解决什么问题
 
-<p align="center">
-  <a href="https://github.com/nageoffer/ragent/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/nageoffer/ragent?style=flat-square&logo=github&color=e8b227" /></a>&nbsp;
-  <a href="https://github.com/nageoffer/ragent/network/members"><img alt="GitHub forks" src="https://img.shields.io/github/forks/nageoffer/ragent?style=flat-square&logo=github&color=2d6a8a" /></a>&nbsp;
-  <a href="https://github.com/nageoffer/ragent/graphs/contributors"><img alt="Contributors" src="https://img.shields.io/github/contributors/nageoffer/ragent?style=flat-square&color=b56e7a" /></a>&nbsp;
-  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-4a9b8f?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/Spring%20AI-2.0-6DB33F?style=flat-square&logo=springboot&logoColor=white" />
-</p>
+告警数量增加后，值班人员需要先判断哪些告警属于同一事件，再查阅处置手册、确认执行风险，并在交接时说明处理依据和结果。
+IncidentPilot 将这些步骤组织为一条事件响应流程：
 
-## 🚀 什么是 Ragent AI？
+```mermaid
+flowchart LR
+    A[签名告警接入] --> B[幂等受理与事件聚合]
+    B --> C[Runbook 检索与证据诊断]
+    C --> D[人员选择建议]
+    D --> E{服务端人工审批}
+    E -->|拒绝| F[记录拒绝 不执行]
+    E -->|批准| G[一次性票据与 MCP 安全模拟]
+    G --> H[执行回执与 UNKNOWN 对账]
+    F --> I[时间线 审计与复盘]
+    H --> I
+```
 
-Ragent 是一个面向 Agentic RAG 演进的生产级 Java AI 应用平台，覆盖从文档入库到智能问答的完整链路。
+- **减少重复处理**：相同告警幂等受理，相关告警按规则聚合到 Incident。
+- **保留诊断依据**：建议关联事实快照、Runbook 原文、行号和内容摘要。
+- **约束处置风险**：人员批准、参数绑定与一次性票据由服务端执行，前端确认不能替代授权。
+- **支持交接复盘**：事件状态、诊断、审批、回执和追加式时间线可以持续追溯。
 
-- **混合检索**：向量、关键词、知识图谱、联网搜索并行召回，支持去重、RRF 融合与 Rerank。
-- **问题理解**：支持查询词映射、问题重写与拆分、树形意图识别和多知识库路由。
-- **模型与工具**：支持模型档位、首包探测、熔断降级，以及 MCP 工具发现、提参与校验。
-- **会话记忆**：最近 N 轮消息结合持久化摘要，控制 Token 成本并保留关键上下文。
-- **流量保护**：Redis 公平排队与分布式并发控制，避免突发请求压垮模型服务。
-- **知识闭环**：提供可编排入库 Pipeline、远程刷新、回答溯源、用户反馈、Trace 和管理后台。
+## 界面预览
 
-生产落地智能体会踩的坑，这里都有对应方案，一套经过真实场景锤炼的工程实践，系统补全 RAG / Agent / MCP 等知识，面试写进简历聊得起来。
+以下为 2026-10-11/12 本机持久安全演示的历史真实截图，仅作功能展示，不代表当前提交重新运行。
+演示数据不代表生产事件或真实模型诊断；画面中的“上游 Star”属于原项目统计。
 
-![](assets/ragent-framework-v2.png)
+### 值班工作台
 
-## 🧭 快速导航
+![IncidentPilot 值班工作台](assets/incidentpilot/workbench.jpg)
 
-> 觉得不错？先点个 Star 收藏，所有链接都会在新标签页打开，不会离开本页 👇
+围绕待处理事件、风险状态和最近活动组织信息，从工作台进入事件详情与复盘。
 
-<p align="left">
-  <a href="https://github.com/nageoffer/ragent/stargazers">
-    <img src="assets/star-me.svg" alt="Star this repo" />
-  </a>
-</p>
+### 事件复盘
 
-| &nbsp; | 链接 | 说明 |
-|:---:|:---|:---|
-| 📖 | <a href="https://nageoffer.com/ragent" target="_blank">官网文档</a> | Ragent AI 完整文档 |
-| 🚀 | <a href="https://nageoffer.com/ragent/demo/" target="_blank">在线体验</a> | 无需部署，直接体验 Ragent AI |
-| ⚡ | <a href="https://nageoffer.com/ragent/local-dev/" target="_blank">快速启动</a> | 本地搭建 Ragent AI 前后端项目 |
-| 📝 | <a href="https://nageoffer.com/ragent/interview/" target="_blank">简历怎么写</a> | 项目如何写到简历上 |
-| 💡 | <a href="https://nageoffer.com/ragent/why-springai-langchain4j/" target="_blank">为什么不用 Spring AI / LangChain4j</a> | 技术选型的思考 |
+![IncidentPilot 事件复盘](assets/incidentpilot/review.jpg)
 
-## 🤝 贡献
+只读汇总事件告警、诊断、动作和证据限制，支持值班交接与复盘，不在复盘页触发处置。
 
-Ragent AI 仍在持续迭代中，欢迎参与共建，一起把项目打磨得更好。 感谢各位亦菲、彦祖们对 Ragent AI 的贡献：
+## 改造贡献
 
-<p align="left">
-    <a href="https://github.com/nageoffer/ragent/graphs/contributors">
-        <img src="https://contrib.rocks/image?repo=nageoffer/ragent&columns=8" />
-    </a>
-</p>
+本项目是基于开源项目的二次开发，不将上游框架、界面或测试成果表述为自行从零实现。
 
-## ❤️ 赞助与支持
+| 范围 | 上游复用能力 | IncidentPilot 新增改造 |
+| --- | --- | --- |
+| 业务领域 | 用户、会话、知识库等基础功能 | 独立 `incident` 模块，告警接入、聚合、生命周期与运行状态 |
+| 数据与一致性 | 数据访问、Redis/MQ 等基础设施 | 数据库幂等约束、追加式 Timeline、事务 Outbox、重试和恢复 |
+| 诊断与证据 | RAG、Agent、模型路由、知识入库框架 | 本地模拟 Runbook 检索、事实快照、引用校验、诊断到 Action 的来源关联 |
+| 安全执行 | MCP 协议桥接与通用工具框架 | 服务端审批、参数摘要绑定、一次性票据、模拟执行幂等、回执及 UNKNOWN 对账 |
+| 用户界面 | 原有管理控制台与认证 | 值班工作台、事件详情、诊断审批、复盘报告和版本化处置手册 |
+| 工程验证 | 原有单元与集成测试 | 故障实验、可靠性专项、确定性评测、统一门禁与本机持久演示工具 |
 
-感谢以下伙伴对 Ragent AI 的支持！
+当前新增诊断采用确定性的 `lexical-v1` 检索与 `extractive-v1` 抽取，使用仓库内模拟语料，**不调用 LLM 或 Embedding**。
+上游真实模型和 RAG 能力仍保留在源码中，但不属于本地安全演示的开放范围。
 
-<table>
-  <tr>
-    <td align="center" width="200">
-      <a href="https://moacode.org/register?ref=doorbyte"><img src="assets/moacode.svg" alt="moacode" width="200" /></a>
-    </td>
-    <td>
-      moacode 是一家稳定、高效的 API 中转服务商，提供 Claude、GPT、Codex、Claude Code 等多种模型调用服务。Ragent AI 用户可<a href="https://moacode.org/register?ref=doorbyte">通过此链接</a>注册，并在充值时填写 <code>MAGE</code> 优惠码，享受 9 折优惠。
-    </td>
-  </tr>
-</table>
+## 核心设计
 
----
+| 关注点 | 实现方式 | 需要守住的业务不变量 |
+| --- | --- | --- |
+| 幂等受理 | `source + externalAlertId` 唯一约束与事务 | 相同身份不重复持久化；相同身份但载荷冲突时拒绝覆盖 |
+| 聚合与状态 | 数据库锁、状态重检、版本校验 | 并发处理不静默覆盖状态，失败不留下部分关联事实 |
+| 消息一致性 | Incident、Timeline 与 Outbox 在同一事务写入 | 发布失败保留同一事件身份，不能把未发送当作成功 |
+| 人工审批 | 绑定工具与参数摘要，服务端发放一次性票据 | 未批准、过期、篡改或重放均不能绕过执行授权 |
+| 模拟执行 | MCP 保护入口与执行幂等键 | 拒绝后零应用；批准后同执行身份只应用一次 |
+| 不确定结果 | `UNKNOWN`、可信回执与对账 | 无法确认结果时不自动重试副作用，等待对账确认 |
+| 诊断证据 | 冻结事实、校验引用位置和摘要 | 建议只能使用本次检索证据，证据不足时明确降级 |
+| 审计追溯 | Timeline 只追加及数据库权限限制 | 历史事实不通过业务接口改写或删除 |
 
-## 💡 为什么学习 AI 项目
+Incident 告警受理和聚合的正确性不依赖 Redis、Broker 或模型可用性。
+本地演示关闭 Broker 发布，Outbox 可以保留为 `PENDING`，不会伪造消息发送成功。
+详细调用链和边界见 [系统架构](docs/ARCHITECTURE.md) 与 [技术决策](docs/DECISIONS.md)。
 
-AI 这波浪潮，Java 程序员已经躲不过去了。
+## 技术栈与模块
 
-不管你现在做的是业务系统还是中间件，面试的时候多多少少都会被问到 AI 相关的东西。RAG 是什么？Agent 怎么实现？用过 MCP 吗？这些问题越来越高频。可以说，**AI 已经从加分项变成了必答题**。
+后端使用 Java、Spring Boot、MyBatis-Plus、PostgreSQL、Redis 与 MCP Java SDK；前端使用 React、TypeScript 和 Vite。
+仓库包含 **8 个 Maven 模块**，采用模块化主应用加独立 MCP 服务：
 
-但说实话，对于大多数应用层的开发者来说，去死磕大模型的微调、蒸馏、Transformer 原理，性价比并不高。真正实用的，是掌握 RAG 和 Agent 这些应用层的东西——能落地、能出活、面试也能聊得起来。
+| 模块 | 职责 |
+| --- | --- |
+| `incident` | 告警、Incident、Timeline/Outbox、诊断事实、审批与执行记录 |
+| `agent` | Agent 编排、MCP 适配及 Runbook 诊断编排 |
+| `rag` | 知识库、入库、检索、Runbook 语料与评测 |
+| `infra-ai` | Chat、Embedding、Rerank 等供应商适配 |
+| `system` | 用户认证、用户上下文与系统审计 |
+| `framework` | Web、数据库、Redis、MQ、幂等与追踪等公共能力 |
+| `bootstrap` | 主应用装配与启动 |
+| `mcp-server` | 独立 MCP 服务与受保护的安全模拟资源 |
 
-<details>
-<summary><b>校招 / 社招 / 怎么学？</b>（点击展开）</summary>
+`frontend/` 提供控制台；`resources/database/` 保存 Schema 与升级脚本；`specs/` 保存功能规格和实施记录。
+Incident 主数据由 `incident` 模块管理，模拟资源在 MCP 独立数据库中，不混用数据所有权。
 
-### 1. 校招现状
+## 快速启动
 
-简历上清一色的 CRUD 项目——商城、外卖、博客，面试官早就审美疲劳了。当别人还在写基于 SpringBoot 的 XX 管理系统时，你简历上有一个完整的 AI 项目，区分度直接拉满。而且大厂校招越来越看重候选人对新技术的敏感度，AI 项目能直接证明你的学习能力和技术视野。
+推荐先运行**本机持久安全演示**，无需配置模型密钥。完整步骤与限制见 [本地运行说明](docs/development/local-demo.md)。
 
-### 2. 社招现状
+### 1. 准备环境与源码
 
-2024 年以来，几乎所有技术团队都在往 AI 方向靠。很多公司已经把有 AI 相关经验写进了 JD 里。你可能 Java/Go 写得很溜，但面试官会问：你对 LLM 了解多少？RAG 做过没有？向量检索怎么实现的？答不上来，直接少了一个谈薪的筹码。
+参考实测组合：Windows、Java **21**、Node **20**/npm、PowerShell **7.6.5**、Docker Desktop 的 **Linux Engine** 和 Compose。
+仓库提供 Maven Wrapper。POM 编译目标为 Java 17，但本地门禁运行要求 Java 21；Java 17、Node 22、Linux 宿主及托管 CI 尚未完成各自验收。
 
-**说白了，学 AI 项目的核心原因就三个：**
+```powershell
+$ErrorActionPreference = 'Stop'
+git clone --branch codex/release-v0.1.0 https://github.com/ovo11509-web/IncidentPilot.git
+if ($LASTEXITCODE -ne 0) { throw 'CLONE_FAILED' }
+Set-Location IncidentPilot
+```
 
-1. **简历差异化**。同样是后端开发，有 AI 项目经验的简历通过率明显更高。不是因为 AI 多神奇，而是它能证明你不只是在重复造轮子。
-2. **面试有东西聊**。AI 项目涉及的技术栈足够深——Embedding、向量数据库、Prompt 工程、模型调用链路、检索策略……每一个点都能展开聊，比我用了 Redis 做缓存有意思得多。
-3. **实际工作用得上**。AI 不是实验室里的玩具，企业已经在大规模落地了。现在学，是为了接下来三到五年的职业发展铺路。
+首次需要下载 Maven、npm 依赖及以下镜像；请先确认本机网络和 Docker 引擎可用：
 
-### 3. 问题是，怎么学？
+```powershell
+docker pull pgvector/pgvector:pg16
+if ($LASTEXITCODE -ne 0) { throw 'PULL_MAIN_DB_FAILED' }
+docker pull postgres:16-alpine
+if ($LASTEXITCODE -ne 0) { throw 'PULL_SIMULATION_DB_FAILED' }
+docker pull redis:latest
+if ($LASTEXITCODE -ne 0) { throw 'PULL_REDIS_FAILED' }
+docker pull rustfs/rustfs:1.0.0-alpha.72
+if ($LASTEXITCODE -ne 0) { throw 'PULL_STORAGE_FAILED' }
+```
 
-很多人跟着 B 站视频或者 GitHub 上的开源项目撸了一遍，以为自己懂了。结果面试一问深的，直接懵了。原因很简单：那些 Demo 级别的项目，和企业真正要用的东西，差距太大了。
+`Init` 只使用本机已有镜像，不自动拉取。浮动标签可能变化，初始化会记录实际 image ID。
 
-还有些同学报了训练营，发现清一色是 Python。语言不熟、生态不通，学完感觉收获有限，回到 Java 这边还是不知道怎么下手。就算用 Spring AI 或者 LangChain4j，版本迭代太快，低版本功能缺，高版本升级约等于重写，也是一肚子苦水。
+### 2. 初始化、构建与启动
 
-基于这些问题，我决定做一个 Agentic RAG 实战项目，名字叫 **Ragent**。
+在仓库根目录执行：
 
-这个项目覆盖 RAG 全链路和 Agent 智能体两条主线，同时涉及 MCP/Skills 集成。更重要的是，它不是我看了几篇文章拼凑出来的玩具——我在公司**实际落地过 Agentic RAG 系统**，解决过信息孤岛、知识检索、效率提升这些真实的业务问题。所以 Ragent 的复杂度，就是企业级项目该有的复杂度。
+```powershell
+pwsh -NoProfile -File scripts/local-demo.ps1 -Command Init
+if ($LASTEXITCODE -ne 0) { throw 'INIT_FAILED' }
+pwsh -NoProfile -File scripts/local-demo.ps1 -Command Build
+if ($LASTEXITCODE -ne 0) { throw 'BUILD_FAILED' }
+pwsh -NoProfile -File scripts/local-demo.ps1 -Command Start
+if ($LASTEXITCODE -ne 0) { throw 'START_FAILED' }
+pwsh -NoProfile -File scripts/local-demo.ps1 -Command Status
+if ($LASTEXITCODE -ne 0) { throw 'STATUS_FAILED' }
+```
 
-学完之后，你可以放心大胆地跟面试官讲：**企业里就是这么做的**。
+`Build` 生成两个 executable JAR 和前端 production dist，**跳过测试，不等于验收通过**。
+`Start`/`Status` 输出本实例的访问地址，端口动态分配并绑定 `127.0.0.1`。
 
-</details>
+### 3. 登录与浏览
 
-## ⚠️ RAG 常见误区
+- 账号：`local-admin`；随机密码由首次初始化生成。
+- 仅在本机打开 `bootstrap/target/local-demo/default/credentials.json` 查看密码，勿上传该文件或把密码放入截图。
+- 登录后进入“值班工作台”（`/admin/workbench`），从左侧“事件中心”（`/admin/incidents`）查看事件列表。
+- 新实例可以是空工作台，`Init` 不会预置已处置事件。启动步骤以 [本地运行说明](docs/development/local-demo.md) 为准。
+- [接手操作手册](specs/013-release-candidate/second-machine-handoff.md) 可作业务演练参考；其中 `070` 旧候选的固定包身份、文件数和哈希不适用于当前 Git clone，勿照搬旧包校验步骤。
 
-市面上打着 RAG 旗号的项目不少，但很多要么是玩具级 Demo，要么是概念包装。在学之前，先把这几个误区理清楚，避免踩坑。
+本地演示只开放认证、Incident 和受保护的模拟 MCP；上游聊天、知识入库等接口在此模式下关闭。
+处置只影响演示数据库内的 `demo` 目标，不用于操作真实服务。
 
-常规 RAG 的流程如下：
+### 4. 只读核验与停止
 
-![](assets/rag-misconceptions-v2.png)
+```powershell
+pwsh -NoProfile -File scripts/local-demo.ps1 -Command Verify
+if ($LASTEXITCODE -ne 0) { throw 'VERIFY_FAILED' }
+pwsh -NoProfile -File scripts/local-demo.ps1 -Command Stop
+if ($LASTEXITCODE -ne 0) { throw 'STOP_FAILED' }
+```
 
-<details>
-<summary><b>4 个常见误区详解</b>（点击展开）</summary>
+`Verify` 只读核验，不提交告警、不批准或执行动作。`Stop` 停止本实例进程和容器，保留持久卷；再次 `Start` 可读取已有事件数据。
+需要独立实例时，生命周期命令统一使用同一个 `-Name`；不要手改生成配置或删除既有卷。
 
-### 1. 调个 API 就算会 RAG 了
+## 验证记录
 
-很多教程的套路是：调一下 OpenAI 的 Embedding 接口，往向量数据库里塞点数据，再用 LLM 生成答案——完事了。这顶多算跑通了一个 Demo，离会 RAG 差得远。
+验收关注业务不变量，而不是用接口返回 200、代码行数或测试总数替代可靠性结论。
 
-真正的 RAG 系统要考虑的问题多得多：文档怎么切分效果最好？检索召回率不够怎么办？多路召回怎么融合排序？幻觉怎么控制？这些才是面试官会追问的点。
+| 场景 | 检查内容 | 历史运行记录 |
+| --- | --- | --- |
+| 重复与并发告警 | 同身份唯一持久化、不同载荷冲突拒绝、固定聚合预期 | [Spec L 可靠性专项，2026-10-12](specs/012-incident-reliability-acceptance/implementation-report.md) |
+| 完整处置与重启 | 两告警聚合一个事件；拒绝零应用、批准一次应用；重启后事实保留 | [固定 `070c4b76` 候选持久运行，2026-10-18](specs/013-release-candidate/persistent-candidate-runtime-report.md) |
+| 测试与构建门禁 | Backend、依赖安装、Incident 页面检查、Lint 和 Build 同一次运行 | [`c1687735` 候选 / `d98d8861` All，2026-10-19](specs/013-release-candidate/cmd-dispatch-fix-report.md) |
 
-跑通 Demo 和做出能上线的系统之间，差的不是代码量，是对每个环节的深入理解。
+这些结果分别归属报告中的源码候选、摘要和环境，不代表当前分支后续提交重新通过了相同测试。
+本地模拟、受控故障和离线评测不等于生产 SLO、真实模型质量或跨平台验收；跳过的外部测试单独记录。
 
-### 2. RAG 就是“检索 + 生成”两步走
+需要在自己环境验证时，先做前提检查，再运行实际门禁：
 
-`Retrieval-Augmented Generation` 这个名字确实容易让人觉得就是检索加生成。但实际工程中，一个能用的 RAG 系统至少涉及这些环节：
+```powershell
+pwsh -NoProfile -File scripts/check-delivery.ps1 -Gate All -CheckOnly
+if ($LASTEXITCODE -ne 0) { throw 'ALL_PRECHECK_FAILED' }
+pwsh -NoProfile -File scripts/check-delivery.ps1 -Gate All
+if ($LASTEXITCODE -ne 0) { throw 'ALL_FAILED' }
+```
 
-- **数据处理**：PDF、Word、PPT、网页，格式五花八门，光是解析成干净文本就是一堆脏活。PDF 里的表格、扫描件、双栏排版，每一个都是坑。
-- **分块策略**：切太大检索不精准，切太小上下文丢失。按段落切、按固定字数切、按语义切，不同文档可能需要不同策略。
-- **问题重写**：用户问“报销咋整”，你拿这四个字去检索，效果能好吗？多轮对话里用户说“怎么申请”，不补上下文系统根本不知道在问啥。
-- **意图识别**：用户是想查知识库，还是要调用业务系统？是闲聊还是正经提问？走错了路，答案肯定不对。
-- **检索策略**：纯向量检索对精确匹配很弱，用户问一个订单号，向量检索可能完全找不到。混合检索怎么融合、top-k 选多少、要不要重排序，都是取舍。
-- **会话记忆**：20 轮对话全塞给模型？Token 成本扛不住。只带最近几轮？可能丢关键上下文。记忆的压缩、摘要、持久化，又是一套单独的机制。
+`CheckOnly` 通过只表示前提检查完成。All 需要 Docker 和依赖缓存或下载网络，完整命令、退出码与报告范围见 [测试指南](docs/development/testing.md) 和 [交付门禁](docs/development/delivery.md)。
 
-每一环都有坑，每一环都值得深挖。面试的时候能把这些讲清楚，比背概念有用得多。
+## 文档导航
 
-### 3. 用 OpenAI/LangChain 套一套就是企业级
+- [项目上下文与贡献边界](docs/PROJECT_CONTEXT.md) · [系统架构](docs/ARCHITECTURE.md) · [技术决策](docs/DECISIONS.md)
+- [本机运行与数据所有权](docs/development/local-demo.md) · [测试策略](docs/development/testing.md) · [交付门禁](docs/development/delivery.md)
+- [功能规格与实施记录](specs/) · [可靠性专项](specs/012-incident-reliability-acceptance/spec.md)
+- [版本与配置边界](docs/releases/configuration-boundary.md) · [源码候选说明](docs/releases/source-candidate-v0.1.0.md)
 
-OpenAI/LangChain 是个好工具，但直接拿来套壳不等于企业级。企业场景下要面对的是：
+历史文档保留其执行时点，当前源码、配置和新的实际运行结果优先。尚未完成的异机、承诺平台、托管 CI 与生产验证继续保留为边界。
 
-- 大规模文档的增量更新，不可能每次全量重建索引
-- 多租户隔离和权限控制，不同部门看到的知识库不一样
-- 高并发下的检索性能，模型调用的成本控制和容错
-- 请求风控，防止用户套取敏感信息或恶意攻击
-- 模型负载均衡，多供应商切换和降级策略
-- 可观测性，效果监控和用户反馈收集
+## 来源与许可证
 
-这些问题 OpenAI/LangChain 的 QuickStart 不会告诉你，但面试官和实际业务一定会考你。
+IncidentPilot 衍生自 [nageoffer/ragent](https://github.com/nageoffer/ragent)，感谢上游作者的开源工作。
+本分支保留作者、版权与上游署名，并使用经净化的衍生 Git 历史；历史内容净化会改变部分提交 SHA，不代表与上游最新分支同步。
 
-### 4. 只关注模型，忽略工程能力
-
-RAG 项目的核心竞争力不在于你用了多强的模型，而在于工程化能力。同样的模型，检索策略不同、Prompt 设计不同、分块粒度不同，最终效果可以天差地别。
-
-举个例子：用户问“打印机墨盒怎么换”，文档里写的是“墨盒更换步骤”。关键词搜索直接匹配不上，但向量检索能理解它们是一回事。这背后是 Embedding 模型的选型、向量数据库的调优、检索结果的重排序——每一步都是工程决策，不是换个更贵的模型就能解决的。
-
-面试中能把这些工程细节讲清楚的人，远比只会说"我用了 GPT-4"的人有说服力。
-
-</details>
-
-## 🏗️ Ragent 核心设计
-
-采用前后端分离的模块化单体架构，后端按职责分为七个 Maven 模块：
-
-| 模块 | 职责                                                                                 |
-|:---|:-------------------------------------------------------------------------------------|
-| `infra-ai` | Chat / Embedding / Rerank / VLM 模型客户端、模型档位、路由、首包探测、健康状态与降级 |
-| `system` | 用户认证与审计日志，位于各业务引擎之下的系统支撑域                                   |
-| `rag` | RAG 问答、知识库、入库 Pipeline、意图树、检索、会话及管理端 API                      |
-| `agent` | AgentScope ReAct 执行引擎，接入知识检索与 MCP 工具，支持技能、记忆和人工确认                             |
-| `bootstrap` | 启动装配层，仅含启动类与主配置                                                       |
-| `framework` | 统一响应与异常、幂等、分布式 ID、MQ 适配、SSE 与跨节点流式取消等基础能力             |
-| `mcp-server` | 基于 MCP Java SDK 的独立工具示例服务，内置天气、票务、销售与联网搜索示例             |
-
-这个分层不是为了炫技，而是把业务编排、AI 供应商差异和通用基础设施隔离开。切换模型、向量库或对象存储时，核心问答流程不需要跟着重写。
-
-![](assets/ragent-module-layering-v3.png)
-
-一次提问在服务里怎么走，v1 和 v2 是两套路子。
-
-- v1 是 Workflow 编排，路径写死在代码里：问题重写、意图识别、多路召回、组装生成，一步接一步走完。
-- v2 换成 Agentic 架构，路径由模型自己定：知识检索、MCP 工具和 Skills 技能都变成它手里的工具，查不查、查几次、查完接着干什么，在 ReAct 循环里边推理边决定。所以链路比 v1 长，也不再是一条直线。
-
-> 下图是 v2 的核心流程。实际项目代码中的逻辑比图上更复杂，落地过程中还涉及很多细节和优化。
-
-![](assets/ragent-chain-v4.png)
-
-两套并存，不是谁替代谁。问答类知识助手需求走 v1 更快也更可控，要规划、要动手操作的场景才交给 v2。
-
-## ✨ 项目质量怎么样？
-
-这里的质量不靠一张架构图来证明，而是看代码边界、测试、故障处理和运维闭环是否真实存在。以下数据按当前仓库统计，代码行数包含注释和空行。
-
-### 1. 规模与完整度
-
-- **后端**：7 个 Maven 模块，约 **7.9** 万行 Java 主代码、734 个主代码文件。
-- **前端**：约 **3.9** 万行代码、39 个页面级 TSX 文件。
-- **数据与测试**：**32** 张平台业务表（另有 9 张演示业务表在 `mcp-server`）、102 个 Java 测试文件、581 个 `@Test` 测试点。
-
-代码量本身不等于质量，但这些模块组成了数据进入系统—检索生成答案—展示证据—收集反馈—追踪与审计的完整闭环，另有 Agent ReAct 推理与工具调用链路，不仅是简单的 API 示例。
-
-### 2. 工程质量
-
-- **模块边界**：通用基础设施、AI 能力、RAG 业务、Agent 引擎和 MCP 服务相互隔离，替换模型或存储实现不会侵入问答编排。
-- **配置防错**：模型档位、候选能力和检索漏斗在启动阶段完成一致性校验，错误配置直接失败而不是静默降质。
-- **并发治理**：10 个专用线程池隔离负载，TTL 保证用户与 Trace 上下文跨线程传递。
-- **关键路径测试**：覆盖模型路由、检索预算、会话摘要、入库 Pipeline、MCP 和 Agent 上下文与长期记忆。
-- **工程约束**：统一响应、错误码和异常处理，认证、幂等、线程安全 SSE 与 Spotless 格式化均已落到代码。
-
-> 项目中大量应用并发线程，建议配合社群里的 [oneThread 动态线程池框架](https://nageoffer.com/onethread) 搭配学习收获更多。
-
-### 3. 代码是怎么组织的
-
-AI 写代码很强，但掌舵的还是程序员。能不能接着扩展、改一处会不会牵一片，取决于动手前有没有把结构定好。项目里的设计模式，每个都对着一个具体问题：
-
-| 设计方式 | 业务场景 | 解决的问题 |
-|:---|:---|:---|
-| 策略 | 检索通道、结果后处理、文档来源 | 不同实现可独立替换 |
-| 工厂 | 意图树、分块策略、流式回调创建 | 集中复杂对象的创建逻辑 |
-| 模板方法 | 并行检索、模型请求 | 固定通用流程，仅开放差异步骤 |
-| 注册表 | MCP 工具发现、意图节点管理 | 统一注册、查找和调用组件 |
-| 装饰器 | 向量写入时同步关键词和图谱索引 | 在不修改主流程的前提下增强能力 |
-| 责任链 | 检索后处理、模型故障降级 | 按顺序组合处理步骤 |
-| 中间件 | Agent 记忆注入、上下文压缩、技能遮蔽、工具批处理 | 不改执行引擎就能插拔能力 |
-| 适配器 | 多家模型方言、MCP 工具桥接、MQ 客户端 | 屏蔽外部接口差异 |
-| 状态机 | 远程文档定时刷新 | 约束状态流转，挡住非法跳转 |
-| 事件回调 | 模型流式响应、首包探测、SSE 输出 | 解耦事件生产与消费 |
-| AOP | 链路追踪、幂等、审计日志 | 将横切逻辑与业务解耦 |
-
-下一节的那些扩展点，基本都是这些模式带来的结果。
-
-### 4. 可扩展性
-
-核心能力通过接口、注册表和配置隔离，新增实现可以复用现有编排、容错、日志和管理能力：
-
-| 扩展维度 | 如何接入 | 接入后的效果 |
-|:---|:---|:---|
-| 模型 | 实现 `ChatClient` / `EmbeddingClient` / `RerankClient`，加入模型候选配置 | 新供应商可进入模型档位与候选路由，复用首包探测、健康检查和熔断降级 |
-| 存储 | 实现向量存取或 `ObjectStorageClient`，通过配置选择实现 | 可替换向量库或对象存储，知识入库与问答主流程保持不变 |
-| 检索 | 实现 `SearchChannel` 或后处理器，注册为 Spring Bean 并设置顺序 | 新通道参与并行召回，新处理器可插入去重、融合、精排与富化链路 |
-| 入库 | 实现 `IngestionNode` 或 `DocumentFetcher`，补充节点类型和配置 | 新处理步骤或文档来源进入 Pipeline，继续使用任务状态、节点日志和失败定位 |
-| Agent | 新建人设与技能手册，或注册新的中间件 | 新智能体复用 ReAct 循环、记忆与人工确认，不必改动执行引擎 |
-| MCP | 暴露 MCP 工具规范，或在客户端配置外部 MCP Server | 工具可被远程发现，并复用参数提取、Schema 校验与调用流程 |
-
-扩展的改动主要收敛在新实现和配置中，不必复制一套检索、会话或 Trace 主链路。
-
-### 5. 生产级特性
-
-这里的生产级特性指项目已经实现生产环境会遇到的关键机制，而不只是功能能跑：
-
-| 特性 | 说明                                                                              |
-|:---|:----------------------------------------------------------------------------------|
-| **流量保护** | Redis ZSET 公平排队，结合 Lua 原子抢占、过期信号量和 Pub/Sub 唤醒                 |
-| **模型容错** | 多候选模型自动切换，首包超时、空响应或异常时触发降级；三态熔断隔离故障节点        |
-| **检索稳定性** | 多通道并行检索，单通道失败不影响主链；按召回、Rerank、TopK 分层控制检索规模       |
-| **数据一致性** | RocketMQ 事务消息保障分块可靠执行；支持幂等，远程刷新使用分布式锁和状态机         |
-| **可观测与审计** | 记录 Trace Run / Node 的耗时、输入输出和异常；管理端提供趋势、详情及配置变更 Diff |
-| **流式体验** | SSE 分事件输出思考、正文、来源和推荐问题；支持全局超时及客户端断开取消            |
-| **会话与证据** | 消息持久化和摘要控制上下文；保存引用来源，支持原文预览、追问和反馈                |
-| **Agent 执行保障** | 上下文按水位裁剪与压缩，长期记忆跨会话沉淀；写操作可配置人工确认，支持执行中断    |
-| **安全基础** | Sa-Token 认证、数据归属校验、上传限流、参数校验和统一异常处理                     |
-
-### 6. 完整控制台
-
-Ragent 提供覆盖**普通用户与管理员用户**的 React 控制台，不只是聊天页面，也把检索证据和运维入口暴露出来。
-
-系统通过多轮 AI 辅助设计优化，在保证功能完整性的同时，提供更加现代化和友好的交互体验。
-
-#### 6.1 用户问答界面
-
-v2 面向 Agent 任务提供完整的执行过程视图。模型思考、工具调用、并行批次和最终回答会按时间线实时展开，任务做了什么、耗时多久都能直接看到。
-
-![](assets/qa-home-v2.png)
-
-遇到下单、修改数据等写操作时，系统会先展示操作内容和原始参数，用户确认后才会继续执行。
-
-![](assets/qa-home-v2-confirm.png)
-
-v1 保留更轻量的知识问答界面，适合检索路径固定、以答案和引用为主的场景。用户可以直接输入问题，也可以通过示例问题快速体验，并按需开启**深度思考模式**。
-
-- 支持自然语言输入
-- 支持示例问题快速填充
-- 支持深度思考模式
-
-![](assets/qa-home.png)
-
-用户提交问题后，模型会实时生成回答结果，并提供良好的阅读体验：
-
-- 支持 Markdown 格式渲染
-- 支持图片内容展示
-- 支持代码高亮显示
-- 支持回答来源、原文预览和推荐追问
-- 支持回答评价（点赞 / 点踩）
-
-![](assets/qa-answer.png)
-
-#### 6.2 管理后台
-
-管理员可以通过后台查看仪表盘，管理知识库与 Chunk、知识图谱、意图树、查询词映射、入库任务、示例问题、用户和系统设置，并查看 RAG Trace 与业务变更日志。
-
-<details>
-<summary><b>管理后台界面截图</b>（点击展开）</summary>
-
-v2 新增 Agent 运行概览，集中展示活跃会话、工具调用成功率、人工确认和上下文压缩等指标，运行状态和问题分布可以直接查看。
-
-![](assets/admin-overview-v2.png)
-
-同时接入 Langfuse，可按会话查看模型推理、工具调用、耗时与 Token 消耗，方便定位 Agent 链路中的具体问题。
-
-![](assets/langfuse.png)
-
-v1 管理后台侧重 RAG 配置和运行管理，覆盖模型、知识库、数据集、Trace 等常用功能。
-
-![](assets/admin-overview.png)
-
-![](assets/admin-settings.png)
-
-![](assets/admin-knowledge-base.png)
-
-![](assets/admin-datasets.png)
-
-![](assets/admin-trace.png)
-
-![](assets/admin-models.png)
-
-</details>
-
-控制台围绕实际使用和排障流程持续打磨，在功能完整的基础上，尽量把复杂能力做得直观、易用。
-
-![](assets/admin-theme.png)
-
-### 7. 和市面上项目的区别
-
-Ragent 定位于 **Java AI 应用的源码级工程参考**，重点是完整链路、生产保障和二次开发能力。
-
-| 对比维度 | 常见 RAG 教程 / Demo | Ragent                                                 |
-|:---|:-----------------|:-------------------------------------------------------|
-| 项目定位 | 跑通检索与生成          | 完整 Java Agentic RAG 应用                             |
-| 检索 | 单路向量 TopK        | 向量 / 关键词 / 图谱 / 联网召回，RRF 融合与 Rerank     |
-| 问题理解 | 原问题直接检索          | 查询词映射、问题重写与拆分、树形意图和多知识库路由     |
-| 模型调用 | 单模型直连            | 模型档位、首包探测与熔断降级                           |
-| 工具接入 | 以应用内函数调用为主 | MCP 协议、远程工具发现、Schema 校验与写操作人工确认    |
-| 智能体 | 无或单轮函数调用 | ReAct 多轮推理、技能体系、执行中断与恢复               |
-| 知识入库 | 一次性脚本            | 可编排 Pipeline、节点日志、远程文档定时刷新            |
-| 会话记忆 | 以近期消息拼接为主 | 最近 N 轮消息 + 持久化摘要；Agent 侧三层上下文管理     |
-| 回答可信度 | 只展示答案            | 来源引用、原文预览与用户反馈                           |
-| 运行保障 | 基础日志             | 分布式限流、幂等、事务消息、Trace 与审计               |
-| 监控指标 | 通用调用量与耗时 | 基于 LangFuse 提供个性化指标，覆盖链路质量、工具调用等 |
-| 二次开发 | 流程写死             | 模型、存储、检索、入库和 MCP 均提供扩展接口            |
-| 管理能力 | 无或简单页面           | 完整用户端与管理后台                                   |
-
-## ❓ 常见问题答疑
-
-一句话：学完 Ragent，你既能跟面试官聊 RAG/Agent 的技术深度，也能证明自己的 Java 工程化水平。
-
-<details>
-<summary><b>能学到什么 / 适合谁？</b>（点击展开）</summary>
-
-### 1. 能够学到什么？
-
-Ragent 不只是教你调 API，而是让你理解一个 Agentic RAG 系统从 0 到 1 落地的全过程。粗略来说，你能收获这些：
-
-- **RAG 全链路工程能力**：文档解析、分块策略、Embedding 向量化、意图识别、问题重写与拆分、多路检索、重排序、Prompt 组装、流式生成，每个环节怎么做、为什么这么做。
-- **Agent 智能体实战**：ReAct 执行引擎、MCP 工具调用、技能体系、三层上下文记忆、人工确认，这些是 AI 应用区别于传统 CRUD 系统的核心能力。
-- **模型工程化实践**：模型档位、多候选路由、首包探测、熔断降级，解决模型不稳定时如何保障服务可用性。
-- **高质量 Java 工程能力**：分层架构、设计模式实战、分布式并发限流、多线程池管理与上下文透传、全链路追踪，这些能力不局限于 AI 项目，放到任何 Java 后端岗位都是加分项。
-- **前后端完整项目经验**：后端 Spring Boot 4 + 前端 React 18，从 API 设计到页面交互，完整的全栈项目经历。
-
-### 2. 适合人群
-
-**校招同学：**
-
-- **Java 后端方向的在校生**：简历上已经有了商城、外卖等常规项目，需要一个有区分度的项目来拉开差距。Ragent 能让你在面试中聊 AI + 工程化，而不是千篇一律的 CRUD。
-- **想转 AI 应用方向的同学**：对大模型感兴趣，但不想从 Python 和算法入手。Ragent 基于 Java 技术栈，学习曲线平滑，不需要额外切换语言生态。
-- **准备实习/秋招/春招的同学**：大厂校招越来越看重候选人对新技术的敏感度，简历上有 AI 项目经验，能直接证明你的学习能力和技术视野。
-
-**社招同学：**
-
-- **1-3 年经验的 Java 开发**：日常写业务代码，想往 AI 方向转型但不知道从哪下手。Ragent 的技术栈你都熟悉，学的是 AI 应用层的东西，上手快、能落地。
-- **3-5 年经验的后端开发**：技术能力不差，但面试被问到 AI 相关问题答不上来，少了一个谈薪筹码。通过 Ragent 补上 RAG、Agent、MCP 这些知识点，面试时能聊得有深度。
-- **想跳槽到 AI 团队的开发者**：越来越多的 JD 要求有 AI 相关经验，Ragent 能帮你快速建立 RAG 系统的全局认知，面试时不再只是纸上谈兵。
-
-</details>
-
-
-## 🌟 为什么开源？
-
-原因很简单：**对项目质量足够自信**。架构设计、代码实现、工程规范，每一行都经得起审视。好不好你 clone 下来自己看——目录结构、提交记录、注释规范，全是明牌。
-
-<details>
-<summary><b>开源背景与价值</b>（点击展开）</summary>
-
-之前做拿个 offer 社群时，第一个业务系统 12306 选择了开源，收获了
-<a href="https://github.com/nageoffer/12306"><img src="https://img.shields.io/github/stars/nageoffer/12306?style=flat-square&logo=github&label=GitHub" style="vertical-align: middle;" /></a>
-<a href="https://gitee.com/nageoffer/12306/stargazers"><img src="https://gitee.com/nageoffer/12306/badge/star.svg?theme=dark" style="vertical-align: middle;" /></a>，也得到了很多同学的认可和信任。这次 Ragent 作为社群在 AI 领域的第一个项目，同样选择开源——既然代码质量经得起检验，就没必要藏着掖着。
-
-市面上不少项目只敢放几张截图、讲几个概念，真正敢把代码全部摊开的并不多。Ragent 敢这么做，是因为前面讲的那些能力——多路检索、意图识别、模型容错、全链路追踪——不是 PPT 里的架构图，是你能跑起来、能断点调试、能逐行阅读的真实代码。
-
-开源对你来说意味着什么：
-
-- **源码即文档**：想了解某个模块怎么实现的，直接翻代码，比任何教程都准确、都及时。
-- **本地可调试**：断点打到任意一行，跟着一次请求走完整个 RAG 链路，比看架构图理解得深十倍。
-- **可参与贡献**：发现 Bug 提 Issue，有优化思路提 PR。参与一个企业级 AI 开源项目，本身就是简历上的亮点。
-- **持续迭代更新**：项目会持续演进，Star 和 Watch 之后能第一时间获取新特性。
-
-</details>
-
-<p align="center">
-  <a href="https://www.star-history.com/?repos=nageoffer%2Fragent&type=date&legend=top-left">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=nageoffer/ragent&type=date&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=nageoffer/ragent&type=date&legend=top-left" />
-      <img alt="Star History Chart" src="https://api.star-history.com/image?repos=nageoffer/ragent&type=date&legend=top-left" />
-    </picture>
-  </a>
-</p>
-
-如果屏幕前的亦菲/彦祖觉得项目还不错，点个 Star 支持一下，这是对开源作者最好的认可！
+代码遵循 [Apache License 2.0](LICENSE)，来源和修改范围见 [NOTICE](NOTICE)。通用 RAG/Agent 能力归属上游，本文列出的事件响应改造归属 IncidentPilot。
