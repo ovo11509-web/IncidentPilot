@@ -112,7 +112,7 @@ Incident 主数据由 `incident` 模块管理，模拟资源在 MCP 独立数据
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-git clone --branch codex/release-v0.1.0 https://github.com/ovo11509-web/IncidentPilot.git
+git clone --branch release/v0.1.0 https://github.com/ovo11509-web/IncidentPilot.git
 if ($LASTEXITCODE -ne 0) { throw 'CLONE_FAILED' }
 Set-Location IncidentPilot
 ```
